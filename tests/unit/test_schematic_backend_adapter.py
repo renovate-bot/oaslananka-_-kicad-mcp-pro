@@ -29,10 +29,10 @@ def test_schematic_capability_matrix_covers_every_public_tool() -> None:
     assert set(SCHEMATIC_BACKEND_CAPABILITY_MATRIX) == set(SCHEMATIC_PUBLIC_TOOL_NAMES)
 
 
-def test_default_schematic_backend_is_legacy() -> None:
+def test_default_schematic_backend_is_kicad_sch_api() -> None:
     backend = get_schematic_backend()
 
-    assert backend.name == "legacy"
+    assert backend.name == "kicad_sch_api"
     assert backend.capability_matrix == SCHEMATIC_BACKEND_CAPABILITY_MATRIX
 
 

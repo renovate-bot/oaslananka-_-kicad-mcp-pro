@@ -97,3 +97,64 @@ class PowerSymbolInput(BaseModel):
     y_mm: CoordMM = Field(validation_alias=AliasChoices("y_mm", "y"))
     rotation: Literal[0, 90, 180, 270] = 0
     snap_to_grid: bool = True
+
+
+class CreateSheetInput(BaseModel):
+    """Create a child schematic sheet on the active top-level schematic."""
+
+    name: str = Field(min_length=1, max_length=120)
+    filename: str = Field(min_length=1, max_length=240)
+    x_mm: CoordMM
+    y_mm: CoordMM
+    snap_to_grid: bool = True
+
+
+class HierarchicalLabelInput(BaseModel):
+    """Hierarchical label placement parameters."""
+
+    text: str = Field(min_length=1, max_length=240)
+    x_mm: CoordMM
+    y_mm: CoordMM
+    shape: Literal["input", "output", "bidirectional", "tri_state", "passive"] = "input"
+    rotation: Literal[0, 90, 180, 270] = 0
+    snap_to_grid: bool = True
+
+
+class GlobalLabelInput(BaseModel):
+    """Global label placement parameters."""
+
+    text: str = Field(min_length=1, max_length=240)
+    x_mm: CoordMM
+    y_mm: CoordMM
+    shape: Literal["input", "output", "bidirectional", "tri_state", "passive"] = "bidirectional"
+    rotation: Literal[0, 90, 180, 270] = 0
+    snap_to_grid: bool = True
+
+
+class GetSheetInfoInput(BaseModel):
+    """Query parameters for a specific child sheet."""
+
+    sheet_name: str = Field(min_length=1, max_length=120)
+
+
+class RouteWireBetweenPinsInput(BaseModel):
+    """Pin-to-pin Manhattan routing parameters for schematics."""
+
+    ref1: str = Field(min_length=1, max_length=64)
+    pin1: str = Field(min_length=1, max_length=64)
+    ref2: str = Field(min_length=1, max_length=64)
+    pin2: str = Field(min_length=1, max_length=64)
+    snap_to_grid: bool = True
+
+
+class TraceNetInput(BaseModel):
+    """Net trace request for schematic connectivity inspection."""
+
+    net_name: str = Field(min_length=1, max_length=240)
+
+
+class AutoPlaceSymbolsInput(BaseModel):
+    """Auto-placement request for an explicit list of schematic references."""
+
+    symbol_list: list[str] = Field(default_factory=list)
+    strategy: Literal["cluster", "linear", "star"] = "cluster"

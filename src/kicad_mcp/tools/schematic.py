@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import re
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -25,7 +25,14 @@ from ..models.schematic import (
     AddSymbolInput,
     AddWireInput,
     AnnotateInput,
+    AutoPlaceSymbolsInput,
+    CreateSheetInput,
+    GetSheetInfoInput,
+    GlobalLabelInput,
+    HierarchicalLabelInput,
     PowerSymbolInput,
+    RouteWireBetweenPinsInput,
+    TraceNetInput,
     UpdatePropertiesInput,
 )
 from ..utils.sexpr import (
@@ -42,6 +49,8 @@ AUTO_LAYOUT_ORIGIN_Y_MM = 50.8
 AUTO_LAYOUT_COLUMN_SPACING_MM = 25.4
 AUTO_LAYOUT_ROW_SPACING_MM = 17.78
 AUTO_LAYOUT_COLUMNS = 4
+DEFAULT_SHEET_WIDTH_MM = 30.48
+DEFAULT_SHEET_HEIGHT_MM = 20.32
 NETLIST_LAYOUT_COLUMN_SPACING_MM = 38.1
 NETLIST_LAYOUT_ROW_SPACING_MM = 35.56
 NETLIST_LABEL_OFFSET_MM = 10.16
@@ -90,6 +99,15 @@ SCHEMATIC_PUBLIC_TOOL_NAMES = (
     "sch_check_power_flags",
     "sch_annotate",
     "sch_reload",
+    "sch_create_sheet",
+    "sch_add_hierarchical_label",
+    "sch_add_global_label",
+    "sch_list_sheets",
+    "sch_get_sheet_info",
+    "sch_route_wire_between_pins",
+    "sch_get_connectivity_graph",
+    "sch_trace_net",
+    "sch_auto_place_symbols",
 )
 
 SCHEMATIC_BACKEND_CAPABILITY_MATRIX: dict[str, SchematicCapabilityEntry] = {
@@ -225,6 +243,80 @@ SCHEMATIC_BACKEND_CAPABILITY_MATRIX: dict[str, SchematicCapabilityEntry] = {
             "editor/session."
         ),
     },
+    "sch_create_sheet": {
+        "kicad_sch_api_support": "native",
+        "verified_surface": ["Schematic.add_sheet", "create_schematic", "Schematic.save"],
+        "notes": "Child sheet creation maps directly to the verified sheet manager helpers.",
+    },
+    "sch_add_hierarchical_label": {
+        "kicad_sch_api_support": "wrapper_needed",
+        "verified_surface": ["Schematic.add_hierarchical_label"],
+        "notes": (
+            "The public API can create hierarchical labels, but the wrapper preserves "
+            "shape and formatting compatibility."
+        ),
+    },
+    "sch_add_global_label": {
+        "kicad_sch_api_support": "wrapper_needed",
+        "verified_surface": ["Schematic.add_global_label"],
+        "notes": (
+            "The public API can create global labels, but the wrapper preserves shape "
+            "and formatting compatibility."
+        ),
+    },
+    "sch_list_sheets": {
+        "kicad_sch_api_support": "native",
+        "verified_surface": ["SheetManager.get_sheet_hierarchy", "SheetManager.get_sheet_by_name"],
+        "notes": "Sheet listing is available directly from the verified sheet manager APIs.",
+    },
+    "sch_get_sheet_info": {
+        "kicad_sch_api_support": "native",
+        "verified_surface": ["SheetManager.get_sheet_by_name"],
+        "notes": (
+            "Detailed sheet metadata is available directly from "
+            "SheetManager.get_sheet_by_name()."
+        ),
+    },
+    "sch_route_wire_between_pins": {
+        "kicad_sch_api_support": "wrapper_needed",
+        "verified_surface": ["Schematic.add_wire_between_pins", "Component.get_pin_position"],
+        "notes": (
+            "Pin-to-pin routing is exposed in kicad-sch-api, but the wrapper keeps the "
+            "current Manhattan-routing contract deterministic."
+        ),
+    },
+    "sch_get_connectivity_graph": {
+        "kicad_sch_api_support": "wrapper_needed",
+        "verified_surface": [
+            "Schematic.get_connected_pins",
+            "Schematic.get_net_for_pin",
+            "WireCollection.all",
+        ],
+        "notes": (
+            "Connectivity summaries are composed from verified wire and component helpers "
+            "to match the existing textual MCP surface."
+        ),
+    },
+    "sch_trace_net": {
+        "kicad_sch_api_support": "wrapper_needed",
+        "verified_surface": [
+            "Schematic.get_net_for_pin",
+            "SheetManager.get_sheet_hierarchy",
+            "SheetManager.get_sheet_by_name",
+        ],
+        "notes": (
+            "Net tracing uses verified sheet metadata plus compatibility parsing to report "
+            "cross-sheet matches."
+        ),
+    },
+    "sch_auto_place_symbols": {
+        "kicad_sch_api_support": "wrapper_needed",
+        "verified_surface": ["ComponentCollection.get", "Component.move", "Schematic.save"],
+        "notes": (
+            "Auto-placement is implemented as a deterministic wrapper around component "
+            "move helpers."
+        ),
+    },
 }
 
 
@@ -239,6 +331,78 @@ class _SchematicBackendAdapter(Protocol):
     def update_symbol_property(self, reference: str, field: str, value: str) -> str: ...
 
     def reload_schematic(self) -> str: ...
+
+
+class _PointLike(Protocol):
+    x: float
+    y: float
+
+
+class _PlacedComponentLike(Protocol):
+    lib_id: str
+    reference: str
+    value: str
+    footprint: str
+    position: _PointLike
+    rotation: float
+    _data: object
+
+    def set_property(self, name: str, value: str) -> object: ...
+
+    def move(self, x: float, y: float) -> object: ...
+
+
+class _ComponentCollectionLike(Protocol):
+    def all(self) -> Iterable[_PlacedComponentLike]: ...
+
+    def get(self, reference: str) -> _PlacedComponentLike | None: ...
+
+
+class _LabelLike(Protocol):
+    text: str
+    position: _PointLike
+    rotation: float
+
+
+class _LabelCollectionLike(Protocol):
+    def all(self) -> Iterable[_LabelLike]: ...
+
+
+class _WireLike(Protocol):
+    start: _PointLike
+    end: _PointLike
+
+
+class _WireCollectionLike(Protocol):
+    def all(self) -> Iterable[_WireLike]: ...
+
+
+class _SheetManagerLike(Protocol):
+    def get_sheet_hierarchy(self) -> dict[str, Any]: ...
+
+    def get_sheet_by_name(self, name: str) -> dict[str, Any] | None: ...
+
+
+class _LoadedSchematicLike(Protocol):
+    components: _ComponentCollectionLike
+    labels: _LabelCollectionLike
+    wires: _WireCollectionLike
+    sheets: _SheetManagerLike
+
+    def add_sheet(
+        self,
+        name: str,
+        filename: str,
+        position: tuple[float, float],
+        size: tuple[float, float],
+        stroke_width: float | None = None,
+        stroke_type: str = "solid",
+        project_name: str | None = None,
+        page_number: str | None = None,
+        uuid: str | None = None,
+    ) -> str: ...
+
+    def save(self, file_path: Path | str | None = None, preserve_format: bool = True) -> object: ...
 
 
 @dataclass(frozen=True)
@@ -261,10 +425,171 @@ class _LegacySchematicBackend:
         return _legacy_reload_schematic()
 
 
+def _load_kicad_schematic(sch_file: Path) -> _LoadedSchematicLike:
+    from kicad_sch_api import load_schematic
+
+    return cast(_LoadedSchematicLike, load_schematic(str(sch_file)))
+
+
+def _component_unit(component: _PlacedComponentLike) -> int:
+    return int(getattr(getattr(component, "_data", None), "unit", 1) or 1)
+
+
+def _component_to_symbol_dict(component: _PlacedComponentLike) -> dict[str, Any]:
+    return {
+        "lib_id": str(component.lib_id),
+        "reference": str(component.reference),
+        "value": str(component.value),
+        "footprint": str(component.footprint or ""),
+        "x": round(float(component.position.x), 4),
+        "y": round(float(component.position.y), 4),
+        "rotation": int(round(float(component.rotation))),
+        "unit": _component_unit(component),
+    }
+
+
+def _api_labels(schematic: _LoadedSchematicLike) -> list[dict[str, Any]]:
+    labels: list[dict[str, Any]] = []
+    for label in cast(list[_LabelLike], list(schematic.labels.all())):
+        labels.append(
+            {
+                "name": str(label.text),
+                "x": round(float(label.position.x), 4),
+                "y": round(float(label.position.y), 4),
+                "rotation": int(round(float(getattr(label, "rotation", 0.0) or 0.0))),
+            }
+        )
+    return labels
+
+
+@dataclass(frozen=True)
+class _KicadSchApiBackend:
+    name: str = "kicad_sch_api"
+    capability_matrix: dict[str, SchematicCapabilityEntry] = field(
+        default_factory=lambda: deepcopy(SCHEMATIC_BACKEND_CAPABILITY_MATRIX)
+    )
+
+    def parse_schematic_file(self, sch_file: Path) -> dict[str, Any]:
+        legacy_data = _legacy_parse_schematic_file(sch_file)
+        try:
+            schematic = _load_kicad_schematic(sch_file)
+        except Exception as exc:
+            logger.debug(
+                "schematic_backend_kicad_sch_api_parse_fallback",
+                schematic_file=str(sch_file),
+                error=str(exc),
+            )
+            return legacy_data
+
+        try:
+            symbols: list[dict[str, Any]] = []
+            power_symbols: list[dict[str, Any]] = []
+            for component in cast(list[_PlacedComponentLike], list(schematic.components.all())):
+                parsed = _component_to_symbol_dict(component)
+                if parsed["lib_id"].startswith("power:"):
+                    power_symbols.append(parsed)
+                else:
+                    symbols.append(parsed)
+
+            wires = legacy_data["wires"]
+            try:
+                wires = [
+                    {
+                        "x1": round(float(wire.start.x), 4),
+                        "y1": round(float(wire.start.y), 4),
+                        "x2": round(float(wire.end.x), 4),
+                        "y2": round(float(wire.end.y), 4),
+                    }
+                    for wire in cast(list[_WireLike], list(schematic.wires.all()))
+                ]
+            except Exception as exc:
+                logger.debug("schematic_backend_wire_parse_fallback", error=str(exc))
+
+            labels = legacy_data["labels"]
+            try:
+                seen_labels = {
+                    (
+                        label["name"],
+                        round(float(label["x"]), 4),
+                        round(float(label["y"]), 4),
+                        int(label["rotation"]),
+                    )
+                    for label in labels
+                }
+                for label in _api_labels(schematic):
+                    key = (
+                        label["name"],
+                        round(float(label["x"]), 4),
+                        round(float(label["y"]), 4),
+                        int(label["rotation"]),
+                    )
+                    if key not in seen_labels:
+                        labels.append(label)
+            except Exception as exc:
+                logger.debug("schematic_backend_label_parse_fallback", error=str(exc))
+
+            return {
+                "uuid": legacy_data["uuid"],
+                "symbols": symbols,
+                "power_symbols": power_symbols,
+                "wires": wires,
+                "labels": labels,
+                "buses": legacy_data["buses"],
+            }
+        except Exception as exc:
+            logger.debug(
+                "schematic_backend_kicad_sch_api_parse_unexpected_fallback",
+                schematic_file=str(sch_file),
+                error=str(exc),
+            )
+            return legacy_data
+
+    def transactional_write(self, mutator: Callable[[str], str]) -> str:
+        return _legacy_transactional_write(mutator)
+
+    def update_symbol_property(self, reference: str, field: str, value: str) -> str:
+        payload = UpdatePropertiesInput(reference=reference, field=field, value=value)
+        sch_file = _get_schematic_file()
+        try:
+            schematic = _load_kicad_schematic(sch_file)
+            component = schematic.components.get(payload.reference)
+            if component is None:
+                return _legacy_update_symbol_property(
+                    payload.reference,
+                    payload.field,
+                    payload.value,
+                )
+
+            normalized_field = payload.field.casefold()
+            if normalized_field == "reference":
+                component.reference = payload.value
+            elif normalized_field == "value":
+                component.value = payload.value
+            elif normalized_field == "footprint":
+                component.footprint = payload.value
+            else:
+                component.set_property(payload.field, payload.value)
+
+            schematic.save(sch_file, preserve_format=True)
+            return f"Updated {payload.reference}.{payload.field}."
+        except Exception as exc:
+            logger.debug(
+                "schematic_backend_property_update_fallback",
+                reference=payload.reference,
+                field=payload.field,
+                error=str(exc),
+            )
+            return _legacy_update_symbol_property(payload.reference, payload.field, payload.value)
+
+    def reload_schematic(self) -> str:
+        return _legacy_reload_schematic()
+
+
 _SCHEMATIC_BACKENDS: dict[str, _SchematicBackendAdapter] = {
-    "legacy": cast(_SchematicBackendAdapter, _LegacySchematicBackend())
+    "legacy": cast(_SchematicBackendAdapter, _LegacySchematicBackend()),
+    "kicad_sch_api": cast(_SchematicBackendAdapter, _KicadSchApiBackend()),
 }
-_DEFAULT_SCHEMATIC_BACKEND = "legacy"
+_DEFAULT_SCHEMATIC_BACKEND = "kicad_sch_api"
 
 
 def get_schematic_backend() -> _SchematicBackendAdapter:
@@ -665,7 +990,7 @@ def _parse_symbol_block(block: str) -> dict[str, Any] | None:
     lib_id_match = re.search(rf"\(lib_id\s+{_STRING_PATTERN}\)", block)
     if lib_id_match is None:
         return None
-    at_match = re.search(r"\(at\s+([-\d.]+)\s+([-\d.]+)\s+(\d+)\)", block)
+    at_match = re.search(r"\(at\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\)", block)
     unit_match = re.search(r"\(unit\s+(\d+)\)", block)
     ref_match = re.search(rf'\(property\s+"Reference"\s+{_STRING_PATTERN}', block)
     value_match = re.search(rf'\(property\s+"Value"\s+{_STRING_PATTERN}', block)
@@ -677,7 +1002,7 @@ def _parse_symbol_block(block: str) -> dict[str, Any] | None:
         "footprint": _unescape_sexpr_string(footprint_match.group(1)) if footprint_match else "",
         "x": float(at_match.group(1)) if at_match else 0.0,
         "y": float(at_match.group(2)) if at_match else 0.0,
-        "rotation": int(at_match.group(3)) if at_match else 0,
+        "rotation": int(round(float(at_match.group(3)))) if at_match else 0,
         "unit": int(unit_match.group(1)) if unit_match else 1,
     }
 
@@ -719,8 +1044,8 @@ def _extract_buses(content: str) -> list[dict[str, float]]:
 def _extract_labels(content: str) -> list[dict[str, Any]]:
     labels: list[dict[str, Any]] = []
     for match in re.finditer(
-        rf"\((?:label|global_label)\s+{_STRING_PATTERN}\s+"
-        r"(?:\(shape\s+\w+\)\s+)?\(at\s+([-\d.]+)\s+([-\d.]+)\s+(\d+)\)",
+        rf"\((?:label|global_label|hierarchical_label)\s+{_STRING_PATTERN}\s+"
+        r"(?:\(shape\s+\w+\)\s+)?\(at\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\)",
         content,
     ):
         labels.append(
@@ -728,7 +1053,7 @@ def _extract_labels(content: str) -> list[dict[str, Any]]:
                 "name": _unescape_sexpr_string(match.group(1)),
                 "x": float(match.group(2)),
                 "y": float(match.group(3)),
-                "rotation": int(match.group(4)),
+                "rotation": int(round(float(match.group(4)))),
             }
         )
     return labels
@@ -1088,6 +1413,186 @@ def _plan_netlist_wires(
     return routed_segments
 
 
+def _point_key(x: float, y: float) -> tuple[float, float]:
+    return (round(float(x), 4), round(float(y), 4))
+
+
+def _point_on_segment(point: tuple[float, float], wire: dict[str, float]) -> bool:
+    px, py = point
+    x1 = float(wire["x1"])
+    y1 = float(wire["y1"])
+    x2 = float(wire["x2"])
+    y2 = float(wire["y2"])
+    if abs(x1 - x2) <= SNAP_TOLERANCE_MM:
+        return (
+            abs(px - x1) <= SNAP_TOLERANCE_MM
+            and min(y1, y2) - SNAP_TOLERANCE_MM <= py <= max(y1, y2) + SNAP_TOLERANCE_MM
+        )
+    if abs(y1 - y2) <= SNAP_TOLERANCE_MM:
+        return (
+            abs(py - y1) <= SNAP_TOLERANCE_MM
+            and min(x1, x2) - SNAP_TOLERANCE_MM <= px <= max(x1, x2) + SNAP_TOLERANCE_MM
+        )
+    return False
+
+
+def _split_lib_id(lib_id: str) -> tuple[str, str]:
+    library, _, symbol_name = lib_id.partition(":")
+    return library, symbol_name or lib_id
+
+
+def _build_connectivity_groups(sch_file: Path) -> list[dict[str, Any]]:
+    data = parse_schematic_file(sch_file)
+    parent: dict[tuple[float, float], tuple[float, float]] = {}
+
+    def find(point: tuple[float, float]) -> tuple[float, float]:
+        root = parent.setdefault(point, point)
+        if root != point:
+            root = find(root)
+            parent[point] = root
+        return root
+
+    def union(left: tuple[float, float], right: tuple[float, float]) -> None:
+        left_root = find(left)
+        right_root = find(right)
+        if left_root != right_root:
+            parent[right_root] = left_root
+
+    for wire in data["wires"]:
+        start = _point_key(wire["x1"], wire["y1"])
+        end = _point_key(wire["x2"], wire["y2"])
+        union(start, end)
+
+    def attach(point: tuple[float, float]) -> tuple[float, float]:
+        key = _point_key(*point)
+        if key in parent:
+            return find(key)
+        for wire in data["wires"]:
+            if _point_on_segment(key, wire):
+                anchor = _point_key(wire["x1"], wire["y1"])
+                return find(anchor)
+        return find(key)
+
+    groups: dict[tuple[float, float], dict[str, Any]] = {}
+
+    def ensure_group(point: tuple[float, float]) -> dict[str, Any]:
+        root = attach(point)
+        return groups.setdefault(
+            root,
+            {
+                "points": set(),
+                "labels": set(),
+                "power": set(),
+                "pins": [],
+            },
+        )
+
+    for wire in data["wires"]:
+        group = ensure_group(_point_key(wire["x1"], wire["y1"]))
+        group["points"].add(_point_key(wire["x1"], wire["y1"]))
+        group["points"].add(_point_key(wire["x2"], wire["y2"]))
+
+    for label in data["labels"]:
+        group = ensure_group((float(label["x"]), float(label["y"])))
+        group["points"].add(_point_key(label["x"], label["y"]))
+        group["labels"].add(str(label["name"]))
+
+    for power_symbol in data["power_symbols"]:
+        group = ensure_group((float(power_symbol["x"]), float(power_symbol["y"])))
+        group["points"].add(_point_key(power_symbol["x"], power_symbol["y"]))
+        group["power"].add(str(power_symbol["value"]))
+
+    for symbol in data["symbols"]:
+        library, symbol_name = _split_lib_id(str(symbol["lib_id"]))
+        pin_positions = get_pin_positions(
+            library,
+            symbol_name,
+            float(symbol["x"]),
+            float(symbol["y"]),
+            int(symbol["rotation"]),
+            int(symbol["unit"]),
+        )
+        for pin_number, point in pin_positions.items():
+            group = ensure_group(point)
+            group["points"].add(_point_key(*point))
+            group["pins"].append(
+                {
+                    "reference": symbol["reference"],
+                    "pin": pin_number,
+                    "value": symbol["value"],
+                }
+            )
+
+    normalized_groups: list[dict[str, Any]] = []
+    for group in groups.values():
+        names = sorted({*group["labels"], *group["power"]})
+        normalized_groups.append(
+            {
+                "names": names,
+                "points": sorted(group["points"]),
+                "pins": sorted(
+                    group["pins"],
+                    key=lambda item: (item["reference"], item["pin"]),
+                ),
+            }
+        )
+    return sorted(
+        normalized_groups,
+        key=lambda group: (
+            group["names"][0] if group["names"] else "~unnamed",
+            len(group["pins"]),
+            len(group["points"]),
+        ),
+    )
+
+
+def _project_name() -> str:
+    cfg = get_config()
+    if cfg.project_file is not None:
+        return cfg.project_file.stem
+    return "KiCadMCP"
+
+
+def _iter_child_sheet_paths(sch_file: Path) -> list[tuple[str, Path]]:
+    try:
+        schematic = _load_kicad_schematic(sch_file)
+    except Exception as exc:
+        logger.debug(
+            "schematic_sheet_discovery_failed",
+            schematic_file=str(sch_file),
+            error=str(exc),
+        )
+        return []
+
+    discovered: list[tuple[str, Path]] = []
+
+    def visit(
+        current_name: str,
+        current_path: Path,
+        current_schematic: _LoadedSchematicLike,
+    ) -> None:
+        hierarchy = current_schematic.sheets.get_sheet_hierarchy()
+        children = hierarchy.get("root", {}).get("children", [])
+        for child in children:
+            child_name = str(child.get("name", "Sheet"))
+            child_file = current_path.parent / str(child.get("filename", ""))
+            display_name = f"{current_name}/{child_name}" if current_name else child_name
+            discovered.append((display_name, child_file))
+            if child_file.exists():
+                try:
+                    visit(display_name, child_file, _load_kicad_schematic(child_file))
+                except Exception as exc:
+                    logger.debug(
+                        "schematic_child_sheet_load_failed",
+                        sheet=display_name,
+                        schematic_file=str(child_file),
+                        error=str(exc),
+                    )
+
+    visit("", sch_file, schematic)
+    return discovered
+
+
 def wire_block(x1: float, y1: float, x2: float, y2: float, kind: str = "wire") -> str:
     """Create a schematic wire or bus block."""
     return (
@@ -1100,13 +1605,22 @@ def wire_block(x1: float, y1: float, x2: float, y2: float, kind: str = "wire") -
 
 
 def label_block(
-    name: str, x: float, y: float, rotation: int = 0, global_label: bool = False
+    name: str,
+    x: float,
+    y: float,
+    rotation: int = 0,
+    global_label: bool = False,
+    shape: str | None = None,
+    kind: str | None = None,
 ) -> str:
     """Create a schematic label block."""
-    kind = "global_label" if global_label else "label"
-    shape_line = "\t\t(shape bidirectional)\n" if global_label else ""
+    effective_kind = kind or ("global_label" if global_label else "label")
+    effective_shape = shape
+    if effective_kind == "global_label" and effective_shape is None:
+        effective_shape = "bidirectional"
+    shape_line = f"\t\t(shape {effective_shape})\n" if effective_shape else ""
     return (
-        f"\t({kind} {_sexpr_string(name)}\n"
+        f"\t({effective_kind} {_sexpr_string(name)}\n"
         f"{shape_line}"
         f"\t\t(at {_fmt_mm(x)} {_fmt_mm(y)} {rotation})\n"
         "\t\t(effects (font (size 1.524 1.524)))\n"
@@ -1914,3 +2428,410 @@ def register(mcp: FastMCP) -> None:
     def sch_reload() -> str:
         """Ask KiCad to reload the active schematic."""
         return _reload_schematic()
+
+    @mcp.tool()
+    def sch_create_sheet(
+        name: str,
+        filename: str,
+        x_mm: float,
+        y_mm: float,
+        snap_to_grid: bool = True,
+    ) -> str:
+        """Create a child schematic sheet and add it to the active top-level schematic."""
+        payload = CreateSheetInput(
+            name=name,
+            filename=filename,
+            x_mm=x_mm,
+            y_mm=y_mm,
+            snap_to_grid=snap_to_grid,
+        )
+        try:
+            from kicad_sch_api import create_schematic
+        except Exception as exc:
+            logger.warning("schematic_create_sheet_dependency_missing", error=str(exc))
+            return "kicad-sch-api is unavailable, so child sheet creation could not run."
+
+        top_schematic_path = _get_schematic_file()
+        sheet_x, sheet_y = _snap_point(payload.x_mm, payload.y_mm, payload.snap_to_grid)
+        snap_note = _snap_notice((payload.x_mm, payload.y_mm), (sheet_x, sheet_y))
+        child_name = payload.filename
+        if not child_name.endswith(".kicad_sch"):
+            child_name = f"{child_name}.kicad_sch"
+        child_path = top_schematic_path.parent / child_name
+        child_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            schematic = _load_kicad_schematic(top_schematic_path)
+            if schematic.sheets.get_sheet_by_name(payload.name) is not None:
+                return f"Sheet '{payload.name}' already exists."
+            if not child_path.exists():
+                child_schematic = create_schematic(payload.name)
+                child_schematic.save(child_path, preserve_format=True)
+            schematic.add_sheet(
+                payload.name,
+                str(child_path.relative_to(top_schematic_path.parent)).replace("\\", "/"),
+                (sheet_x, sheet_y),
+                (DEFAULT_SHEET_WIDTH_MM, DEFAULT_SHEET_HEIGHT_MM),
+                project_name=_project_name(),
+            )
+            schematic.save(top_schematic_path, preserve_format=True)
+        except Exception as exc:
+            logger.warning(
+                "schematic_create_sheet_failed",
+                name=payload.name,
+                filename=str(child_path),
+                error=str(exc),
+            )
+            return f"Could not create child sheet '{payload.name}': {exc}"
+
+        result = _reload_schematic()
+        detail = f"Created child sheet '{payload.name}' -> {child_path.name}."
+        if snap_note:
+            detail = f"{detail}\n{snap_note}"
+        return f"{result}\n{detail}"
+
+    @mcp.tool()
+    def sch_add_hierarchical_label(
+        text: str,
+        x_mm: float,
+        y_mm: float,
+        shape: str = "input",
+        rotation: int = 0,
+        snap_to_grid: bool = True,
+    ) -> str:
+        """Add a hierarchical label, preserving the requested shape and rotation."""
+        payload = HierarchicalLabelInput(
+            text=text,
+            x_mm=x_mm,
+            y_mm=y_mm,
+            shape=shape,
+            rotation=rotation,
+            snap_to_grid=snap_to_grid,
+        )
+        label_x, label_y = _snap_point(payload.x_mm, payload.y_mm, payload.snap_to_grid)
+        snap_note = _snap_notice((payload.x_mm, payload.y_mm), (label_x, label_y))
+        transactional_write(
+            lambda current: _append_before_sheet_instances(
+                current,
+                label_block(
+                    payload.text,
+                    label_x,
+                    label_y,
+                    payload.rotation,
+                    kind="hierarchical_label",
+                    shape=payload.shape,
+                ),
+            )
+        )
+        result = _reload_schematic()
+        return f"{result}\n{snap_note}" if snap_note else result
+
+    @mcp.tool()
+    def sch_add_global_label(
+        text: str,
+        x_mm: float,
+        y_mm: float,
+        shape: str = "bidirectional",
+        rotation: int = 0,
+        snap_to_grid: bool = True,
+    ) -> str:
+        """Add a global label, preserving the requested shape and rotation."""
+        payload = GlobalLabelInput(
+            text=text,
+            x_mm=x_mm,
+            y_mm=y_mm,
+            shape=shape,
+            rotation=rotation,
+            snap_to_grid=snap_to_grid,
+        )
+        label_x, label_y = _snap_point(payload.x_mm, payload.y_mm, payload.snap_to_grid)
+        snap_note = _snap_notice((payload.x_mm, payload.y_mm), (label_x, label_y))
+        transactional_write(
+            lambda current: _append_before_sheet_instances(
+                current,
+                label_block(
+                    payload.text,
+                    label_x,
+                    label_y,
+                    payload.rotation,
+                    kind="global_label",
+                    shape=payload.shape,
+                ),
+            )
+        )
+        result = _reload_schematic()
+        return f"{result}\n{snap_note}" if snap_note else result
+
+    @mcp.tool()
+    def sch_list_sheets() -> str:
+        """List child sheets from the active top-level schematic."""
+        sch_file = _get_schematic_file()
+        try:
+            schematic = _load_kicad_schematic(sch_file)
+            hierarchy = schematic.sheets.get_sheet_hierarchy()
+        except Exception as exc:
+            logger.warning(
+                "schematic_list_sheets_failed",
+                schematic_file=str(sch_file),
+                error=str(exc),
+            )
+            return f"Could not inspect sheet hierarchy: {exc}"
+
+        children = hierarchy.get("root", {}).get("children", [])
+        if not children:
+            return "The active schematic has no child sheets."
+
+        lines = [f"Child sheets ({len(children)} total):"]
+        for child in children:
+            position = child.get("position")
+            size = child.get("size")
+            lines.append(
+                f"- {child.get('name')} -> {child.get('filename')} "
+                f"@ ({float(position.x):.2f}, {float(position.y):.2f}) "
+                f"size=({float(size.x):.2f}, {float(size.y):.2f})"
+            )
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def sch_get_sheet_info(sheet_name: str) -> str:
+        """Return metadata for a specific child sheet."""
+        payload = GetSheetInfoInput(sheet_name=sheet_name)
+        sch_file = _get_schematic_file()
+        try:
+            schematic = _load_kicad_schematic(sch_file)
+            info = schematic.sheets.get_sheet_by_name(payload.sheet_name)
+        except Exception as exc:
+            logger.warning(
+                "schematic_get_sheet_info_failed",
+                schematic_file=str(sch_file),
+                sheet_name=payload.sheet_name,
+                error=str(exc),
+            )
+            return f"Could not inspect sheet '{payload.sheet_name}': {exc}"
+
+        if info is None:
+            return f"Sheet '{payload.sheet_name}' was not found."
+
+        pins = info.get("pins", [])
+        position = info.get("position", {})
+        size = info.get("size", {})
+        lines = [f"Sheet '{payload.sheet_name}'"]
+        lines.append(f"- File: {info.get('filename')}")
+        lines.append(
+            "- Position: "
+            f"({float(position.get('x', 0.0)):.2f}, {float(position.get('y', 0.0)):.2f}) mm"
+        )
+        lines.append(
+            "- Size: "
+            f"({float(size.get('width', 0.0)):.2f}, {float(size.get('height', 0.0)):.2f}) mm"
+        )
+        lines.append(f"- Page: {info.get('page_number', '?')}")
+        lines.append(f"- Pins: {len(pins)}")
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def sch_route_wire_between_pins(
+        ref1: str,
+        pin1: str,
+        ref2: str,
+        pin2: str,
+        snap_to_grid: bool = True,
+    ) -> str:
+        """Route deterministic Manhattan wire segments between two placed symbol pins."""
+        payload = RouteWireBetweenPinsInput(
+            ref1=ref1,
+            pin1=pin1,
+            ref2=ref2,
+            pin2=pin2,
+            snap_to_grid=snap_to_grid,
+        )
+        data = parse_schematic_file(_get_schematic_file())
+        symbols = {symbol["reference"]: symbol for symbol in data["symbols"]}
+        first = symbols.get(payload.ref1)
+        second = symbols.get(payload.ref2)
+        if first is None:
+            return f"Reference '{payload.ref1}' was not found in the schematic."
+        if second is None:
+            return f"Reference '{payload.ref2}' was not found in the schematic."
+
+        first_library, first_symbol = _split_lib_id(str(first["lib_id"]))
+        second_library, second_symbol = _split_lib_id(str(second["lib_id"]))
+        first_pins = get_pin_positions(
+            first_library,
+            first_symbol,
+            float(first["x"]),
+            float(first["y"]),
+            int(first["rotation"]),
+            int(first["unit"]),
+        )
+        second_pins = get_pin_positions(
+            second_library,
+            second_symbol,
+            float(second["x"]),
+            float(second["y"]),
+            int(second["rotation"]),
+            int(second["unit"]),
+        )
+        start = first_pins.get(payload.pin1)
+        end = second_pins.get(payload.pin2)
+        if start is None:
+            return f"Pin {payload.pin1} was not found on {payload.ref1}."
+        if end is None:
+            return f"Pin {payload.pin2} was not found on {payload.ref2}."
+
+        segments = _manhattan_segments(start, end, payload.snap_to_grid)
+        if not segments:
+            return (
+                f"{payload.ref1}:{payload.pin1} and {payload.ref2}:{payload.pin2} "
+                "already overlap."
+            )
+
+        def mutator(current: str) -> str:
+            updated = current
+            for segment in segments:
+                updated = _append_before_sheet_instances(updated, wire_block(*segment))
+            return updated
+
+        transactional_write(mutator)
+        result = _reload_schematic()
+        return (
+            f"{result}\nRouted {len(segments)} wire segment(s) between "
+            f"{payload.ref1}:{payload.pin1} and {payload.ref2}:{payload.pin2}."
+        )
+
+    @mcp.tool()
+    def sch_get_connectivity_graph() -> str:
+        """Summarize the active schematic as a textual net connectivity graph."""
+        groups = _build_connectivity_groups(_get_schematic_file())
+        if not groups:
+            return "The active schematic has no connectivity to summarize."
+
+        lines = [f"Connectivity groups ({len(groups)} total):"]
+        for index, group in enumerate(groups, start=1):
+            names = ", ".join(group["names"]) if group["names"] else "~unnamed"
+            pins = ", ".join(
+                f"{item['reference']}:{item['pin']}" for item in group["pins"]
+            ) or "none"
+            lines.append(
+                f"- Group {index}: {names} | pins={pins} | points={len(group['points'])}"
+            )
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def sch_trace_net(net_name: str) -> str:
+        """Trace a named net through the active schematic and matching child sheets."""
+        payload = TraceNetInput(net_name=net_name)
+        target = payload.net_name
+        local_matches = [
+            group
+            for group in _build_connectivity_groups(_get_schematic_file())
+            if target in group["names"]
+        ]
+
+        child_matches: list[str] = []
+        for display_name, child_path in _iter_child_sheet_paths(_get_schematic_file()):
+            if not child_path.exists():
+                continue
+            child_data = parse_schematic_file(child_path)
+            matched_labels = [
+                label
+                for label in child_data["labels"]
+                if str(label["name"]) == target
+            ]
+            matched_power = [
+                symbol
+                for symbol in child_data["power_symbols"]
+                if str(symbol["value"]) == target
+            ]
+            if matched_labels or matched_power:
+                child_matches.append(
+                    f"- {display_name}: labels={len(matched_labels)} "
+                    f"power_symbols={len(matched_power)}"
+                )
+
+        if not local_matches and not child_matches:
+            return f"Net '{target}' was not found in the active schematic or child sheets."
+
+        lines = [f"Trace for net '{target}':"]
+        if local_matches:
+            for index, group in enumerate(local_matches, start=1):
+                pins = ", ".join(
+                    f"{item['reference']}:{item['pin']}" for item in group["pins"]
+                ) or "none"
+                lines.append(
+                    f"- Top level match {index}: pins={pins} points={len(group['points'])}"
+                )
+        if child_matches:
+            lines.append("Child sheet matches:")
+            lines.extend(child_matches)
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def sch_auto_place_symbols(
+        symbol_list: list[str] | None = None,
+        strategy: str = "cluster",
+    ) -> str:
+        """Auto-place selected references using deterministic cluster, linear, or star layouts."""
+        payload = AutoPlaceSymbolsInput(symbol_list=symbol_list or [], strategy=strategy)
+        sch_file = _get_schematic_file()
+        try:
+            schematic = _load_kicad_schematic(sch_file)
+        except Exception as exc:
+            logger.warning(
+                "schematic_auto_place_load_failed",
+                schematic_file=str(sch_file),
+                error=str(exc),
+            )
+            return f"Could not load the active schematic for auto-placement: {exc}"
+
+        requested = payload.symbol_list or [
+            str(symbol["reference"]) for symbol in parse_schematic_file(sch_file)["symbols"]
+        ]
+        if not requested:
+            return "The active schematic contains no symbols to auto-place."
+
+        placed = 0
+        missing: list[str] = []
+        radius_mm = AUTO_LAYOUT_COLUMN_SPACING_MM
+        center_x = AUTO_LAYOUT_ORIGIN_X_MM + AUTO_LAYOUT_COLUMN_SPACING_MM
+        center_y = AUTO_LAYOUT_ORIGIN_Y_MM + AUTO_LAYOUT_ROW_SPACING_MM
+
+        for index, reference in enumerate(requested):
+            component = schematic.components.get(reference)
+            if component is None:
+                missing.append(reference)
+                continue
+
+            if payload.strategy == "linear":
+                x = AUTO_LAYOUT_ORIGIN_X_MM + (index * AUTO_LAYOUT_COLUMN_SPACING_MM)
+                y = AUTO_LAYOUT_ORIGIN_Y_MM
+            elif payload.strategy == "star":
+                if index == 0:
+                    x = center_x
+                    y = center_y
+                else:
+                    angle = ((index - 1) / max(len(requested) - 1, 1)) * (2 * math.pi)
+                    x = center_x + (radius_mm * math.cos(angle))
+                    y = center_y + (radius_mm * math.sin(angle))
+            else:
+                x, y = _auto_layout_point(index)
+
+            snapped_x, snapped_y = _snap_point(x, y, True)
+            component.move(snapped_x, snapped_y)
+            placed += 1
+
+        try:
+            schematic.save(sch_file, preserve_format=True)
+        except Exception as exc:
+            logger.warning(
+                "schematic_auto_place_save_failed",
+                schematic_file=str(sch_file),
+                error=str(exc),
+            )
+            return f"Could not save auto-placement changes: {exc}"
+
+        result = _reload_schematic()
+        missing_suffix = f" Missing: {', '.join(missing)}." if missing else ""
+        return (
+            f"{result}\nAuto-placed {placed} symbol(s) using the {payload.strategy} strategy."
+            f"{missing_suffix}"
+        )

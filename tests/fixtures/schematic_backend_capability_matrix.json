@@ -116,5 +116,78 @@
       "KiCad IPC reload helper outside kicad-sch-api"
     ],
     "notes": "Reload is a KiCad IPC concern and will remain a wrapper around the active editor/session."
+  },
+  "sch_create_sheet": {
+    "kicad_sch_api_support": "native",
+    "verified_surface": [
+      "Schematic.add_sheet",
+      "create_schematic",
+      "Schematic.save"
+    ],
+    "notes": "Child sheet creation maps directly to the verified sheet manager helpers."
+  },
+  "sch_add_hierarchical_label": {
+    "kicad_sch_api_support": "wrapper_needed",
+    "verified_surface": [
+      "Schematic.add_hierarchical_label"
+    ],
+    "notes": "The public API can create hierarchical labels, but the wrapper preserves shape and formatting compatibility."
+  },
+  "sch_add_global_label": {
+    "kicad_sch_api_support": "wrapper_needed",
+    "verified_surface": [
+      "Schematic.add_global_label"
+    ],
+    "notes": "The public API can create global labels, but the wrapper preserves shape and formatting compatibility."
+  },
+  "sch_list_sheets": {
+    "kicad_sch_api_support": "native",
+    "verified_surface": [
+      "SheetManager.get_sheet_hierarchy",
+      "SheetManager.get_sheet_by_name"
+    ],
+    "notes": "Sheet listing is available directly from the verified sheet manager APIs."
+  },
+  "sch_get_sheet_info": {
+    "kicad_sch_api_support": "native",
+    "verified_surface": [
+      "SheetManager.get_sheet_by_name"
+    ],
+    "notes": "Detailed sheet metadata is available directly from SheetManager.get_sheet_by_name()."
+  },
+  "sch_route_wire_between_pins": {
+    "kicad_sch_api_support": "wrapper_needed",
+    "verified_surface": [
+      "Schematic.add_wire_between_pins",
+      "Component.get_pin_position"
+    ],
+    "notes": "Pin-to-pin routing is exposed in kicad-sch-api, but the wrapper keeps the current Manhattan-routing contract deterministic."
+  },
+  "sch_get_connectivity_graph": {
+    "kicad_sch_api_support": "wrapper_needed",
+    "verified_surface": [
+      "Schematic.get_connected_pins",
+      "Schematic.get_net_for_pin",
+      "WireCollection.all"
+    ],
+    "notes": "Connectivity summaries are composed from verified wire and component helpers to match the existing textual MCP surface."
+  },
+  "sch_trace_net": {
+    "kicad_sch_api_support": "wrapper_needed",
+    "verified_surface": [
+      "Schematic.get_net_for_pin",
+      "SheetManager.get_sheet_hierarchy",
+      "SheetManager.get_sheet_by_name"
+    ],
+    "notes": "Net tracing uses verified sheet metadata plus compatibility parsing to report cross-sheet matches."
+  },
+  "sch_auto_place_symbols": {
+    "kicad_sch_api_support": "wrapper_needed",
+    "verified_surface": [
+      "ComponentCollection.get",
+      "Component.move",
+      "Schematic.save"
+    ],
+    "notes": "Auto-placement is implemented as a deterministic wrapper around component move helpers."
   }
 }

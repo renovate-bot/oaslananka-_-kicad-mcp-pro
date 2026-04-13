@@ -23,6 +23,7 @@ classifiers = [
 requires-python = ">=3.12"
 dependencies = [
   "anyio>=4.4.0",
+  "kicad-sch-api>=0.5.0,<0.6",
   "kicad-python>=0.6,<0.7",
   "mcp[cli]>=1.23.0",
   "pydantic>=2.7.0",

@@ -486,6 +486,206 @@ async def test_schematic_update_property_escapes_quotes(sample_project, mock_kic
     assert '(property "Value" "10k \\"1%\\""' in schematic
 
 
+@pytest.mark.anyio
+async def test_schematic_create_and_inspect_child_sheets(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+
+    result = await call_tool_text(
+        server,
+        "sch_create_sheet",
+        {"name": "Power", "filename": "power.kicad_sch", "x_mm": 40.64, "y_mm": 50.8},
+    )
+
+    assert "Created child sheet 'Power'" in result
+    assert (sample_project / "power.kicad_sch").exists()
+
+    listing = await call_tool_text(server, "sch_list_sheets", {})
+    assert "Power -> power.kicad_sch" in listing
+    assert "size=(30.48, 20.32)" in listing
+
+    info = await call_tool_text(server, "sch_get_sheet_info", {"sheet_name": "Power"})
+    assert "Sheet 'Power'" in info
+    assert "- File: power.kicad_sch" in info
+    assert "- Page: 2" in info
+
+
+@pytest.mark.anyio
+async def test_schematic_global_and_hierarchical_labels_preserve_shape(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_add_global_label",
+        {"text": "VCC", "x_mm": 25.4, "y_mm": 25.4, "shape": "output"},
+    )
+    await call_tool_text(
+        server,
+        "sch_add_hierarchical_label",
+        {"text": "SIG", "x_mm": 30.48, "y_mm": 30.48, "shape": "bidirectional"},
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    assert '(global_label "VCC"' in schematic
+    assert "\t\t(shape output)\n" in schematic
+    assert '(hierarchical_label "SIG"' in schematic
+    assert "\t\t(shape bidirectional)\n" in schematic
+
+
+@pytest.mark.anyio
+async def test_schematic_route_wire_between_pins_updates_connectivity_graph(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "symbols": [
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 10.16,
+                    "y_mm": 10.16,
+                    "reference": "R1",
+                    "value": "10k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 20.32,
+                    "y_mm": 10.16,
+                    "reference": "R2",
+                    "value": "22k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+            ],
+        },
+    )
+
+    route_text = await call_tool_text(
+        server,
+        "sch_route_wire_between_pins",
+        {"ref1": "R1", "pin1": "2", "ref2": "R2", "pin2": "1"},
+    )
+    await call_tool_text(
+        server,
+        "sch_add_label",
+        {"name": "MID", "x_mm": 12.7, "y_mm": 10.16, "rotation": 0},
+    )
+
+    graph = await call_tool_text(server, "sch_get_connectivity_graph", {})
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+
+    assert "Routed 1 wire segment" in route_text
+    assert "(pts (xy 12.7 10.16) (xy 17.78 10.16))" in schematic
+    assert "MID" in graph
+    assert "R1:2" in graph
+    assert "R2:1" in graph
+
+
+@pytest.mark.anyio
+async def test_schematic_trace_net_reports_child_sheet_matches(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_create_sheet",
+        {"name": "Power", "filename": "power.kicad_sch", "x_mm": 40.64, "y_mm": 50.8},
+    )
+    await call_tool_text(
+        server,
+        "sch_create_sheet",
+        {"name": "Control", "filename": "control.kicad_sch", "x_mm": 81.28, "y_mm": 50.8},
+    )
+    await call_tool_text(
+        server,
+        "sch_add_global_label",
+        {"text": "VIN", "x_mm": 20.32, "y_mm": 20.32, "shape": "input"},
+    )
+
+    child_template = (
+        "(kicad_sch\n"
+        "\t(version 20250316)\n"
+        '\t(generator "pytest")\n'
+        '\t(uuid "11111111-1111-1111-1111-111111111111")\n'
+        '\t(paper "A4")\n'
+        "\t(lib_symbols)\n"
+        '\t(hierarchical_label "VIN"\n'
+        "\t\t(shape input)\n"
+        "\t\t(at 10.16 10.16 0)\n"
+        "\t\t(effects (font (size 1.27 1.27)))\n"
+        '\t\t(uuid "22222222-2222-2222-2222-222222222222")\n'
+        "\t)\n"
+        "\t(sheet_instances\n"
+        '\t\t(path "/" (page "1"))\n'
+        "\t)\n"
+        "\t(embedded_fonts no)\n"
+        ")\n"
+    )
+    (sample_project / "power.kicad_sch").write_text(child_template, encoding="utf-8")
+    (sample_project / "control.kicad_sch").write_text(child_template, encoding="utf-8")
+
+    trace = await call_tool_text(server, "sch_trace_net", {"net_name": "VIN"})
+
+    assert "Trace for net 'VIN':" in trace
+    assert "Top level match" in trace
+    assert "Child sheet matches:" in trace
+    assert "Power" in trace
+    assert "Control" in trace
+
+
+@pytest.mark.anyio
+async def test_schematic_auto_place_symbols_repositions_requested_references(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "symbols": [
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 10.16,
+                    "y_mm": 10.16,
+                    "reference": "R1",
+                    "value": "10k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 10.16,
+                    "y_mm": 20.32,
+                    "reference": "R2",
+                    "value": "22k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+            ],
+        },
+    )
+
+    result = await call_tool_text(
+        server,
+        "sch_auto_place_symbols",
+        {"symbol_list": ["R1", "R2"], "strategy": "linear"},
+    )
+    symbols = await call_tool_text(server, "sch_get_symbols", {})
+
+    assert "Auto-placed 2 symbol(s) using the linear strategy." in result
+    assert "R1 10k Device:R @ (50.80, 50.80)" in symbols
+    assert "R2 22k Device:R @ (76.20, 50.80)" in symbols
+
+
 # ── sch_build_circuit ──────────────────────────────────────────────────────────
 
 
