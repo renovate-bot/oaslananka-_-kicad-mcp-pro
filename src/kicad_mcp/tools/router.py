@@ -203,6 +203,20 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "si_calculate_decoupling_placement",
         ],
     },
+    "power_integrity": {
+        "description": (
+            "Estimate voltage drop, current capacity, decoupling needs, power planes, "
+            "and thermal spreading."
+        ),
+        "tools": [
+            "pdn_calculate_voltage_drop",
+            "pdn_recommend_decoupling_caps",
+            "pdn_check_copper_weight",
+            "pdn_generate_power_plane",
+            "thermal_calculate_via_count",
+            "thermal_check_copper_pour",
+        ],
+    },
     "simulation": {
         "description": "Run SPICE operating-point, AC, transient, DC sweep, and stability checks.",
         "tools": [

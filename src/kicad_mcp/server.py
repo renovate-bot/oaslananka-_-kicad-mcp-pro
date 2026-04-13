@@ -16,6 +16,7 @@ from .tools import (
     export,
     library,
     pcb,
+    power_integrity,
     project,
     router,
     routing,
@@ -65,6 +66,8 @@ def build_server(profile: str | None = None) -> FastMCP:
         validation.register(server)
     if "routing" in enabled:
         routing.register(server)
+    if "power_integrity" in enabled:
+        power_integrity.register(server)
     if "signal_integrity" in enabled:
         signal_integrity.register(server)
     if "simulation" in enabled:

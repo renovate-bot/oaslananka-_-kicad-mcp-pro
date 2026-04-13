@@ -2,6 +2,11 @@
 
 from .export import ExportBOMInput, ExportGerberInput
 from .pcb import AddCircleInput, AddRectangleInput, AddTrackInput, AddViaInput
+from .power_integrity import (
+    CopperWeightCheckInput,
+    DecouplingRecommendationInput,
+    VoltageDropInput,
+)
 from .schematic import AddLabelInput, AddSymbolInput, AddWireInput
 from .signal_integrity import (
     DifferentialPairSkewInput,
@@ -21,6 +26,8 @@ __all__ = [
     "AddTrackInput",
     "AddViaInput",
     "AddWireInput",
+    "CopperWeightCheckInput",
+    "DecouplingRecommendationInput",
     "DCSweepInput",
     "DifferentialPairSkewInput",
     "ExportBOMInput",
@@ -31,4 +38,5 @@ __all__ = [
     "TraceImpedanceInput",
     "TraceWidthForImpedanceInput",
     "TransientAnalysisInput",
+    "VoltageDropInput",
 ]

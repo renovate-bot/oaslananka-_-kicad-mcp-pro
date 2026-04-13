@@ -56,3 +56,17 @@ placement checks:
 
 These tools use quasi-static formulas and board heuristics so agents can make
 better placement and routing decisions before a full SI review.
+
+## Power Integrity Surface
+
+v2 also adds a board-focused PDN and thermal review category:
+
+- `pdn_calculate_voltage_drop`
+- `pdn_recommend_decoupling_caps`
+- `pdn_check_copper_weight`
+- `pdn_generate_power_plane`
+- `thermal_calculate_via_count`
+- `thermal_check_copper_pour`
+
+This surface gives agents a lightweight way to review rail sizing, local
+decoupling, copper spreading, and stitched thermal escape plans before final DRC.

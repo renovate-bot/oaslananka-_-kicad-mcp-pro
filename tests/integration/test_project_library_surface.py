@@ -52,6 +52,9 @@ async def test_project_resources_prompts_and_library_surface(
     si_tools = await call_tool_text(
         server, "kicad_get_tools_in_category", {"category": "signal_integrity"}
     )
+    power_tools = await call_tool_text(
+        server, "kicad_get_tools_in_category", {"category": "power_integrity"}
+    )
 
     assert "Project directory" in info
     assert "Scan results" in scan
@@ -71,6 +74,8 @@ async def test_project_resources_prompts_and_library_surface(
     assert "sim_check_stability" in simulation_tools
     assert "si_calculate_trace_impedance" in si_tools
     assert "si_check_differential_pair_skew" in si_tools
+    assert "pdn_calculate_voltage_drop" in power_tools
+    assert "pdn_generate_power_plane" in power_tools
 
     created = await call_tool_text(
         server,

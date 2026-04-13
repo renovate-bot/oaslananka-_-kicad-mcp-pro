@@ -21,6 +21,7 @@ Primary CI/CD and release automation runs in Azure DevOps. GitHub Actions in thi
 - Validation tools for DRC, ERC, DFM, courtyard issues, silk overlaps, and schematic-versus-PCB footprint checks.
 - Export tools for Gerber, drill, BOM, PDF, netlist, STEP, render, pick-and-place, IPC-2581, SVG, and DXF.
 - Signal integrity tools for impedance synthesis, differential skew checks, stackup planning, via-stub review, and decoupling heuristics.
+- Power integrity tools for voltage-drop estimation, copper current checks, plane generation, and thermal via guidance.
 - Simulation tools for SPICE operating-point, AC, transient, DC sweep, and loop-stability checks.
 - MCP resources for live board/project state and prompts for first-board, schematic-to-PCB, and manufacturing workflows.
 - Server profiles (`full`, `minimal`, `pcb`, `schematic`, `manufacturing`) to reduce tool surface for clients.
@@ -353,6 +354,19 @@ useful for reusable `.param`, `.include`, or `.options` lines.
 These helpers provide fast board-level estimates for routing and review. They are
 intended for engineering triage and pre-layout guidance, then should be verified
 against your fabricator stackup and final KiCad rule setup before tape-out.
+
+### Power Integrity
+
+- `pdn_calculate_voltage_drop`
+- `pdn_recommend_decoupling_caps`
+- `pdn_check_copper_weight`
+- `pdn_generate_power_plane`
+- `thermal_calculate_via_count`
+- `thermal_check_copper_pour`
+
+These tools focus on quick PDN sanity checks: whether a rail looks too resistive,
+whether routed copper is undersized, whether a local plane exists, and how much
+thermal stitching is likely needed around hotter regions.
 
 ## Workflows
 
