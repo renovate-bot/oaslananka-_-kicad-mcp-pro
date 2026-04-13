@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-04-13
+
+### Added
+
+- Project-level quality, connectivity, placement, and manufacturing release gates for agent-guided review loops.
+- Design intent storage plus quality/fix-queue resources and benchmark release-gate fixtures.
+
+### Changed
+
+- Hard-blocked manufacturing package export when the project fails production quality gates.
+- Tightened release workflows, startup diagnostics, and validation-driven agent prompts for production review flows.
+
 ## [2.0.0] - 2026-04-13
 
 ### Added
