@@ -16,7 +16,7 @@ Primary CI/CD and release automation runs in Azure DevOps. GitHub Actions in thi
 - Project-first workflow with `kicad_set_project()`, recent project discovery, and safe path handling.
 - KiCad 10.x-first runtime with best-effort 9.x support and cross-platform CLI/library discovery.
 - PCB tools for board inspection, tracks, vias, footprints, text, shapes, outline editing, and zone refill.
-- Schematic tools for symbols, wires, labels, buses, no-connect markers, property updates, annotation, and IPC reload.
+- Schematic tools for symbols, wires, labels, buses, no-connect markers, property updates, annotation, netlist-aware auto-layout, and IPC reload.
 - Library tools for symbol search, footprint search, datasheet lookup, footprint assignment, and custom symbol generation.
 - Validation tools for DRC, ERC, DFM, courtyard issues, silk overlaps, and schematic-versus-PCB footprint checks.
 - Export tools for Gerber, drill, BOM, PDF, netlist, STEP, render, pick-and-place, IPC-2581, SVG, and DXF.
@@ -210,6 +210,7 @@ HTTP transports are available in [Client Configuration](docs/client-configuratio
 - `pcb_set_net_class`
 - `pcb_move_footprint`
 - `pcb_set_footprint_layer`
+- `pcb_sync_from_schematic`
 
 ### Schematic
 
@@ -230,6 +231,21 @@ HTTP transports are available in [Client Configuration](docs/client-configuratio
 - `sch_check_power_flags`
 - `sch_annotate`
 - `sch_reload`
+
+`sch_build_circuit` can accept `auto_layout=true` for a readable grid placement. When a
+`nets` list is also provided, it performs a lightweight connection-aware layout, creates
+missing power symbols or labels for named nets, and generates Manhattan wire segments
+from symbol pins. This is a deterministic helper, not a full KiCad-quality autorouter.
+Multi-unit symbols such as dual op-amps can be placed and inspected with `unit=<n>`.
+The MCP now validates requested units against the KiCad library and reports available
+units instead of silently falling back to unit 1.
+
+`pcb_sync_from_schematic` closes the first-board gap by reading schematic footprint
+assignments and writing missing footprint instances into the `.kicad_pcb` file. It is
+intended for initial board bring-up and footprint sync, not for full autorouting.
+It preserves existing footprints by default, can replace wrong footprint names in place
+with `replace_mismatched=true`, and performs a lightweight overlap-avoidance pass for
+newly added footprints.
 
 ### Library
 

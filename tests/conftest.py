@@ -141,17 +141,105 @@ def sample_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fake_cli: Pa
         ),
         encoding="utf-8",
     )
+    (symbols_dir / "Extended.kicad_sym").write_text(
+        (
+            "(kicad_symbol_lib (version 20250316) (generator pytest)\n"
+            '  (symbol "BaseTimer"\n'
+            '    (property "Reference" "U" (id 0) (at -5.08 5.08 0))\n'
+            '    (property "Value" "BaseTimer" (id 1) (at 0 -5.08 0))\n'
+            '    (pin input line (at -2.54 0 0) (length 2.54) (name "IN") (number "1"))\n'
+            '    (pin output line (at 2.54 0 180) (length 2.54) (name "OUT") (number "2"))\n'
+            "  )\n"
+            '  (symbol "ChildTimer"\n'
+            '    (extends "BaseTimer")\n'
+            '    (property "Reference" "U" (id 0) (at -5.08 5.08 0))\n'
+            '    (property "Value" "ChildTimer" (id 1) (at 0 -5.08 0))\n'
+            '    (property "Footprint" "Package_DIP:DIP-8_W7.62mm" (id 2) (at 0 -7.62 0))\n'
+            "  )\n"
+            ")\n"
+        ),
+        encoding="utf-8",
+    )
+    (symbols_dir / "MultiUnit.kicad_sym").write_text(
+        (
+            "(kicad_symbol_lib (version 20250316) (generator pytest)\n"
+            '  (symbol "DualOpamp"\n'
+            '    (property "Reference" "U" (id 0) (at 0 5.08 0))\n'
+            '    (property "Value" "DualOpamp" (id 1) (at 0 -5.08 0))\n'
+            '    (symbol "DualOpamp_1_1"\n'
+            '      (pin output line (at 7.62 0 180) (length 2.54) (name "OUTA") (number "1"))\n'
+            '      (pin input line (at -7.62 -2.54 0) (length 2.54) (name "-A") (number "2"))\n'
+            '      (pin input line (at -7.62 2.54 0) (length 2.54) (name "+A") (number "3"))\n'
+            "    )\n"
+            '    (symbol "DualOpamp_2_1"\n'
+            '      (pin input line (at -7.62 2.54 0) (length 2.54) (name "+B") (number "5"))\n'
+            '      (pin input line (at -7.62 -2.54 0) (length 2.54) (name "-B") (number "6"))\n'
+            '      (pin output line (at 7.62 0 180) (length 2.54) (name "OUTB") (number "7"))\n'
+            "    )\n"
+            '    (symbol "DualOpamp_3_1"\n'
+            '      (pin power_in line (at -2.54 -7.62 90) (length 2.54) (name "V-") (number "4"))\n'
+            '      (pin power_in line (at -2.54 7.62 270) (length 2.54) (name "V+") (number "8"))\n'
+            "    )\n"
+            "  )\n"
+            '  (symbol "DualChild"\n'
+            '    (extends "DualOpamp")\n'
+            '    (property "Reference" "U" (id 0) (at 0 5.08 0))\n'
+            '    (property "Value" "DualChild" (id 1) (at 0 -5.08 0))\n'
+            '    (property "Footprint" "Package_DIP:DIP-8_W7.62mm" (id 2) (at 0 -7.62 0))\n'
+            "  )\n"
+            ")\n"
+        ),
+        encoding="utf-8",
+    )
 
     footprints_dir = tmp_path / "footprints"
     footprints_dir.mkdir()
     resistor_lib = footprints_dir / "Resistor_SMD.pretty"
     resistor_lib.mkdir()
     (resistor_lib / "R_0805.kicad_mod").write_text(
-        '(module R_0805 (model "Resistor_SMD.3dshapes/R_0805.wrl"))\n',
+        (
+            '(footprint "R_0805"\n'
+            '\t(layer "F.Cu")\n'
+            '\t(property "Reference" "REF**"\n'
+            '\t\t(at 0 -1.5 0)\n'
+            '\t\t(layer "F.SilkS")\n'
+            "\t)\n"
+            '\t(property "Value" "R_0805"\n'
+            '\t\t(at 0 1.5 0)\n'
+            '\t\t(layer "F.Fab")\n'
+            "\t)\n"
+            '\t(fp_rect (start -1.4 -0.9) (end 1.4 0.9)'
+            ' (stroke (width 0.05) (type solid)) (fill no) (layer "F.CrtYd"))\n'
+            '\t(pad "1" smd rect (at -0.95 0) (size 0.8 1.2)'
+            ' (layers "F.Cu" "F.Mask" "F.Paste"))\n'
+            '\t(pad "2" smd rect (at 0.95 0) (size 0.8 1.2)'
+            ' (layers "F.Cu" "F.Mask" "F.Paste"))\n'
+            '\t(model "Resistor_SMD.3dshapes/R_0805.wrl")\n'
+            ")\n"
+        ),
         encoding="utf-8",
     )
     (resistor_lib / "R_1206.kicad_mod").write_text(
-        '(module R_1206 (model "Resistor_SMD.3dshapes/R_1206.wrl"))\n',
+        (
+            '(footprint "R_1206"\n'
+            '\t(layer "F.Cu")\n'
+            '\t(property "Reference" "REF**"\n'
+            '\t\t(at 0 -1.8 0)\n'
+            '\t\t(layer "F.SilkS")\n'
+            "\t)\n"
+            '\t(property "Value" "R_1206"\n'
+            '\t\t(at 0 1.8 0)\n'
+            '\t\t(layer "F.Fab")\n'
+            "\t)\n"
+            '\t(fp_rect (start -1.8 -1.0) (end 1.8 1.0)'
+            ' (stroke (width 0.05) (type solid)) (fill no) (layer "F.CrtYd"))\n'
+            '\t(pad "1" smd rect (at -1.4 0) (size 1.2 1.6)'
+            ' (layers "F.Cu" "F.Mask" "F.Paste"))\n'
+            '\t(pad "2" smd rect (at 1.4 0) (size 1.2 1.6)'
+            ' (layers "F.Cu" "F.Mask" "F.Paste"))\n'
+            '\t(model "Resistor_SMD.3dshapes/R_1206.wrl")\n'
+            ")\n"
+        ),
         encoding="utf-8",
     )
 

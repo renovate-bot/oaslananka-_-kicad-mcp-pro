@@ -128,3 +128,16 @@ class SetBoardOutlineInput(BaseModel):
     height_mm: float = Field(gt=0.0, le=2000.0)
     origin_x_mm: CoordMM = 0.0
     origin_y_mm: CoordMM = 0.0
+
+
+class SyncPcbFromSchematicInput(BaseModel):
+    """File-based PCB footprint sync parameters."""
+
+    origin_x_mm: CoordMM = Field(default=20.0)
+    origin_y_mm: CoordMM = Field(default=20.0)
+    scale_x: float = Field(default=1.0, gt=0.1, le=20.0)
+    scale_y: float = Field(default=1.0, gt=0.1, le=20.0)
+    grid_mm: float = Field(default=2.54, gt=0.01, le=50.0)
+    allow_open_board: bool = Field(default=False)
+    use_net_names: bool = Field(default=True)
+    replace_mismatched: bool = Field(default=False)

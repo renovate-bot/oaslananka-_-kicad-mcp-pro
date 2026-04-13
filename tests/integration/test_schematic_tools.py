@@ -20,6 +20,421 @@ async def test_schematic_add_label(sample_project, mock_kicad) -> None:
 
 
 @pytest.mark.anyio
+async def test_schematic_string_values_are_escaped(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_add_label",
+        {"name": 'NET(1)"A\\B', "x_mm": 10.0, "y_mm": 10.0, "rotation": 0},
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    labels = await call_tool_text(server, "sch_get_labels", {})
+    assert '"NET(1)\\"A\\\\B"' in schematic
+    assert 'NET(1)"A\\B' in labels
+
+
+@pytest.mark.anyio
+async def test_power_symbol_reference_is_hidden_and_value_offset(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    result = await call_tool_text(
+        server,
+        "sch_add_power_symbol",
+        {"name": "GND", "x_mm": 20.0, "y_mm": 30.0, "rotation": 0},
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    assert "updated" in result.lower() or "reload" in result.lower()
+    assert "Grid snap" in result
+    assert '(property "Reference" "#PWR' in schematic
+    assert "\t\t\t(at 20.32 36.83 0)" in schematic
+    assert "\t\t\t(effects (font (size 1.27 1.27)) (hide yes))" in schematic
+    assert '(property "Value" "GND"\n\t\t\t(at 20.32 35.56 0)' in schematic
+
+
+@pytest.mark.anyio
+async def test_build_circuit_accepts_power_symbol_mm_aliases(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "symbols": [],
+            "wires": [],
+            "labels": [],
+            "power_symbols": [{"name": "GND", "x_mm": 20.0, "y_mm": 30.0, "rotation": 0}],
+        },
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    assert '(lib_id "power:GND")' in schematic
+    assert "\t\t(at 20.32 30.48 0)" in schematic
+
+
+@pytest.mark.anyio
+async def test_build_circuit_auto_layout_assigns_missing_coordinates(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    result = await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "auto_layout": True,
+            "symbols": [
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "reference": "R1",
+                    "value": "10k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "reference": "R2",
+                    "value": "22k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+            ],
+            "wires": [],
+            "labels": [{"name": "OUT"}],
+            "power_symbols": [{"name": "GND"}],
+        },
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    assert "Applied basic auto-layout" in result
+    assert '(property "Reference" "R1"\n\t\t\t(at 50.8 46.99 0)' in schematic
+    assert "\t\t(at 76.2 50.8 0)" in schematic
+    assert "\t\t(at 50.8 68.58 0)" in schematic
+    assert '(label "OUT"\n\t\t(at 50.8 86.36 0)' in schematic
+
+
+@pytest.mark.anyio
+async def test_build_circuit_netlist_auto_layout_generates_wires(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    result = await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "auto_layout": True,
+            "symbols": [
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "reference": "R1",
+                    "value": "10k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "reference": "R2",
+                    "value": "22k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+            ],
+            "nets": [
+                {"name": "VIN", "endpoints": [{"reference": "R1", "pin": "1"}]},
+                {
+                    "name": "MID",
+                    "endpoints": [
+                        {"reference": "R1", "pin": "2"},
+                        {"reference": "R2", "pin": "1"},
+                    ],
+                },
+                {"name": "GND", "endpoints": [{"reference": "R2", "pin": "2"}]},
+            ],
+        },
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    assert "Applied netlist-aware auto-layout" in result
+    assert "generated 7 wire segment" in result
+    assert '(label "VIN"' in schematic
+    assert '(label "MID"' in schematic
+    assert '(lib_id "power:GND")' in schematic
+    assert "(pts (xy 53.34 50.8) (xy 86.36 50.8))" in schematic
+    assert "(pts (xy 88.9 50.8) (xy 88.9 68.58))" in schematic
+
+
+@pytest.mark.anyio
+async def test_schematic_snap_to_grid_can_be_disabled(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+
+    result = await call_tool_text(
+        server,
+        "sch_add_wire",
+        {
+            "x1_mm": 1.1,
+            "y1_mm": 2.2,
+            "x2_mm": 3.3,
+            "y2_mm": 4.4,
+            "snap_to_grid": False,
+        },
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    assert "Grid snap" not in result
+    assert "(pts (xy 1.1 2.2) (xy 3.3 4.4))" in schematic
+
+
+@pytest.mark.anyio
+async def test_schematic_pin_positions_use_electrical_pin_end(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    text = await call_tool_text(
+        server,
+        "sch_get_pin_positions",
+        {"library": "Device", "symbol_name": "R", "x_mm": 10.16, "y_mm": 10.16},
+    )
+
+    assert "Pin 1: (7.6200, 10.1600)" in text
+    assert "Pin 2: (12.7000, 10.1600)" in text
+
+
+@pytest.mark.anyio
+async def test_schematic_pin_positions_follow_extended_base_symbol(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    text = await call_tool_text(
+        server,
+        "sch_get_pin_positions",
+        {"library": "Extended", "symbol_name": "ChildTimer", "x_mm": 20.0, "y_mm": 20.0},
+    )
+
+    assert "Pin 1: (17.4600, 20.0000)" in text
+    assert "Pin 2: (22.5400, 20.0000)" in text
+
+
+@pytest.mark.anyio
+async def test_schematic_add_symbol_embeds_extended_symbol_chain(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_add_symbol",
+        {
+            "library": "Extended",
+            "symbol_name": "ChildTimer",
+            "x_mm": 20.0,
+            "y_mm": 20.0,
+            "reference": "U1",
+            "value": "ChildTimer",
+            "footprint": "Package_DIP:DIP-8_W7.62mm",
+            "rotation": 0,
+        },
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    assert '(symbol "BaseTimer"' in schematic
+    assert '(symbol "Extended:ChildTimer"' in schematic
+
+
+@pytest.mark.anyio
+async def test_schematic_pin_positions_support_multi_unit_inherited_symbols(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    text = await call_tool_text(
+        server,
+        "sch_get_pin_positions",
+        {
+            "library": "MultiUnit",
+            "symbol_name": "DualChild",
+            "x_mm": 40.0,
+            "y_mm": 40.0,
+            "rotation": 0,
+            "unit": 2,
+        },
+    )
+
+    assert "unit=2" in text
+    assert "Pin 5: (32.3800, 42.5400)" in text
+    assert "Pin 6: (32.3800, 37.4600)" in text
+    assert "Pin 7: (47.6200, 40.0000)" in text
+
+
+@pytest.mark.anyio
+async def test_schematic_add_symbol_records_requested_unit(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_add_symbol",
+        {
+            "library": "MultiUnit",
+            "symbol_name": "DualChild",
+            "x_mm": 30.0,
+            "y_mm": 30.0,
+            "reference": "U2",
+            "value": "DualChild",
+            "footprint": "Package_DIP:DIP-8_W7.62mm",
+            "rotation": 0,
+            "unit": 2,
+        },
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    symbols = await call_tool_text(server, "sch_get_symbols", {})
+    assert "\t\t(unit 2)\n" in schematic
+    assert '(reference "U2") (unit 2)' in schematic
+    assert "U2 DualChild MultiUnit:DualChild" in symbols
+    assert "unit=2" in symbols
+
+
+@pytest.mark.anyio
+async def test_schematic_invalid_unit_reports_available_units(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+
+    text = await call_tool_text(
+        server,
+        "sch_get_pin_positions",
+        {
+            "library": "MultiUnit",
+            "symbol_name": "DualChild",
+            "x_mm": 40.0,
+            "y_mm": 40.0,
+            "rotation": 0,
+            "unit": 4,
+        },
+    )
+
+    assert "does not support unit 4" in text
+    assert "Available units: 1, 2, 3" in text
+
+
+@pytest.mark.anyio
+async def test_build_circuit_netlist_auto_layout_supports_extended_symbols(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    result = await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "auto_layout": True,
+            "symbols": [
+                {
+                    "library": "Extended",
+                    "symbol_name": "ChildTimer",
+                    "reference": "U1",
+                    "value": "Timer",
+                    "footprint": "Package_DIP:DIP-8_W7.62mm",
+                },
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "reference": "R1",
+                    "value": "10k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+            ],
+            "nets": [
+                {
+                    "name": "SIG",
+                    "endpoints": [
+                        {"reference": "U1", "pin": "2"},
+                        {"reference": "R1", "pin": "1"},
+                    ],
+                },
+                {"name": "GND", "endpoints": [{"reference": "U1", "pin": "1"}]},
+            ],
+        },
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    assert "Applied netlist-aware auto-layout" in result
+    assert '(symbol "BaseTimer"' in schematic
+    assert '(symbol "Extended:ChildTimer"' in schematic
+    assert '(lib_id "power:GND")' in schematic
+    assert schematic.count("(wire") >= 2
+
+
+@pytest.mark.anyio
+async def test_build_circuit_netlist_auto_layout_uses_symbol_unit_for_routing(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    result = await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "auto_layout": True,
+            "symbols": [
+                {
+                    "library": "MultiUnit",
+                    "symbol_name": "DualChild",
+                    "reference": "U1",
+                    "value": "Dual",
+                    "footprint": "Package_DIP:DIP-8_W7.62mm",
+                    "unit": 2,
+                },
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "reference": "R1",
+                    "value": "10k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+            ],
+            "nets": [
+                {
+                    "name": "OUT2",
+                    "endpoints": [
+                        {"reference": "U1", "pin": "7"},
+                        {"reference": "R1", "pin": "1"},
+                    ],
+                },
+                {
+                    "name": "FB2",
+                    "endpoints": [
+                        {"reference": "U1", "pin": "6"},
+                        {"reference": "R1", "pin": "2"},
+                    ],
+                },
+            ],
+        },
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    assert "Applied netlist-aware auto-layout" in result
+    assert '(symbol "DualOpamp"' in schematic
+    assert '(symbol "MultiUnit:DualChild"' in schematic
+    assert '(label "OUT2"' in schematic
+    assert '(label "FB2"' in schematic
+    assert schematic.count("(wire") >= 3
+
+
+@pytest.mark.anyio
 async def test_library_assign_footprint_updates_schematic(sample_project, mock_kicad) -> None:
     server = build_server("schematic")
     await server.call_tool(
@@ -41,6 +456,34 @@ async def test_library_assign_footprint_updates_schematic(sample_project, mock_k
         {"reference": "R1", "library": "Resistor_SMD", "footprint": "R_0805"},
     )
     assert "Assigned footprint" in text
+
+
+@pytest.mark.anyio
+async def test_schematic_update_property_escapes_quotes(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+    await server.call_tool(
+        "sch_add_symbol",
+        {
+            "library": "Device",
+            "symbol_name": "R",
+            "x_mm": 10.0,
+            "y_mm": 10.0,
+            "reference": "R1",
+            "value": "10k",
+            "footprint": "",
+            "rotation": 0,
+        },
+    )
+
+    text = await call_tool_text(
+        server,
+        "sch_update_properties",
+        {"reference": "R1", "field": "Value", "value": '10k "1%"'},
+    )
+
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+    assert "Updated R1.Value" in text
+    assert '(property "Value" "10k \\"1%\\""' in schematic
 
 
 # ── sch_build_circuit ──────────────────────────────────────────────────────────

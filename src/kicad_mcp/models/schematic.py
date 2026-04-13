@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field
 
 CoordMM = Annotated[
     float,
@@ -23,6 +23,8 @@ class AddSymbolInput(BaseModel):
     value: str = Field(min_length=1, max_length=240)
     footprint: str = Field(default="", max_length=240)
     rotation: Literal[0, 90, 180, 270] = 0
+    unit: int = Field(default=1, ge=1, le=64)
+    snap_to_grid: bool = True
 
 
 class AddWireInput(BaseModel):
@@ -32,6 +34,7 @@ class AddWireInput(BaseModel):
     y1_mm: CoordMM
     x2_mm: CoordMM
     y2_mm: CoordMM
+    snap_to_grid: bool = True
 
 
 class AddLabelInput(BaseModel):
@@ -41,6 +44,7 @@ class AddLabelInput(BaseModel):
     x_mm: CoordMM
     y_mm: CoordMM
     rotation: Literal[0, 90, 180, 270] = 0
+    snap_to_grid: bool = True
 
 
 class AddBusInput(BaseModel):
@@ -50,6 +54,7 @@ class AddBusInput(BaseModel):
     y1_mm: CoordMM
     x2_mm: CoordMM
     y2_mm: CoordMM
+    snap_to_grid: bool = True
 
 
 class AddBusWireEntryInput(BaseModel):
@@ -58,6 +63,7 @@ class AddBusWireEntryInput(BaseModel):
     x_mm: CoordMM
     y_mm: CoordMM
     direction: Literal["up_right", "down_right", "up_left", "down_left"] = "up_right"
+    snap_to_grid: bool = True
 
 
 class AnnotateInput(BaseModel):
@@ -80,12 +86,14 @@ class AddNoConnectInput(BaseModel):
 
     x_mm: CoordMM
     y_mm: CoordMM
+    snap_to_grid: bool = True
 
 
 class PowerSymbolInput(BaseModel):
     """Power symbol placement input for sch_build_circuit."""
 
     name: str = Field(min_length=1, max_length=120)
-    x: CoordMM
-    y: CoordMM
+    x_mm: CoordMM = Field(validation_alias=AliasChoices("x_mm", "x"))
+    y_mm: CoordMM = Field(validation_alias=AliasChoices("y_mm", "y"))
     rotation: Literal[0, 90, 180, 270] = 0
+    snap_to_grid: bool = True

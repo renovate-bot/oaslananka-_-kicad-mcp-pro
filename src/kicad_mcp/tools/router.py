@@ -66,7 +66,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
         ],
     },
     "pcb_write": {
-        "description": "Modify PCB geometry and save board changes.",
+        "description": "Modify PCB geometry, sync initial footprints, and save board changes.",
         "tools": [
             "pcb_add_track",
             "pcb_add_tracks_bulk",
@@ -83,6 +83,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "pcb_set_net_class",
             "pcb_move_footprint",
             "pcb_set_footprint_layer",
+            "pcb_sync_from_schematic",
         ],
     },
     "schematic": {

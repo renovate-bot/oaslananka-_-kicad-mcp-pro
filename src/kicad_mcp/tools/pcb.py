@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
+import re
+import subprocess
+import uuid
 from collections.abc import Callable, Iterable
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from typing import Any, Protocol, TypeVar, cast
 
 import structlog
@@ -18,10 +23,11 @@ from kipy.board_types import (
 )
 from kipy.geometry import Angle, Vector2
 from kipy.proto.board.board_types_pb2 import BoardLayer, ViaType
+from kipy.proto.common import types as common_types
 from mcp.server.fastmcp import FastMCP
 
 from ..config import get_config
-from ..connection import board_transaction, get_board
+from ..connection import KiCadConnectionError, board_transaction, get_board
 from ..models.pcb import (
     AddCircleInput,
     AddRectangleInput,
@@ -31,12 +37,18 @@ from ..models.pcb import (
     AddViaInput,
     BulkTrackItem,
     SetBoardOutlineInput,
+    SyncPcbFromSchematicInput,
 )
 from ..utils.layers import resolve_layer
 from ..utils.units import mm_to_nm, nm_to_mm
+from .schematic import parse_schematic_file
 
 logger = structlog.get_logger(__name__)
 T = TypeVar("T")
+BOARD_FILE_VERSION = "20250216"
+STRING_PATTERN = r'"((?:\\.|[^"\\])*)"'
+FLOAT_PATTERN = r"-?\d+(?:\.\d+)?"
+PLACEMENT_MARGIN_MM = 1.27
 
 
 class _PositionLike(Protocol):
@@ -70,6 +82,15 @@ class _PadLike(Protocol):
     position: Any
 
 
+class _ComponentPlacement(Protocol):
+    reference: str
+    value: str
+    footprint: str
+    x: float
+    y: float
+    rotation: int
+
+
 def _coord_nm(point: object, axis: str) -> int:
     attr_name = f"{axis}_nm"
     value = getattr(point, attr_name) if hasattr(point, attr_name) else getattr(point, axis)
@@ -99,6 +120,602 @@ def _find_footprint_by_reference(reference: str) -> _FootprintLike | None:
 def _format_selection_id(item: object) -> str:
     item_id = getattr(getattr(item, "id", None), "value", "")
     return str(item_id)[:8] + ("..." if item_id else "")
+
+
+def _escape_sexpr_string(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .replace("\n", "\\n")
+    )
+
+
+def _sexpr_string(value: str) -> str:
+    return f'"{_escape_sexpr_string(value)}"'
+
+
+def _extract_block(content: str, start: int) -> tuple[str, int]:
+    depth = 0
+    in_string = False
+    escaped = False
+    for index, char in enumerate(content[start:]):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth == 0:
+                return content[start : start + index + 1], index + 1
+    return "", 0
+
+
+def _validate_board_text(content: str) -> None:
+    depth = 0
+    in_string = False
+    escaped = False
+    for char in content:
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+        elif char == '"':
+            in_string = True
+        elif char == "(":
+            depth += 1
+        elif char == ")":
+            depth -= 1
+            if depth < 0:
+                break
+    if depth != 0 or in_string:
+        raise ValueError("Refusing to write an invalid PCB file with unbalanced parentheses.")
+
+
+def _default_board_text() -> str:
+    return (
+        "(kicad_pcb\n"
+        f"\t(version {BOARD_FILE_VERSION})\n"
+        '\t(generator "kicad-mcp-pro")\n'
+        "\t(general)\n"
+        '\t(paper "A4")\n'
+        ")\n"
+    )
+
+
+def _get_pcb_file_for_sync() -> Path:
+    cfg = get_config()
+    if cfg.pcb_file is not None:
+        path = cfg.pcb_file
+    elif cfg.project_file is not None:
+        path = cfg.project_file.with_suffix(".kicad_pcb")
+        cfg.pcb_file = path
+    else:
+        raise ValueError(
+            "No PCB file is configured. Call kicad_set_project() or set KICAD_MCP_PCB_FILE."
+        )
+    if not path.exists():
+        path.write_text(_default_board_text(), encoding="utf-8")
+    return path
+
+
+def _normalize_board_content(content: str) -> str:
+    stripped = content.strip()
+    if not stripped or stripped == "(kicad_pcb)":
+        return _default_board_text()
+    if "(version" not in content:
+        return _default_board_text()
+    return content
+
+
+def _transactional_board_write(mutator: Callable[[str], str]) -> str:
+    board_file = _get_pcb_file_for_sync()
+    current = _normalize_board_content(board_file.read_text(encoding="utf-8", errors="ignore"))
+    updated = mutator(current)
+    _validate_board_text(updated)
+    with NamedTemporaryFile("w", encoding="utf-8", delete=False, dir=board_file.parent) as handle:
+        handle.write(updated)
+        temp_path = Path(handle.name)
+    temp_path.replace(board_file)
+    return str(board_file)
+
+
+def _board_is_open() -> bool:
+    try:
+        get_board()
+    except KiCadConnectionError:
+        return False
+    except Exception:
+        return False
+    return True
+
+
+def _reload_board_after_file_sync() -> str:
+    try:
+        board = get_board()
+    except KiCadConnectionError:
+        return "The PCB file was updated. Reload it manually in KiCad if needed."
+    except Exception:
+        return "The PCB file was updated. Reload it manually in KiCad if needed."
+
+    try:
+        revert = cast(Callable[[], None], board.revert)
+        revert()
+        return "The PCB file was updated and KiCad was asked to reload it."
+    except Exception as exc:
+        logger.debug("board_reload_after_sync_failed", error=str(exc))
+        return "The PCB file was updated. Reload it manually in KiCad if needed."
+
+
+def _parse_root_at(block: str) -> tuple[float, float, int] | None:
+    for line in block.splitlines()[:12]:
+        match = re.match(
+            rf"\s*\(at\s+({FLOAT_PATTERN})\s+({FLOAT_PATTERN})(?:\s+({FLOAT_PATTERN}))?\)",
+            line,
+        )
+        if match:
+            rotation = int(round(float(match.group(3) or "0")))
+            return float(match.group(1)), float(match.group(2)), rotation
+    return None
+
+
+def _iter_blocks(content: str, keyword: str) -> Iterable[str]:
+    cursor = 0
+    marker = f"({keyword}"
+    while cursor < len(content):
+        if content[cursor:].startswith(marker):
+            block, length = _extract_block(content, cursor)
+            if block:
+                yield block
+                cursor += length
+                continue
+        cursor += 1
+
+
+def _bbox_from_block(block: str) -> tuple[float, float]:
+    xs: list[float] = []
+    ys: list[float] = []
+
+    for rect in re.finditer(
+        rf"\(fp_rect\s+\(start\s+({FLOAT_PATTERN})\s+({FLOAT_PATTERN})\)\s+\(end\s+({FLOAT_PATTERN})\s+({FLOAT_PATTERN})\)",
+        block,
+    ):
+        xs.extend([float(rect.group(1)), float(rect.group(3))])
+        ys.extend([float(rect.group(2)), float(rect.group(4))])
+
+    for line in re.finditer(
+        rf"\(fp_line\s+\(start\s+({FLOAT_PATTERN})\s+({FLOAT_PATTERN})\)\s+\(end\s+({FLOAT_PATTERN})\s+({FLOAT_PATTERN})\)",
+        block,
+    ):
+        xs.extend([float(line.group(1)), float(line.group(3))])
+        ys.extend([float(line.group(2)), float(line.group(4))])
+
+    for pad_block in _iter_blocks(block, "pad"):
+        at_match = re.search(
+            rf"\(at\s+({FLOAT_PATTERN})\s+({FLOAT_PATTERN})(?:\s+{FLOAT_PATTERN})?\)",
+            pad_block,
+        )
+        size_match = re.search(rf"\(size\s+({FLOAT_PATTERN})\s+({FLOAT_PATTERN})\)", pad_block)
+        if at_match and size_match:
+            center_x = float(at_match.group(1))
+            center_y = float(at_match.group(2))
+            width = float(size_match.group(1))
+            height = float(size_match.group(2))
+            xs.extend([center_x - (width / 2), center_x + (width / 2)])
+            ys.extend([center_y - (height / 2), center_y + (height / 2)])
+
+    if not xs or not ys:
+        return 5.08, 5.08
+
+    width = max(max(xs) - min(xs), 1.0)
+    height = max(max(ys) - min(ys), 1.0)
+    return round(width, 4), round(height, 4)
+
+
+def _footprint_size_from_assignment(assignment: str) -> tuple[float, float]:
+    library, footprint = _split_footprint_assignment(assignment)
+    path = _footprint_file(library, footprint)
+    if not path.exists():
+        raise FileNotFoundError(f"Footprint '{assignment}' was not found.")
+    return _bbox_from_block(path.read_text(encoding="utf-8", errors="ignore"))
+
+
+def _parse_board_footprint_blocks(content: str) -> dict[str, dict[str, Any]]:
+    footprints: dict[str, dict[str, Any]] = {}
+    cursor = 0
+    while cursor < len(content):
+        if content[cursor:].startswith("(footprint"):
+            block, length = _extract_block(content, cursor)
+            if block:
+                ref_match = re.search(rf'\(property\s+"Reference"\s+{STRING_PATTERN}', block)
+                name_match = re.match(rf'\(footprint\s+{STRING_PATTERN}', block.lstrip())
+                if ref_match and name_match:
+                    root_at = _parse_root_at(block)
+                    width_mm, height_mm = _bbox_from_block(block)
+                    footprints[ref_match.group(1)] = {
+                        "name": name_match.group(1),
+                        "block": block,
+                        "start": cursor,
+                        "end": cursor + length,
+                        "x_mm": root_at[0] if root_at else None,
+                        "y_mm": root_at[1] if root_at else None,
+                        "rotation": root_at[2] if root_at else 0,
+                        "width_mm": width_mm,
+                        "height_mm": height_mm,
+                    }
+                cursor += length
+                continue
+        cursor += 1
+    return footprints
+
+
+def _append_board_blocks(content: str, blocks: list[str]) -> str:
+    normalized = _normalize_board_content(content).rstrip()
+    if not normalized.endswith(")"):
+        raise ValueError("The active PCB file does not end with a closing parenthesis.")
+    body = normalized[:-1].rstrip()
+    rendered = "\n".join("\n".join("\t" + line for line in block.splitlines()) for block in blocks)
+    return f"{body}\n{rendered}\n)\n"
+
+
+def _replace_board_blocks(
+    content: str,
+    replacements: dict[str, str],
+    additions: list[str],
+) -> str:
+    normalized = _normalize_board_content(content)
+    if replacements:
+        parsed = _parse_board_footprint_blocks(normalized)
+        pieces: list[str] = []
+        cursor = 0
+        for reference, entry in sorted(
+            parsed.items(),
+            key=lambda item: int(cast(int, item[1]["start"])),
+        ):
+            start = int(entry["start"])
+            end = int(entry["end"])
+            pieces.append(normalized[cursor:start])
+            pieces.append(replacements.get(reference, str(entry["block"])))
+            cursor = end
+        pieces.append(normalized[cursor:])
+        normalized = "".join(pieces)
+    if additions:
+        normalized = _append_board_blocks(normalized, additions)
+    return normalized
+
+
+def _footprint_file(library: str, footprint: str) -> Path:
+    cfg = get_config()
+    if cfg.footprint_library_dir is None or not cfg.footprint_library_dir.exists():
+        raise FileNotFoundError("No KiCad footprint library directory is configured.")
+    return cfg.footprint_library_dir / f"{library}.pretty" / f"{footprint}.kicad_mod"
+
+
+def _split_footprint_assignment(assignment: str) -> tuple[str, str]:
+    if ":" not in assignment:
+        raise ValueError(
+            f"Footprint assignment '{assignment}' must use the 'Library:Footprint' format."
+        )
+    library, footprint = assignment.split(":", 1)
+    if not library or not footprint:
+        raise ValueError(
+            f"Footprint assignment '{assignment}' must use the 'Library:Footprint' format."
+        )
+    return library, footprint
+
+
+def _snap_board_coord(value: float, grid_mm: float) -> float:
+    snapped = round(round(value / grid_mm) * grid_mm, 4)
+    return 0.0 if abs(snapped) < 1e-6 else snapped
+
+
+def _replace_property_value(block: str, field_name: str, value: str) -> str:
+    pattern = re.compile(rf'(\(property\s+"{re.escape(field_name)}"\s+){STRING_PATTERN}')
+    return pattern.sub(lambda match: f"{match.group(1)}{_sexpr_string(value)}", block, count=1)
+
+
+def _set_pad_net_name(pad_block: str, net_name: str) -> str:
+    net_pattern = re.compile(rf'(\(net\s+){STRING_PATTERN}')
+    if net_pattern.search(pad_block):
+        return net_pattern.sub(
+            lambda match: f"{match.group(1)}{_sexpr_string(net_name)}",
+            pad_block,
+            count=1,
+        )
+    insert_at = pad_block.rfind("\n)")
+    if insert_at == -1:
+        insert_at = pad_block.rfind(")")
+    if insert_at == -1:
+        return pad_block
+    return (
+        pad_block[:insert_at]
+        + f"\n\t\t(net {_sexpr_string(net_name)})"
+        + pad_block[insert_at:]
+    )
+
+
+def _assign_pad_nets(block: str, pad_nets: dict[str, str]) -> str:
+    rebuilt: list[str] = []
+    cursor = 0
+    while cursor < len(block):
+        if block[cursor:].startswith("(pad"):
+            pad_block, length = _extract_block(block, cursor)
+            if pad_block:
+                pad_match = re.match(rf'\(pad\s+{STRING_PATTERN}', pad_block.lstrip())
+                if pad_match and pad_match.group(1) in pad_nets:
+                    pad_block = _set_pad_net_name(pad_block, pad_nets[pad_match.group(1)])
+                rebuilt.append(pad_block)
+                cursor += length
+                continue
+        rebuilt.append(block[cursor])
+        cursor += 1
+    return "".join(rebuilt)
+
+
+def _inject_root_placement(block: str, *, x_mm: float, y_mm: float, rotation: int) -> str:
+    layer_match = re.search(r'\n(\s*\(layer\s+"[^"]+"\))', block)
+    insertion = (
+        f"\n\t(uuid {_sexpr_string(str(uuid.uuid4()))})"
+        f"\n\t(at {x_mm:.4f} {y_mm:.4f} {rotation})"
+    )
+    if layer_match:
+        end = layer_match.end()
+        return block[:end] + insertion + block[end:]
+    line_end = block.find("\n")
+    if line_end == -1:
+        return block[:-1] + insertion + "\n)"
+    return block[:line_end] + insertion + block[line_end:]
+
+
+def _render_board_footprint_block(
+    footprint_assignment: str,
+    *,
+    reference: str,
+    value: str,
+    x_mm: float,
+    y_mm: float,
+    rotation: int,
+    pad_nets: dict[str, str],
+) -> str:
+    library, footprint = _split_footprint_assignment(footprint_assignment)
+    path = _footprint_file(library, footprint)
+    if not path.exists():
+        raise FileNotFoundError(f"Footprint '{footprint_assignment}' was not found.")
+    block = path.read_text(encoding="utf-8", errors="ignore").strip()
+    block = _replace_property_value(block, "Reference", reference)
+    block = _replace_property_value(block, "Value", value)
+    block = _assign_pad_nets(block, pad_nets)
+    return _inject_root_placement(block, x_mm=x_mm, y_mm=y_mm, rotation=rotation)
+
+
+def _placement_boxes_overlap(
+    x1_mm: float,
+    y1_mm: float,
+    width1_mm: float,
+    height1_mm: float,
+    x2_mm: float,
+    y2_mm: float,
+    width2_mm: float,
+    height2_mm: float,
+    margin_mm: float,
+) -> bool:
+    return (
+        abs(x1_mm - x2_mm) < ((width1_mm + width2_mm) / 2) + margin_mm
+        and abs(y1_mm - y2_mm) < ((height1_mm + height2_mm) / 2) + margin_mm
+    )
+
+
+def _find_open_position(
+    seed_x_mm: float,
+    seed_y_mm: float,
+    width_mm: float,
+    height_mm: float,
+    payload: SyncPcbFromSchematicInput,
+    occupied: list[dict[str, float]],
+) -> tuple[float, float]:
+    margin_mm = PLACEMENT_MARGIN_MM
+
+    def is_free(candidate_x_mm: float, candidate_y_mm: float) -> bool:
+        return not any(
+            _placement_boxes_overlap(
+                candidate_x_mm,
+                candidate_y_mm,
+                width_mm,
+                height_mm,
+                box["x_mm"],
+                box["y_mm"],
+                box["width_mm"],
+                box["height_mm"],
+                margin_mm,
+            )
+            for box in occupied
+        )
+
+    snapped_seed = (
+        _snap_board_coord(seed_x_mm, payload.grid_mm),
+        _snap_board_coord(seed_y_mm, payload.grid_mm),
+    )
+    if is_free(*snapped_seed):
+        return snapped_seed
+
+    step_x_mm = max(
+        payload.grid_mm,
+        _snap_board_coord(width_mm + margin_mm, payload.grid_mm),
+    )
+    step_y_mm = max(
+        payload.grid_mm,
+        _snap_board_coord(height_mm + margin_mm, payload.grid_mm),
+    )
+
+    for radius in range(1, 25):
+        candidates: list[tuple[int, int]] = []
+        for delta_x in range(-radius, radius + 1):
+            candidates.append((delta_x, -radius))
+            candidates.append((delta_x, radius))
+        for delta_y in range(-radius + 1, radius):
+            candidates.append((-radius, delta_y))
+            candidates.append((radius, delta_y))
+        seen: set[tuple[int, int]] = set()
+        for delta_x, delta_y in candidates:
+            if (delta_x, delta_y) in seen:
+                continue
+            seen.add((delta_x, delta_y))
+            candidate_x_mm = _snap_board_coord(seed_x_mm + (delta_x * step_x_mm), payload.grid_mm)
+            candidate_y_mm = _snap_board_coord(seed_y_mm + (delta_y * step_y_mm), payload.grid_mm)
+            if is_free(candidate_x_mm, candidate_y_mm):
+                return candidate_x_mm, candidate_y_mm
+
+    return snapped_seed
+
+
+def _export_schematic_net_map() -> tuple[dict[tuple[str, str], str], str]:
+    cfg = get_config()
+    if cfg.sch_file is None or not cfg.sch_file.exists():
+        return {}, "No schematic file is configured, so pad net names were skipped."
+    if not cfg.kicad_cli.exists():
+        return {}, "kicad-cli is unavailable, so pad net names were skipped."
+
+    out_file = cfg.ensure_output_dir() / "pcb_sync.net"
+    variants = [
+        ["sch", "export", "netlist", "--output", str(out_file), str(cfg.sch_file)],
+        ["sch", "export", "netlist", "--input", str(cfg.sch_file), "--output", str(out_file)],
+    ]
+    last_stderr = "unknown error"
+    for variant in variants:
+        result = subprocess.run(
+            [str(cfg.kicad_cli), *variant],
+            capture_output=True,
+            text=True,
+            timeout=cfg.cli_timeout,
+            check=False,
+        )
+        if result.returncode == 0 and out_file.exists():
+            content = out_file.read_text(encoding="utf-8", errors="ignore")
+            return _parse_netlist_text(content), ""
+        last_stderr = result.stderr.strip() or last_stderr
+    return {}, f"Netlist export failed, so pad net names were skipped: {last_stderr}"
+
+
+def _parse_netlist_text(content: str) -> dict[tuple[str, str], str]:
+    net_map: dict[tuple[str, str], str] = {}
+    cursor = 0
+    while cursor < len(content):
+        if content[cursor:].startswith("(net"):
+            block, length = _extract_block(content, cursor)
+            if block:
+                name_match = re.search(rf'\(name\s+{STRING_PATTERN}\)', block)
+                if name_match is not None:
+                    net_name = name_match.group(1)
+                    for node in re.finditer(
+                        rf'\(node\s+\(ref\s+{STRING_PATTERN}\)\s+\(pin\s+{STRING_PATTERN}\)',
+                        block,
+                    ):
+                        net_map[(node.group(1), node.group(2))] = net_name
+                cursor += length
+                continue
+        cursor += 1
+    return net_map
+
+
+def _collect_schematic_components() -> tuple[list[dict[str, Any]], list[str]]:
+    cfg = get_config()
+    if cfg.sch_file is None or not cfg.sch_file.exists():
+        raise ValueError(
+            "No schematic file is configured. Call kicad_set_project() or set KICAD_MCP_SCH_FILE."
+        )
+
+    data = parse_schematic_file(cfg.sch_file)
+    grouped: dict[str, dict[str, Any]] = {}
+    issues: list[str] = []
+    for symbol in data["symbols"]:
+        reference = str(symbol["reference"])
+        component = grouped.setdefault(
+            reference,
+            {
+                "reference": reference,
+                "value": str(symbol["value"]),
+                "footprints": set(),
+                "positions": [],
+                "rotations": [],
+            },
+        )
+        footprint = str(symbol["footprint"]).strip()
+        if footprint:
+            component["footprints"].add(footprint)
+        component["positions"].append((float(symbol["x"]), float(symbol["y"])))
+        component["rotations"].append(int(symbol["rotation"]))
+
+    components: list[dict[str, Any]] = []
+    for reference, component in grouped.items():
+        footprints = cast(set[str], component["footprints"])
+        if len(footprints) > 1:
+            footprint_list = ", ".join(sorted(footprints))
+            issues.append(
+                f"{reference} has conflicting footprint assignments: {footprint_list}"
+            )
+            continue
+        positions = cast(list[tuple[float, float]], component["positions"])
+        rotations = cast(list[int], component["rotations"])
+        components.append(
+            {
+                "reference": reference,
+                "value": str(component["value"]),
+                "footprint": next(iter(footprints), ""),
+                "x": sum(position[0] for position in positions) / len(positions),
+                "y": sum(position[1] for position in positions) / len(positions),
+                "rotation": rotations[0] if rotations else 0,
+            }
+        )
+    return components, issues
+
+
+def _planned_board_positions(
+    components: list[dict[str, Any]],
+    payload: SyncPcbFromSchematicInput,
+    occupied_boxes: list[dict[str, float]] | None = None,
+) -> dict[str, tuple[float, float]]:
+    if not components:
+        return {}
+    min_x = min(float(component["x"]) for component in components)
+    min_y = min(float(component["y"]) for component in components)
+    positions: dict[str, tuple[float, float]] = {}
+    occupied = list(occupied_boxes or [])
+    for component in sorted(
+        components,
+        key=lambda item: (float(item["y"]), float(item["x"]), str(item["reference"])),
+    ):
+        seed_x_mm = payload.origin_x_mm + ((float(component["x"]) - min_x) * payload.scale_x)
+        seed_y_mm = payload.origin_y_mm + ((float(component["y"]) - min_y) * payload.scale_y)
+        width_mm, height_mm = _footprint_size_from_assignment(str(component["footprint"]))
+        resolved_x_mm, resolved_y_mm = _find_open_position(
+            seed_x_mm,
+            seed_y_mm,
+            width_mm,
+            height_mm,
+            payload,
+            occupied,
+        )
+        positions[str(component["reference"])] = (resolved_x_mm, resolved_y_mm)
+        occupied.append(
+            {
+                "x_mm": resolved_x_mm,
+                "y_mm": resolved_y_mm,
+                "width_mm": width_mm,
+                "height_mm": height_mm,
+            }
+        )
+    return positions
 
 
 def register(mcp: FastMCP) -> None:
@@ -526,6 +1143,8 @@ def register(mcp: FastMCP) -> None:
         text_item.attributes.size = Vector2.from_xy_mm(payload.size_mm, payload.size_mm)
         text_item.attributes.bold = payload.bold
         text_item.attributes.italic = payload.italic
+        text_item.attributes.horizontal_alignment = common_types.HA_LEFT
+        text_item.attributes.vertical_alignment = common_types.VA_BOTTOM
         try:
             text_item.attributes.angle = payload.rotation_deg
         except Exception as exc:
@@ -618,3 +1237,191 @@ def register(mcp: FastMCP) -> None:
         with board_transaction() as board:
             board.update_items([cast(BoardItem, footprint)])
         return f"Updated footprint '{reference}' to layer '{layer}'."
+
+    @mcp.tool()
+    def pcb_sync_from_schematic(
+        origin_x_mm: float = 20.0,
+        origin_y_mm: float = 20.0,
+        scale_x: float = 1.0,
+        scale_y: float = 1.0,
+        grid_mm: float = 2.54,
+        allow_open_board: bool = False,
+        use_net_names: bool = True,
+        replace_mismatched: bool = False,
+    ) -> str:
+        """Sync missing PCB footprints from schematic footprint assignments.
+
+        This is a file-based operation intended for initial board bring-up. It adds
+        missing footprint instances to the `.kicad_pcb` file using schematic
+        references, values, rotations, and assigned `Library:Footprint` names.
+        When `replace_mismatched=True`, existing footprints with the same
+        reference but the wrong footprint name are replaced in place.
+        """
+        payload = SyncPcbFromSchematicInput(
+            origin_x_mm=origin_x_mm,
+            origin_y_mm=origin_y_mm,
+            scale_x=scale_x,
+            scale_y=scale_y,
+            grid_mm=grid_mm,
+            allow_open_board=allow_open_board,
+            use_net_names=use_net_names,
+            replace_mismatched=replace_mismatched,
+        )
+        if _board_is_open() and not payload.allow_open_board:
+            return (
+                "Refusing file-based PCB sync while a board is open in KiCad. "
+                "Close the board first, or rerun with allow_open_board=True if you want "
+                "KiCad to reload the updated file from disk."
+            )
+
+        components, issues = _collect_schematic_components()
+        if issues:
+            return "PCB sync aborted:\n" + "\n".join(f"- {issue}" for issue in issues)
+        if not components:
+            return "No schematic symbols were found to sync."
+
+        missing_assignments = [
+            component["reference"]
+            for component in components
+            if not str(component["footprint"]).strip()
+        ]
+        if missing_assignments:
+            return (
+                "PCB sync aborted because some schematic symbols are missing "
+                "footprint assignments:\n"
+                + "\n".join(f"- {reference}" for reference in missing_assignments)
+            )
+
+        board_file = _get_pcb_file_for_sync()
+        board_content = _normalize_board_content(
+            board_file.read_text(encoding="utf-8", errors="ignore")
+        )
+        existing = _parse_board_footprint_blocks(board_content)
+        components_by_reference = {
+            str(component["reference"]): component for component in components
+        }
+
+        expected_names = {
+            str(component["reference"]): _split_footprint_assignment(str(component["footprint"]))[1]
+            for component in components
+        }
+        mismatched_references = [
+            reference
+            for reference, entry in existing.items()
+            if reference in expected_names and entry["name"] != expected_names[reference]
+        ]
+        mismatches = [
+            (
+                f"{reference}: board has {existing[reference]['name']}, "
+                f"schematic expects {expected_names[reference]}"
+            )
+            for reference in mismatched_references
+        ]
+
+        net_map: dict[tuple[str, str], str] = {}
+        net_note = ""
+        if payload.use_net_names:
+            net_map, net_note = _export_schematic_net_map()
+
+        additions: list[str] = []
+        replacements: dict[str, str] = {}
+        occupied_boxes = [
+            {
+                "x_mm": float(entry["x_mm"]),
+                "y_mm": float(entry["y_mm"]),
+                "width_mm": float(entry["width_mm"]),
+                "height_mm": float(entry["height_mm"]),
+            }
+            for entry in existing.values()
+            if entry["x_mm"] is not None and entry["y_mm"] is not None
+        ]
+        components_to_add = [
+            component
+            for component in components
+            if str(component["reference"]) not in existing
+        ]
+        placements = _planned_board_positions(components_to_add, payload, occupied_boxes)
+
+        for component in components_to_add:
+            reference = str(component["reference"])
+            x_mm, y_mm = placements[reference]
+            pad_nets = {
+                pin: name for (ref, pin), name in net_map.items() if ref == reference and name
+            }
+            additions.append(
+                _render_board_footprint_block(
+                    str(component["footprint"]),
+                    reference=reference,
+                    value=str(component["value"]),
+                    x_mm=x_mm,
+                    y_mm=y_mm,
+                    rotation=int(component["rotation"]),
+                    pad_nets=pad_nets,
+                )
+            )
+
+        if payload.replace_mismatched:
+            for reference in mismatched_references:
+                component = components_by_reference[reference]
+                existing_entry = existing[reference]
+                x_mm = (
+                    float(existing_entry["x_mm"])
+                    if existing_entry["x_mm"] is not None
+                    else payload.origin_x_mm
+                )
+                y_mm = (
+                    float(existing_entry["y_mm"])
+                    if existing_entry["y_mm"] is not None
+                    else payload.origin_y_mm
+                )
+                pad_nets = {
+                    pin: name
+                    for (ref, pin), name in net_map.items()
+                    if ref == reference and name
+                }
+                replacements[reference] = _render_board_footprint_block(
+                    str(component["footprint"]),
+                    reference=reference,
+                    value=str(component["value"]),
+                    x_mm=x_mm,
+                    y_mm=y_mm,
+                    rotation=int(existing_entry["rotation"]),
+                    pad_nets=pad_nets,
+                )
+
+        if not additions and not mismatches:
+            return "The PCB already contains all schematic footprint assignments."
+
+        if additions or replacements:
+            _transactional_board_write(
+                lambda current: _replace_board_blocks(current, replacements, additions)
+            )
+
+        reload_note = (
+            _reload_board_after_file_sync()
+            if (additions or replacements) and payload.allow_open_board
+            else "The PCB file was updated. Reload it manually in KiCad if needed."
+            if additions or replacements
+            else ""
+        )
+
+        lines = [
+            f"Schematic components considered: {len(components)}",
+            f"Existing PCB footprints kept: {len(existing) - len(replacements)}",
+            f"New footprints added: {len(additions)}",
+            f"Mismatched footprints replaced: {len(replacements)}",
+        ]
+        if mismatches:
+            lines.append("Existing footprint mismatches:")
+            lines.extend(f"- {mismatch}" for mismatch in mismatches[:20])
+            if len(mismatches) > 20:
+                lines.append(f"... and {len(mismatches) - 20} more")
+            if not payload.replace_mismatched:
+                lines.append(
+                    "Rerun with replace_mismatched=True to replace those footprints in place."
+                )
+        if net_note:
+            lines.append(net_note)
+        if reload_note:
+            lines.append(reload_note)
+        return "\n".join(lines)
