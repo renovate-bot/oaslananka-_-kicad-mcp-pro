@@ -1,6 +1,17 @@
 """Tool modules."""
 
-from . import export, library, pcb, project, router, routing, schematic, simulation, validation
+from . import (
+    export,
+    library,
+    pcb,
+    project,
+    router,
+    routing,
+    schematic,
+    signal_integrity,
+    simulation,
+    validation,
+)
 
 __all__ = [
     "export",
@@ -10,6 +21,7 @@ __all__ = [
     "router",
     "routing",
     "schematic",
+    "signal_integrity",
     "simulation",
     "validation",
 ]

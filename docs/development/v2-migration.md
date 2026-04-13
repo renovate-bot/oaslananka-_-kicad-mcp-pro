@@ -40,3 +40,19 @@ v2 also adds a dedicated SPICE simulation category:
 The preferred backend is `InSpice` when the `simulation` extra is installed.
 When that path is unavailable, the server falls back to direct `ngspice` CLI
 execution.
+
+## Signal Integrity Surface
+
+v2 adds a signal-integrity category focused on quick transmission-line and
+placement checks:
+
+- `si_calculate_trace_impedance`
+- `si_calculate_trace_width_for_impedance`
+- `si_check_differential_pair_skew`
+- `si_validate_length_matching`
+- `si_generate_stackup`
+- `si_check_via_stub`
+- `si_calculate_decoupling_placement`
+
+These tools use quasi-static formulas and board heuristics so agents can make
+better placement and routing decisions before a full SI review.

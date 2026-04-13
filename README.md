@@ -20,6 +20,7 @@ Primary CI/CD and release automation runs in Azure DevOps. GitHub Actions in thi
 - Library tools for symbol search, footprint search, datasheet lookup, footprint assignment, and custom symbol generation.
 - Validation tools for DRC, ERC, DFM, courtyard issues, silk overlaps, and schematic-versus-PCB footprint checks.
 - Export tools for Gerber, drill, BOM, PDF, netlist, STEP, render, pick-and-place, IPC-2581, SVG, and DXF.
+- Signal integrity tools for impedance synthesis, differential skew checks, stackup planning, via-stub review, and decoupling heuristics.
 - Simulation tools for SPICE operating-point, AC, transient, DC sweep, and loop-stability checks.
 - MCP resources for live board/project state and prompts for first-board, schematic-to-PCB, and manufacturing workflows.
 - Server profiles (`full`, `minimal`, `pcb`, `schematic`, `manufacturing`) to reduce tool surface for clients.
@@ -338,6 +339,20 @@ Simulation tools prefer `InSpice` when the `simulation` extra is installed and
 fall back to direct `ngspice` CLI execution when needed. `sim_add_spice_directive`
 stores a project-local sidecar file used by future MCP simulation runs, which is
 useful for reusable `.param`, `.include`, or `.options` lines.
+
+### Signal Integrity
+
+- `si_calculate_trace_impedance`
+- `si_calculate_trace_width_for_impedance`
+- `si_check_differential_pair_skew`
+- `si_validate_length_matching`
+- `si_generate_stackup`
+- `si_check_via_stub`
+- `si_calculate_decoupling_placement`
+
+These helpers provide fast board-level estimates for routing and review. They are
+intended for engineering triage and pre-layout guidance, then should be verified
+against your fabricator stackup and final KiCad rule setup before tape-out.
 
 ## Workflows
 

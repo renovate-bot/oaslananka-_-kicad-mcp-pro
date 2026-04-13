@@ -188,6 +188,21 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "tune_diff_pair_length",
         ],
     },
+    "signal_integrity": {
+        "description": (
+            "Estimate impedance, skew, length matching, stackup geometry, via stubs, "
+            "and decoupling placement."
+        ),
+        "tools": [
+            "si_calculate_trace_impedance",
+            "si_calculate_trace_width_for_impedance",
+            "si_check_differential_pair_skew",
+            "si_validate_length_matching",
+            "si_generate_stackup",
+            "si_check_via_stub",
+            "si_calculate_decoupling_placement",
+        ],
+    },
     "simulation": {
         "description": "Run SPICE operating-point, AC, transient, DC sweep, and stability checks.",
         "tools": [
