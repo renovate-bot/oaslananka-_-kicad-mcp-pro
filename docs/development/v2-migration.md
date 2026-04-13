@@ -87,6 +87,25 @@ v2 adds EMC-oriented board heuristics and a bundled sweep:
 The bundled compliance sweep runs ten named checks and returns pass/warn/fail
 text so agents can surface EMC risk early in the layout cycle.
 
+## DFM Surface
+
+v2 adds bundled manufacturer profiles and dedicated DFM tools:
+
+- `dfm_load_manufacturer_profile`
+- `dfm_run_manufacturer_check`
+- `dfm_calculate_manufacturing_cost`
+
+The initial bundled profiles target:
+
+- `JLCPCB / standard`
+- `JLCPCB / advanced`
+- `PCBWay / standard`
+- `OSH Park / 2layer`
+
+The legacy `check_design_for_manufacture` tool stays available, but now routes
+through the same bundled profile engine so manufacturing checks and cost
+estimates share one rule source.
+
 ## PCB Bring-Up Surface
 
 v2 expands the PCB write category with first-layout helpers:

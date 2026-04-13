@@ -13,6 +13,7 @@ from .config import get_config, reset_config
 from .prompts import workflows
 from .resources import board_state
 from .tools import (
+    dfm,
     emc_compliance,
     export,
     library,
@@ -65,6 +66,8 @@ def build_server(profile: str | None = None) -> FastMCP:
         export.register(server)
     if "validation" in enabled:
         validation.register(server)
+    if "dfm" in enabled:
+        dfm.register(server)
     if "routing" in enabled:
         routing.register(server)
     if "power_integrity" in enabled:

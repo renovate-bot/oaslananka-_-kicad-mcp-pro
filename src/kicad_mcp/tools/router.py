@@ -179,6 +179,14 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "validate_footprints_vs_schematic",
         ],
     },
+    "dfm": {
+        "description": "Load bundled manufacturer profiles, run DFM checks, and estimate cost.",
+        "tools": [
+            "dfm_load_manufacturer_profile",
+            "dfm_run_manufacturer_check",
+            "dfm_calculate_manufacturing_cost",
+        ],
+    },
     "routing": {
         "description": (
             "Advanced routing helpers including FreeRouting orchestration and rule-file tuning."
@@ -256,7 +264,7 @@ PROFILE_CATEGORIES: dict[str, tuple[str, ...]] = {
     "minimal": ("project", "pcb_read", "export"),
     "pcb": ("project", "pcb_read", "pcb_write", "routing", "export", "validation"),
     "schematic": ("project", "schematic", "library", "export", "validation"),
-    "manufacturing": ("project", "pcb_read", "export", "validation"),
+    "manufacturing": ("project", "pcb_read", "export", "validation", "dfm"),
 }
 
 

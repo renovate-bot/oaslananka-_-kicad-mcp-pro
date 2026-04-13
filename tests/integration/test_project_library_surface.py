@@ -59,6 +59,7 @@ async def test_project_resources_prompts_and_library_surface(
         server, "kicad_get_tools_in_category", {"category": "power_integrity"}
     )
     emc_tools = await call_tool_text(server, "kicad_get_tools_in_category", {"category": "emc"})
+    dfm_tools = await call_tool_text(server, "kicad_get_tools_in_category", {"category": "dfm"})
 
     assert "Project directory" in info
     assert "Scan results" in scan
@@ -85,6 +86,8 @@ async def test_project_resources_prompts_and_library_surface(
     assert "pdn_generate_power_plane" in power_tools
     assert "emc_check_ground_plane_voids" in emc_tools
     assert "emc_run_full_compliance" in emc_tools
+    assert "dfm_load_manufacturer_profile" in dfm_tools
+    assert "dfm_run_manufacturer_check" in dfm_tools
 
     created = await call_tool_text(
         server,

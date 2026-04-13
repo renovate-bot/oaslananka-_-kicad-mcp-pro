@@ -165,30 +165,11 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     def check_design_for_manufacture(jlcpcb: bool = True) -> str:
         """Run a lightweight DFM check using available DRC data."""
-        _, report, error = _run_drc_report("dfm_drc.json")
-        if report is None:
-            return f"DFM check failed: {error or 'unknown error'}"
+        from .dfm import _dfm_check_lines, _load_profile
 
-        violations = _entries(report, "violations")
-        unconnected = _entries(report, "unconnected_items")
-        courtyard = _entries(report, "items_not_passing_courtyard")
-        silk = [
-            violation
-            for violation in violations
-            if "silk" in str(violation.get("description", "")).lower()
-        ]
-        lines = [
-            f"DFM check ({'JLCPCB' if jlcpcb else 'generic'} profile):",
-            f"- Total DRC violations: {len(violations)}",
-            f"- Unconnected items: {len(unconnected)}",
-            f"- Courtyard issues: {len(courtyard)}",
-            f"- Silk to copper hints: {len(silk)}",
-        ]
-        if jlcpcb:
-            lines.append(
-                "Review annular ring, solder mask expansion, and slot support before fabrication."
-            )
-        return "\n".join(lines)
+        profile = _load_profile("JLCPCB" if jlcpcb else "PCBWay", "standard")
+        heading = f"DFM check ({'JLCPCB' if jlcpcb else 'generic'} profile):"
+        return "\n".join(_dfm_check_lines(profile, heading=heading))
 
     @mcp.tool()
     def get_unconnected_nets() -> str:

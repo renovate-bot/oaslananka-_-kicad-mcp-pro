@@ -320,6 +320,18 @@ that provide the required credentials.
 - `get_board_stats`
 - `export_manufacturing_package`
 
+### DFM
+
+- `dfm_load_manufacturer_profile`
+- `dfm_run_manufacturer_check`
+- `dfm_calculate_manufacturing_cost`
+
+DFM profiles are now bundled with the server for quick fabrication review. The
+first v2 profile set includes `JLCPCB` (`standard`, `advanced`), `PCBWay`
+(`standard`), and `OSH Park` (`2layer`). `dfm_load_manufacturer_profile`
+stores the active selection in the project output directory so later DFM checks
+can reuse the same fabricator assumptions.
+
 ### Routing
 
 - `route_single_track`
