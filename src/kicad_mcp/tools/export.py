@@ -89,6 +89,22 @@ def _ensure_output_dir(subdir: str | None = None) -> Path:
     return get_config().ensure_output_dir(subdir)
 
 
+def _safe_output_filename(raw_name: str, *, default_name: str) -> str:
+    name = raw_name or default_name
+    if "/" in name or "\\" in name:
+        raise ValueError("Output file names cannot contain directory separators or traversal.")
+    candidate = Path(name).expanduser()
+    if candidate.is_absolute() or candidate.anchor:
+        raise ValueError("Output file names must be relative to the export output directory.")
+    if len(candidate.parts) != 1 or candidate.name in {"", ".", ".."}:
+        raise ValueError("Output file names cannot contain directory separators or traversal.")
+    return candidate.name
+
+
+def _resolve_output_file(subdir: str, raw_name: str, *, default_name: str) -> Path:
+    return _ensure_output_dir(subdir) / _safe_output_filename(raw_name, default_name=default_name)
+
+
 def _format_file_list(files: list[Path], heading: str) -> str:
     if not files:
         return f"{heading}\nNo files were produced."
@@ -116,36 +132,45 @@ def register(mcp: FastMCP) -> None:
         """Export Gerber manufacturing files."""
         payload = ExportGerberInput(output_subdir=output_subdir, layers=layers or [])
         pcb_file = _get_pcb_file()
-        out_dir = _ensure_output_dir(payload.output_subdir)
+        try:
+            out_dir = _ensure_output_dir(payload.output_subdir)
+        except ValueError as exc:
+            return f"Invalid output path: {exc}"
         caps = get_cli_capabilities(get_config().kicad_cli)
 
         layer_args = []
         if payload.layers:
             layer_args = ["--layers", ",".join(payload.layers)]
 
-        code, _, stderr = _run_cli_variants(
-            [
+        gerber_commands = ["gerbers", "gerber"]
+        if caps.gerber_command not in gerber_commands:
+            gerber_commands.append(caps.gerber_command)
+        variants: list[list[str]] = []
+        for gerber_command in gerber_commands:
+            variants.extend(
                 [
-                    "pcb",
-                    "export",
-                    caps.gerber_command,
-                    "--output",
-                    str(out_dir),
-                    *layer_args,
-                    str(pcb_file),
-                ],
-                [
-                    "pcb",
-                    "export",
-                    caps.gerber_command,
-                    "--input",
-                    str(pcb_file),
-                    "--output",
-                    str(out_dir),
-                    *layer_args,
-                ],
-            ]
-        )
+                    [
+                        "pcb",
+                        "export",
+                        gerber_command,
+                        "--output",
+                        str(out_dir),
+                        *layer_args,
+                        str(pcb_file),
+                    ],
+                    [
+                        "pcb",
+                        "export",
+                        gerber_command,
+                        "--input",
+                        str(pcb_file),
+                        "--output",
+                        str(out_dir),
+                        *layer_args,
+                    ],
+                ]
+            )
+        code, _, stderr = _run_cli_variants(variants)
         if code != 0:
             return f"Gerber export failed: {stderr or 'unknown error'}"
 
@@ -157,7 +182,10 @@ def register(mcp: FastMCP) -> None:
     def export_drill(output_subdir: str = "gerber") -> str:
         """Export drill files."""
         pcb_file = _get_pcb_file()
-        out_dir = _ensure_output_dir(output_subdir)
+        try:
+            out_dir = _ensure_output_dir(output_subdir)
+        except ValueError as exc:
+            return f"Invalid output path: {exc}"
         caps = get_cli_capabilities(get_config().kicad_cli)
         code, _, stderr = _run_cli_variants(
             [
@@ -326,11 +354,10 @@ def register(mcp: FastMCP) -> None:
         if not caps.supports_step:
             return "STEP export is not supported by the detected KiCad CLI."
 
-        out_file = (
-            Path(output_path).expanduser().resolve()
-            if output_path
-            else _ensure_output_dir("3d") / "board.step"
-        )
+        try:
+            out_file = _resolve_output_file("3d", output_path, default_name="board.step")
+        except ValueError as exc:
+            return f"Invalid output path: {exc}"
         code, _, stderr = _run_cli_variants(
             [
                 ["pcb", "export", "step", "--output", str(out_file), str(pcb_file)],
@@ -355,7 +382,10 @@ def register(mcp: FastMCP) -> None:
         if not caps.supports_render:
             return "3D rendering is not supported by the detected KiCad CLI."
 
-        out_file = _ensure_output_dir("3d") / payload.output_file
+        try:
+            out_file = _resolve_output_file("3d", payload.output_file, default_name="render.png")
+        except ValueError as exc:
+            return f"Invalid output path: {exc}"
         code, _, stderr = _run_cli_variants(
             [
                 [

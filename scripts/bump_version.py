@@ -97,6 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     update_json(ROOT / "server.json", version)
     update_json(ROOT / "mcp.json", version)
+    replace_once(ROOT / "smithery.yaml", r'^version: "[^"]+"', f'version: "{version}"')
     update_changelog(ROOT / "CHANGELOG.md", version, args.date)
 
     if not args.skip_lock:

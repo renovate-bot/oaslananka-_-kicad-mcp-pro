@@ -65,6 +65,10 @@ def reset_globals(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("KICAD_MCP_FOOTPRINT_LIBRARY_DIR", raising=False)
     monkeypatch.delenv("KICAD_MCP_KICAD_CLI", raising=False)
     monkeypatch.delenv("KICAD_MCP_TRANSPORT", raising=False)
+    monkeypatch.delenv("KICAD_MCP_HOST", raising=False)
+    monkeypatch.delenv("KICAD_MCP_PORT", raising=False)
+    monkeypatch.delenv("KICAD_MCP_LOG_LEVEL", raising=False)
+    monkeypatch.delenv("KICAD_MCP_LOG_FORMAT", raising=False)
     monkeypatch.delenv("KICAD_MCP_PROFILE", raising=False)
     monkeypatch.delenv("KICAD_MCP_ENABLE_EXPERIMENTAL_TOOLS", raising=False)
 

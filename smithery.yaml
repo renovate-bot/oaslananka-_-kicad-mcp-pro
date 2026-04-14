@@ -3,7 +3,7 @@ displayName: KiCad MCP Pro Server
 description: >
   Professional Model Context Protocol server for KiCad EDA with project setup,
   PCB editing, schematic tooling, validation, and manufacturing exports.
-version: "1.0.0"
+version: "2.0.2"
 icon: https://raw.githubusercontent.com/oaslananka/kicad-mcp-pro/main/docs/assets/icon.png
 categories:
   - engineering
@@ -46,4 +46,4 @@ requirements:
     url: https://www.kicad.org/download/
     notes: KiCad must be installed. For IPC tools, keep KiCad open or enable headless use.
   - name: Python
-    version: ">=3.11"
+    version: ">=3.12"

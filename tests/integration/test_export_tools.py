@@ -49,6 +49,131 @@ async def test_export_gerber_uses_cli_variants(sample_project, monkeypatch) -> N
 
 
 @pytest.mark.anyio
+async def test_export_gerber_prefers_modern_command_then_legacy_fallback(
+    sample_project,
+    monkeypatch,
+) -> None:
+    out_dir = sample_project / "output" / "gerber"
+    commands: list[list[str]] = []
+
+    def fake_run(cmd, *args: object, **kwargs: object):
+        _ = args, kwargs
+        commands.append(list(cmd))
+
+        class Result:
+            stdout = ""
+
+            def __init__(self, returncode: int, stderr: str) -> None:
+                self.returncode = returncode
+                self.stderr = stderr
+
+        if "gerbers" in cmd:
+            return Result(1, "unknown command")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "demo-F_Cu.gbr").write_text("gerber", encoding="utf-8")
+        return Result(0, "")
+
+    monkeypatch.setattr("kicad_mcp.tools.export.subprocess.run", fake_run)
+    monkeypatch.setattr("kicad_mcp.discovery.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "kicad_mcp.tools.export.get_cli_capabilities",
+        lambda _cli: CliCapabilities(
+            version="KiCad 10.0.1",
+            gerber_command="gerbers",
+            drill_command="drill",
+            position_command="pos",
+            supports_step=True,
+            supports_render=True,
+        ),
+    )
+    server = build_server("manufacturing")
+    text = await call_tool_text(server, "export_gerber", {"output_subdir": "gerber", "layers": []})
+
+    assert "Gerber export completed" in text
+    assert [command[3] for command in commands[:3]] == ["gerbers", "gerbers", "gerber"]
+
+
+@pytest.mark.anyio
+async def test_export_paths_reject_traversal_and_absolute_outputs(
+    sample_project,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "kicad_mcp.tools.export.get_cli_capabilities",
+        lambda _cli: CliCapabilities(
+            version="KiCad 10.0.1",
+            gerber_command="gerbers",
+            drill_command="drill",
+            position_command="pos",
+            supports_step=True,
+            supports_render=True,
+        ),
+    )
+    server = build_server("manufacturing")
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+
+    gerber = await call_tool_text(server, "export_gerber", {"output_subdir": "../escape"})
+    step = await call_tool_text(
+        server,
+        "export_step",
+        {"output_path": str(sample_project.parent / "escape.step")},
+    )
+    render = await call_tool_text(server, "export_3d_render", {"output_file": "nested/render.png"})
+    render_backslash = await call_tool_text(
+        server,
+        "export_3d_render",
+        {"output_file": r"nested\render.png"},
+    )
+
+    assert "Invalid output path" in gerber
+    assert "Invalid output path" in step
+    assert "Invalid output path" in render
+    assert "Invalid output path" in render_backslash
+
+
+@pytest.mark.anyio
+async def test_export_step_and_render_keep_relative_names_under_output_dir(
+    sample_project,
+    monkeypatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(cmd, *args: object, **kwargs: object):
+        _ = args, kwargs
+        commands.append(list(cmd))
+
+        class Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("kicad_mcp.tools.export.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "kicad_mcp.tools.export.get_cli_capabilities",
+        lambda _cli: CliCapabilities(
+            version="KiCad 10.0.1",
+            gerber_command="gerbers",
+            drill_command="drill",
+            position_command="pos",
+            supports_step=True,
+            supports_render=True,
+        ),
+    )
+    server = build_server("manufacturing")
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+
+    step = await call_tool_text(server, "export_step", {"output_path": "board.step"})
+    render = await call_tool_text(server, "export_3d_render", {"output_file": "render.png"})
+
+    assert "STEP model exported" in step
+    assert "Rendered board image exported" in render
+    assert str(sample_project / "output" / "3d" / "board.step") in commands[0]
+    assert str(sample_project / "output" / "3d" / "render.png") in commands[1]
+
+
+@pytest.mark.anyio
 async def test_run_drc_reads_json_report(sample_project, monkeypatch) -> None:
     report_path = sample_project / "output" / "drc_report.json"
 

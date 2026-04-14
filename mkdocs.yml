@@ -48,3 +48,4 @@ nav:
   - Development:
       - Contributing: development/contributing.md
       - Architecture: development/architecture.md
+      - v2 Migration: development/v2-migration.md

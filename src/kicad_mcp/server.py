@@ -7,6 +7,7 @@ import os
 import structlog
 import typer
 from mcp.server.fastmcp import FastMCP
+from typer.models import OptionInfo
 
 from . import __version__
 from .config import KiCadMCPConfig, get_config, reset_config
@@ -112,27 +113,36 @@ def _print_startup_diagnostics(cfg: KiCadMCPConfig) -> None:
 
 @app.callback(invoke_without_command=True)
 def main_callback(
-    transport: str = typer.Option("stdio", help="Transport: stdio, http, sse, streamable-http"),
-    host: str = typer.Option("127.0.0.1", help="HTTP bind host"),
-    port: int = typer.Option(3334, help="HTTP bind port"),
-    project_dir: str | None = typer.Option(None, help="Active KiCad project directory"),
-    log_level: str = typer.Option("INFO", help="Log level"),
-    log_format: str = typer.Option("console", help="Log format: console or json"),
-    profile: str = typer.Option(
-        "full", help=f"Server profile: {', '.join(available_profiles())}"
+    transport: str | None = typer.Option(
+        None, help="Transport: stdio, http, sse, streamable-http"
     ),
-    experimental: bool = typer.Option(False, help="Enable experimental tools"),
+    host: str | None = typer.Option(None, help="HTTP bind host"),
+    port: int | None = typer.Option(None, help="HTTP bind port"),
+    project_dir: str | None = typer.Option(None, help="Active KiCad project directory"),
+    log_level: str | None = typer.Option(None, help="Log level"),
+    log_format: str | None = typer.Option(None, help="Log format: console or json"),
+    profile: str | None = typer.Option(
+        None, help=f"Server profile: {', '.join(available_profiles())}"
+    ),
+    experimental: bool | None = typer.Option(None, help="Enable experimental tools"),
 ) -> None:
     """Start the KiCad MCP Pro server."""
-    os.environ["KICAD_MCP_TRANSPORT"] = transport
-    os.environ["KICAD_MCP_HOST"] = host
-    os.environ["KICAD_MCP_PORT"] = str(port)
-    os.environ["KICAD_MCP_LOG_LEVEL"] = log_level
-    os.environ["KICAD_MCP_LOG_FORMAT"] = log_format
-    os.environ["KICAD_MCP_PROFILE"] = profile
-    os.environ["KICAD_MCP_ENABLE_EXPERIMENTAL_TOOLS"] = "true" if experimental else "false"
-    if project_dir:
-        os.environ["KICAD_MCP_PROJECT_DIR"] = project_dir
+    cli_env = {
+        "KICAD_MCP_TRANSPORT": transport,
+        "KICAD_MCP_HOST": host,
+        "KICAD_MCP_PORT": (
+            str(port) if port is not None and not isinstance(port, OptionInfo) else None
+        ),
+        "KICAD_MCP_LOG_LEVEL": log_level,
+        "KICAD_MCP_LOG_FORMAT": log_format,
+        "KICAD_MCP_PROFILE": profile,
+        "KICAD_MCP_PROJECT_DIR": project_dir,
+    }
+    for key, value in cli_env.items():
+        if value is not None and not isinstance(value, OptionInfo):
+            os.environ[key] = value
+    if experimental is not None and not isinstance(experimental, OptionInfo):
+        os.environ["KICAD_MCP_ENABLE_EXPERIMENTAL_TOOLS"] = "true" if experimental else "false"
 
     reset_config()
     cfg = get_config()

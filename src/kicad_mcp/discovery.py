@@ -149,7 +149,7 @@ def get_cli_capabilities(cli_path: Path) -> CliCapabilities:
 
     blob = "\n".join(help_outputs).lower()
     tokens = set(re.findall(r"[a-z0-9_-]+", blob))
-    gerber_command = "gerbers" if "gerbers" in tokens and "gerber" not in tokens else "gerber"
+    gerber_command = "gerbers" if "gerbers" in tokens else "gerber"
     position_command = "positions" if "positions" in tokens else "pos"
 
     return CliCapabilities(

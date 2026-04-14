@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-04-14
+
+### Fixed
+
+- Restored complete sdist/wheel contents for package installs and `uvx` entrypoints.
+- Preserved environment-based MCP client configuration unless CLI options explicitly override it.
+- Preferred KiCad 10 `pcb export gerbers` and kept singular `gerber` as a fallback.
+- Rejected export output traversal/absolute path writes and escaped custom symbol strings.
+
+### Changed
+
+- Updated Docker, registry, Smithery, docs, and security metadata for the 2.x release line.
+
 ## [2.0.1] - 2026-04-13
 
 ### Added

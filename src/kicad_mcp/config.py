@@ -172,7 +172,18 @@ class KiCadMCPConfig(BaseSettings):
     def ensure_output_dir(self, subdir: str | None = None) -> Path:
         """Create and return the output directory."""
         base = (self.output_dir or (self.project_root / "output")).resolve()
-        target = base / subdir if subdir else base
+        target = base
+        if subdir:
+            candidate = Path(subdir).expanduser()
+            if candidate.is_absolute():
+                raise ValueError("Output subdirectories must be relative to the output directory.")
+            if any(part == ".." for part in candidate.parts):
+                raise ValueError("Output subdirectories cannot contain parent traversal.")
+            target = (base / candidate).resolve()
+            try:
+                target.relative_to(base)
+            except ValueError as exc:
+                raise ValueError("The requested output directory escapes the output root.") from exc
         target.mkdir(parents=True, exist_ok=True)
         return target
 

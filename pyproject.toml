@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kicad-mcp-pro"
-version = "2.0.1"
+version = "2.0.2"
 description = "A professional Model Context Protocol server for KiCad EDA."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -67,8 +67,10 @@ packages = ["src/kicad_mcp"]
 
 [tool.hatch.build.targets.sdist]
 include = [
-  "src/kicad_mcp/dfm_profiles/*.json",
-  "src/kicad_mcp/dfm_profiles/__init__.py",
+  "src/kicad_mcp",
+  "README.md",
+  "LICENSE",
+  "pyproject.toml",
 ]
 
 [tool.ruff]

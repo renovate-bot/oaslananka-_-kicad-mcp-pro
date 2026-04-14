@@ -1,4 +1,5 @@
 # KiCad MCP Pro Server
+<!-- mcp-name: io.github.oaslananka/kicad-mcp-pro -->
 
 [![PyPI](https://img.shields.io/pypi/v/kicad-mcp-pro.svg)](https://pypi.org/project/kicad-mcp-pro/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -148,6 +149,9 @@ HTTP transports are available in [Client Configuration](docs/client-configuratio
 - `kicad-cli`-backed export and validation tools require a KiCad installation inside the
   container, typically mounted at `/usr/bin/kicad-cli`, or `KICAD_MCP_KICAD_CLI` pointed to a
   valid binary.
+- The default Compose setup mounts the project read-only and writes exports to
+  `/tmp/kicad-mcp-output`. For edit/write workflows, change the project volume to `rw`
+  intentionally and keep remote HTTP deployments behind trusted authentication and origin checks.
 - Live IPC tools still require a reachable KiCad session with the IPC API enabled.
 
 ## Configuration

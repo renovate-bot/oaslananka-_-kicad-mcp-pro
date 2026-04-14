@@ -19,8 +19,20 @@ Do not open public issues for undisclosed security problems.
 
 | Version | Supported |
 | ------- | --------- |
-| `1.x`   | Yes       |
+| `2.x`   | Yes       |
+| `1.x`   | No        |
 | `<1.0`  | No        |
+
+## Accepted Advisories
+
+### CVE-2025-69872 (`diskcache`, optional simulation extra)
+
+`diskcache` is pulled transitively by InSpice when installing the optional
+`simulation` extra. The default KiCad MCP Pro install does not include it. Until
+an upstream fix is available, deployments that enable simulation tools should
+keep cache directories trusted and isolated, especially for remote HTTP servers.
+The CI audit may ignore this CVE only when the ignore is visible in the audit
+command and this note remains present.
 
 ## Response Expectations
 

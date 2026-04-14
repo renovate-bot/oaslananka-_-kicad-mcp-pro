@@ -18,7 +18,7 @@ from ..utils.component_search import (
     NexarClient,
     normalize_lcsc_code,
 )
-from ..utils.sexpr import _extract_block
+from ..utils.sexpr import _extract_block, _sexpr_string
 from .metadata import headless_compatible
 from .schematic import get_schematic_backend, update_symbol_property
 
@@ -407,17 +407,19 @@ def register(mcp: FastMCP) -> None:
                 "\t\t(pin passive line\n"
                 f"\t\t\t(at {x} {y} 180)\n"
                 "\t\t\t(length 2.54)\n"
-                f'\t\t\t(name "{pin_name}" (effects (font (size 1.27 1.27))))\n'
-                f'\t\t\t(number "{pin_number}" (effects (font (size 1.27 1.27))))\n'
+                f"\t\t\t(name {_sexpr_string(pin_name)} "
+                "(effects (font (size 1.27 1.27))))\n"
+                f"\t\t\t(number {_sexpr_string(pin_number)} "
+                "(effects (font (size 1.27 1.27))))\n"
                 "\t\t)\n"
             )
             y -= 2.54
 
         symbol_block = (
-            f'\t(symbol "{name}"\n'
+            f"\t(symbol {_sexpr_string(name)}\n"
             '\t\t(property "Reference" "U" (id 0) (at 0 5.08 0) '
             "(effects (font (size 1.27 1.27))))\n"
-            f'\t\t(property "Value" "{name}" (id 1) (at 0 -5.08 0) '
+            f'\t\t(property "Value" {_sexpr_string(name)} (id 1) (at 0 -5.08 0) '
             "(effects (font (size 1.27 1.27))))\n" + "".join(pin_blocks) + "\t)\n"
         )
         if content.rstrip().endswith(")"):

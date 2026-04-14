@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +16,8 @@ from kicad_mcp.discovery import (
 )
 from kicad_mcp.server import main_callback
 from kicad_mcp.utils.logging import setup_logging
+
+DOCKER_BIND_HOST = "0.0.0.0"  # noqa: S104 - regression fixture for Docker env preservation.
 
 
 def test_setup_logging_smoke() -> None:
@@ -57,6 +60,84 @@ def test_main_callback_runs_stdio(sample_project: Path, monkeypatch) -> None:
         experimental=False,
     )
 
+    fake_server.run.assert_called_once_with(transport="stdio")
+
+
+def test_main_callback_preserves_env_when_cli_options_missing(
+    sample_project: Path,
+    monkeypatch,
+) -> None:
+    fake_server = MagicMock()
+    profiles: list[str] = []
+    monkeypatch.setenv("KICAD_MCP_TRANSPORT", "http")
+    monkeypatch.setenv("KICAD_MCP_HOST", DOCKER_BIND_HOST)
+    monkeypatch.setenv("KICAD_MCP_PORT", "4444")
+    monkeypatch.setenv("KICAD_MCP_LOG_LEVEL", "DEBUG")
+    monkeypatch.setenv("KICAD_MCP_LOG_FORMAT", "json")
+    monkeypatch.setenv("KICAD_MCP_PROFILE", "pcb_only")
+    monkeypatch.setenv("KICAD_MCP_ENABLE_EXPERIMENTAL_TOOLS", "true")
+    monkeypatch.setenv("KICAD_MCP_PROJECT_DIR", str(sample_project))
+    monkeypatch.setattr(
+        "kicad_mcp.server.build_server",
+        lambda profile: profiles.append(profile) or fake_server,
+    )
+    monkeypatch.setattr("kicad_mcp.server.setup_logging", lambda *args: None)
+    monkeypatch.setattr("kicad_mcp.server._print_startup_diagnostics", lambda _cfg: None)
+
+    main_callback(
+        transport=None,
+        host=None,
+        port=None,
+        project_dir=None,
+        log_level=None,
+        log_format=None,
+        profile=None,
+        experimental=None,
+    )
+
+    assert os.environ["KICAD_MCP_HOST"] == DOCKER_BIND_HOST
+    assert os.environ["KICAD_MCP_PORT"] == "4444"
+    assert os.environ["KICAD_MCP_PROFILE"] == "pcb_only"
+    assert os.environ["KICAD_MCP_ENABLE_EXPERIMENTAL_TOOLS"] == "true"
+    assert profiles == ["pcb_only"]
+    fake_server.run.assert_called_once_with(transport="streamable-http", mount_path="/mcp")
+
+
+def test_main_callback_explicit_cli_options_override_env(
+    sample_project: Path,
+    monkeypatch,
+) -> None:
+    fake_server = MagicMock()
+    profiles: list[str] = []
+    monkeypatch.setenv("KICAD_MCP_TRANSPORT", "http")
+    monkeypatch.setenv("KICAD_MCP_HOST", DOCKER_BIND_HOST)
+    monkeypatch.setenv("KICAD_MCP_PORT", "4444")
+    monkeypatch.setenv("KICAD_MCP_PROFILE", "pcb_only")
+    monkeypatch.setenv("KICAD_MCP_ENABLE_EXPERIMENTAL_TOOLS", "true")
+    monkeypatch.setattr(
+        "kicad_mcp.server.build_server",
+        lambda profile: profiles.append(profile) or fake_server,
+    )
+    monkeypatch.setattr("kicad_mcp.server.setup_logging", lambda *args: None)
+    monkeypatch.setattr("kicad_mcp.server._print_startup_diagnostics", lambda _cfg: None)
+
+    main_callback(
+        transport="stdio",
+        host="127.0.0.1",
+        port=3334,
+        project_dir=str(sample_project),
+        log_level="INFO",
+        log_format="console",
+        profile="minimal",
+        experimental=False,
+    )
+
+    assert os.environ["KICAD_MCP_TRANSPORT"] == "stdio"
+    assert os.environ["KICAD_MCP_HOST"] == "127.0.0.1"
+    assert os.environ["KICAD_MCP_PORT"] == "3334"
+    assert os.environ["KICAD_MCP_PROFILE"] == "minimal"
+    assert os.environ["KICAD_MCP_ENABLE_EXPERIMENTAL_TOOLS"] == "false"
+    assert profiles == ["minimal"]
     fake_server.run.assert_called_once_with(transport="stdio")
 
 
@@ -128,7 +209,7 @@ def test_cli_version_and_capabilities_are_detected(tmp_path: Path, monkeypatch) 
         _ = (capture_output, text, timeout, check)
         if "--version" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout="KiCad 10.0.1", stderr="")
-        help_blob = "gerbers positions ipc2581 svg dxf step render spice"
+        help_blob = "gerbers Gerber files positions ipc2581 svg dxf step render spice"
         return subprocess.CompletedProcess(cmd, 0, stdout=help_blob, stderr="")
 
     get_cli_capabilities.cache_clear()

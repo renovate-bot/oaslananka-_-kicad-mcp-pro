@@ -8,6 +8,7 @@ import pytest
 from kicad_mcp import __version__
 from kicad_mcp.server import build_server
 from kicad_mcp.utils.component_search import ComponentRecord
+from kicad_mcp.utils.sexpr import _extract_block, _sexpr_string
 from tests.conftest import call_tool_text, get_prompt_text, read_resource_text
 
 
@@ -327,6 +328,30 @@ async def test_project_resources_prompts_and_library_surface(
     assert "Alternative parts for C25804" in alternatives
     assert "C17414" in alternatives
     assert "Created custom symbol" in custom
+
+
+@pytest.mark.anyio
+async def test_lib_create_custom_symbol_escapes_sexpr_strings(sample_project: Path) -> None:
+    server = build_server("library")
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+
+    name = 'Bad")\n\t(symbol "Injected"'
+    pin_name = 'PIN")\n\t(pin output line'
+    text = await call_tool_text(
+        server,
+        "lib_create_custom_symbol",
+        {"name": name, "pins": [{"number": '1")\n\t(number "9"', "name": pin_name}]},
+    )
+
+    content = (sample_project / "custom_symbols.kicad_sym").read_text(encoding="utf-8")
+    start = content.index(f"\t(symbol {_sexpr_string(name)}")
+    block, consumed = _extract_block(content, start)
+
+    assert "Created custom symbol" in text
+    assert consumed > 0
+    assert '\n\t(symbol "Injected"' not in content
+    assert '\n\t(pin output line' not in block
+    assert _sexpr_string(pin_name) in block
 
 
 @pytest.mark.anyio
