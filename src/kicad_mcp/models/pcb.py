@@ -125,6 +125,28 @@ class AddRectangleInput(BaseModel):
     width_mm: WidthMM = Field(default=0.05)
 
 
+class ZoneCornerInput(BaseModel):
+    """Single polygon corner for copper zone placement."""
+
+    x_mm: CoordMM
+    y_mm: CoordMM
+
+
+class AddZoneInput(BaseModel):
+    """Copper zone placement parameters."""
+
+    net_name: str = Field(min_length=1, max_length=240)
+    layer: LayerName = Field(default="F_Cu")
+    corners: list[ZoneCornerInput] = Field(min_length=3, max_length=128)
+    clearance_mm: WidthMM = Field(default=0.3)
+    min_width_mm: WidthMM = Field(default=0.25)
+    thermal_relief: bool = Field(default=True)
+    thermal_gap_mm: WidthMM = Field(default=0.5)
+    thermal_bridge_width_mm: WidthMM = Field(default=0.5)
+    priority: int = Field(default=0, ge=0, le=255)
+    name: str = Field(default="", max_length=120)
+
+
 class AddTextInput(BaseModel):
     """Board text insertion parameters."""
 
@@ -214,6 +236,17 @@ class KeepoutZoneInput(BaseModel):
     h_mm: float = Field(gt=0.1, le=2000.0)
     rules: list[KeepoutRule] = Field(default_factory=_default_keepout_rules)
     name: str = Field(default="MCP_Keepout", min_length=1, max_length=100)
+
+
+class SetDesignRulesInput(BaseModel):
+    """Board-level design rule defaults."""
+
+    min_trace_width_mm: WidthMM = Field(default=0.15)
+    min_clearance_mm: WidthMM = Field(default=0.15)
+    min_via_drill_mm: WidthMM = Field(default=0.3)
+    min_via_diameter_mm: WidthMM = Field(default=0.6)
+    min_annular_ring_mm: WidthMM = Field(default=0.13)
+    min_hole_to_hole_mm: WidthMM = Field(default=0.25)
 
 
 class AddMountingHolesInput(BaseModel):

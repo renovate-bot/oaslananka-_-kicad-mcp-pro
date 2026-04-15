@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from kicad_mcp.server import build_server
@@ -914,6 +916,167 @@ async def test_schematic_auto_place_symbols_repositions_requested_references(
     assert "Auto-placed 2 symbol(s) using the linear strategy." in result
     assert "R1 10k Device:R @ (50.80, 50.80)" in symbols
     assert "R2 22k Device:R @ (76.20, 50.80)" in symbols
+
+
+@pytest.mark.anyio
+async def test_schematic_move_symbol_updates_symbol_anchor(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "symbols": [
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 10.16,
+                    "y_mm": 10.16,
+                    "reference": "R1",
+                    "value": "10k",
+                    "footprint": "Resistor_SMD:R_0805",
+                }
+            ]
+        },
+    )
+
+    result = await call_tool_text(
+        server,
+        "sch_move_symbol",
+        {"reference": "R1", "x_mm": 25.4, "y_mm": 30.48},
+    )
+    symbols = await call_tool_text(server, "sch_get_symbols", {})
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+
+    assert "Moved symbol 'R1' to (25.40, 30.48) mm." in result
+    assert "R1 10k Device:R @ (25.40, 30.48)" in symbols
+    assert "(at 25.4 30.48 0)" in schematic
+
+
+@pytest.mark.anyio
+async def test_schematic_delete_wire_uses_wire_uuid_surface(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "symbols": [
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 10.16,
+                    "y_mm": 10.16,
+                    "reference": "R1",
+                    "value": "10k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 20.32,
+                    "y_mm": 10.16,
+                    "reference": "R2",
+                    "value": "22k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+            ]
+        },
+    )
+    await call_tool_text(
+        server,
+        "sch_route_wire_between_pins",
+        {"ref1": "R1", "pin1": "2", "ref2": "R2", "pin2": "1"},
+    )
+
+    wires = await call_tool_text(server, "sch_get_wires", {})
+    match = re.search(r"- ([0-9a-f-]{36}) \(", wires, flags=re.IGNORECASE)
+    assert match is not None
+    wire_id = match.group(1)
+
+    result = await call_tool_text(server, "sch_delete_wire", {"wire_id": wire_id[:8]})
+    wires_after = await call_tool_text(server, "sch_get_wires", {})
+    schematic = (sample_project / "demo.kicad_sch").read_text(encoding="utf-8")
+
+    assert f"Deleted wire '{wire_id}'" in result
+    assert "contains no wires" in wires_after
+    assert "(wire" not in schematic
+
+
+@pytest.mark.anyio
+async def test_schematic_delete_symbol_removes_attached_wires(sample_project, mock_kicad) -> None:
+    server = build_server("schematic")
+
+    await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "symbols": [
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 10.16,
+                    "y_mm": 10.16,
+                    "reference": "R1",
+                    "value": "10k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 20.32,
+                    "y_mm": 10.16,
+                    "reference": "R2",
+                    "value": "22k",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+            ]
+        },
+    )
+    await call_tool_text(
+        server,
+        "sch_route_wire_between_pins",
+        {"ref1": "R1", "pin1": "2", "ref2": "R2", "pin2": "1"},
+    )
+
+    result = await call_tool_text(server, "sch_delete_symbol", {"reference": "R1"})
+    symbols = await call_tool_text(server, "sch_get_symbols", {})
+    wires = await call_tool_text(server, "sch_get_wires", {})
+
+    assert "Deleted 1 symbol block(s) for 'R1' and 1 directly connected wire(s)." in result
+    assert "R1" not in symbols
+    assert "R2" in symbols
+    assert "contains no wires" in wires
+
+
+@pytest.mark.anyio
+async def test_schematic_template_surface_includes_benchmark_templates(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    listing = await call_tool_text(server, "sch_list_templates", {})
+    info = await call_tool_text(
+        server,
+        "sch_get_template_info",
+        {"template_name": "supercap_backup"},
+    )
+    plan = await call_tool_text(
+        server,
+        "sch_instantiate_template",
+        {
+            "template_name": "buzzer_nmos_driver",
+            "prefix": "AUD_",
+            "params": {"supply_v": 5.0},
+        },
+    )
+
+    assert "buzzer_nmos_driver" in listing
+    assert "supercap_backup" in listing
+    assert "hold_up_ms" in info
+    assert "AUD_BZ1" in plan
+    assert "lib_bind_part_to_symbol" in plan
 
 
 # ── sch_build_circuit ──────────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ from kipy.board_types import (
     Zone,
 )
 from kipy.geometry import Angle, PolygonWithHoles, PolyLine, PolyLineNode, Vector2
+from kipy.proto.board import board_types_pb2
 from kipy.proto.board.board_types_pb2 import BoardLayer, ViaType, ZoneType
 from kipy.proto.common import types as common_types
 from mcp.server.fastmcp import FastMCP
@@ -42,6 +43,7 @@ from ..models.pcb import (
     AddTextInput,
     AddTrackInput,
     AddViaInput,
+    AddZoneInput,
     AlignFootprintsInput,
     AutoPlaceBySchematicInput,
     BulkTrackItem,
@@ -52,6 +54,7 @@ from ..models.pcb import (
     LayerViaInput,
     PlaceDecouplingCapsInput,
     SetBoardOutlineInput,
+    SetDesignRulesInput,
     SetStackupInput,
     StackupLayerSpec,
     SyncPcbFromSchematicInput,
@@ -1107,6 +1110,16 @@ def _polygon_from_points(points_nm: list[tuple[int, int]]) -> PolygonWithHoles:
     return polygon
 
 
+def _polygon_from_mm_points(points_mm: list[tuple[float, float]]) -> PolygonWithHoles:
+    polygon = PolygonWithHoles()
+    outline = PolyLine()
+    for point_x_mm, point_y_mm in points_mm:
+        outline.append(PolyLineNode.from_point(Vector2.from_xy_mm(point_x_mm, point_y_mm)))
+    outline.closed = True
+    polygon.outline = outline
+    return polygon
+
+
 def _append_board_blocks(content: str, blocks: list[str]) -> str:
     normalized = _normalize_board_content(content).rstrip()
     if not normalized.endswith(")"):
@@ -1879,6 +1892,86 @@ def register(mcp: FastMCP) -> None:
         if len(content) > cfg.max_text_response_chars:
             content = f"{content[: cfg.max_text_response_chars]}\n... [truncated]"
         return content
+
+    @mcp.tool()
+    @headless_compatible
+    def pcb_set_design_rules(
+        min_trace_width_mm: float = 0.15,
+        min_clearance_mm: float = 0.15,
+        min_via_drill_mm: float = 0.3,
+        min_via_diameter_mm: float = 0.6,
+        min_annular_ring_mm: float = 0.13,
+        min_hole_to_hole_mm: float = 0.25,
+    ) -> str:
+        """Write board-level manufacturing constraints into the active .kicad_dru file."""
+        from .routing import _load_rules_content, _mm, _rules_file_path, _upsert_rule
+
+        payload = SetDesignRulesInput(
+            min_trace_width_mm=min_trace_width_mm,
+            min_clearance_mm=min_clearance_mm,
+            min_via_drill_mm=min_via_drill_mm,
+            min_via_diameter_mm=min_via_diameter_mm,
+            min_annular_ring_mm=min_annular_ring_mm,
+            min_hole_to_hole_mm=min_hole_to_hole_mm,
+        )
+
+        rule_definitions = [
+            (
+                "Board minimum track width",
+                "A.Type == 'track'",
+                [
+                    f"  (constraint track_width (min {_mm(payload.min_trace_width_mm)}) "
+                    f"(opt {_mm(payload.min_trace_width_mm)}))",
+                ],
+            ),
+            (
+                "Board minimum clearance",
+                (
+                    "A.Type == 'track' || A.Type == 'via' || A.Type == 'pad' || "
+                    "B.Type == 'track' || B.Type == 'via' || B.Type == 'pad'"
+                ),
+                [
+                    f"  (constraint clearance (min {_mm(payload.min_clearance_mm)}))",
+                    f"  (constraint hole_to_hole (min {_mm(payload.min_hole_to_hole_mm)}))",
+                ],
+            ),
+            (
+                "Board minimum via geometry",
+                "A.Type == 'via' || A.Type == 'micro_via' || A.Type == 'buried_via'",
+                [
+                    f"  (constraint via_diameter (min {_mm(payload.min_via_diameter_mm)}))",
+                    f"  (constraint hole_size (min {_mm(payload.min_via_drill_mm)}))",
+                    f"  (constraint annular_width (min {_mm(payload.min_annular_ring_mm)}))",
+                ],
+            ),
+        ]
+
+        try:
+            path = _rules_file_path()
+            content = _load_rules_content(path)
+            for rule_name, condition, constraints in rule_definitions:
+                rule_body = "\n".join(
+                    [
+                        f'(rule {_sexpr_string(rule_name)}',
+                        f'  (condition "{condition}")',
+                        *constraints,
+                        ")",
+                    ]
+                )
+                content = _upsert_rule(content, rule_name, rule_body)
+            path.write_text(content, encoding="utf-8")
+        except (OSError, ValueError) as exc:
+            return f"Board design rule update failed: {exc}"
+
+        return (
+            f"Board design rules written to {path}.\n"
+            f"- Min trace width: {payload.min_trace_width_mm:.3f} mm\n"
+            f"- Min clearance: {payload.min_clearance_mm:.3f} mm\n"
+            f"- Min via drill: {payload.min_via_drill_mm:.3f} mm\n"
+            f"- Min via diameter: {payload.min_via_diameter_mm:.3f} mm\n"
+            f"- Min annular ring: {payload.min_annular_ring_mm:.3f} mm\n"
+            f"- Min hole-to-hole: {payload.min_hole_to_hole_mm:.3f} mm"
+        )
 
     @mcp.tool()
     @requires_kicad_running
@@ -2823,6 +2916,112 @@ def register(mcp: FastMCP) -> None:
             lines.extend(f"- {reference}" for reference in missing_refs[:20])
         lines.append(_finalize_file_based_board_edit(payload.allow_open_board))
         return "\n".join(lines)
+
+    @mcp.tool()
+    @requires_kicad_running
+    def pcb_add_zone(
+        net_name: str,
+        layer: str,
+        corners: list[dict[str, float]],
+        clearance_mm: float = 0.3,
+        min_width_mm: float = 0.25,
+        thermal_relief: bool = True,
+        thermal_gap_mm: float = 0.5,
+        thermal_bridge_width_mm: float = 0.5,
+        priority: int = 0,
+        name: str = "",
+    ) -> str:
+        """Add a copper zone with an arbitrary polygon outline on one copper layer."""
+        payload = AddZoneInput(
+            net_name=net_name,
+            layer=layer,
+            corners=corners,
+            clearance_mm=clearance_mm,
+            min_width_mm=min_width_mm,
+            thermal_relief=thermal_relief,
+            thermal_gap_mm=thermal_gap_mm,
+            thermal_bridge_width_mm=thermal_bridge_width_mm,
+            priority=priority,
+            name=name,
+        )
+        layer_value = resolve_layer(payload.layer)
+        if "_Cu" not in BoardLayer.Name(layer_value):
+            return "Copper zones can only be added to copper layers."
+
+        unique_points: list[tuple[float, float]] = []
+        seen_points: set[tuple[float, float]] = set()
+        for corner in payload.corners:
+            point = (float(corner.x_mm), float(corner.y_mm))
+            if point not in seen_points:
+                unique_points.append(point)
+                seen_points.add(point)
+        if len(unique_points) >= 2 and unique_points[0] == unique_points[-1]:
+            unique_points.pop()
+        if len(unique_points) < 3:
+            return "Copper zones require at least three unique polygon corners."
+
+        zone = Zone()
+        zone.name = payload.name or f"{payload.net_name}_{resolve_layer_name(payload.layer)}_ZONE"
+        zone.net = _find_net(payload.net_name)
+        zone.layers = [layer_value]
+        zone.priority = payload.priority
+        zone.outline = _polygon_from_mm_points(unique_points)
+        zone.clearance = mm_to_nm(payload.clearance_mm)
+        zone.min_thickness = mm_to_nm(payload.min_width_mm)
+        zone.proto.copper_settings.connection.zone_connection = (
+            board_types_pb2.ZCS_THERMAL
+            if payload.thermal_relief
+            else board_types_pb2.ZCS_FULL
+        )
+        zone.proto.copper_settings.connection.thermal_spokes.gap.value_nm = mm_to_nm(
+            payload.thermal_gap_mm
+        )
+        zone.proto.copper_settings.connection.thermal_spokes.width.value_nm = mm_to_nm(
+            payload.thermal_bridge_width_mm
+        )
+
+        with board_transaction() as board:
+            board.create_items([zone])
+            board.refill_zones(block=True, max_poll_seconds=60.0)
+
+        return (
+            f"Added copper zone '{zone.name}' for net '{payload.net_name}' on {payload.layer}.\n"
+            f"- Corners: {len(unique_points)}\n"
+            f"- Clearance: {payload.clearance_mm:.3f} mm\n"
+            f"- Minimum width: {payload.min_width_mm:.3f} mm\n"
+            f"- Thermal relief: {'enabled' if payload.thermal_relief else 'solid'}\n"
+            f"- Priority: {payload.priority}"
+        )
+
+    @mcp.tool()
+    @requires_kicad_running
+    def pcb_add_copper_zone(
+        net_name: str,
+        layer: str,
+        corners: list[dict[str, float]],
+        clearance_mm: float = 0.3,
+        min_width_mm: float = 0.25,
+        thermal_relief: bool = True,
+        thermal_gap_mm: float = 0.5,
+        thermal_bridge_width_mm: float = 0.5,
+        priority: int = 0,
+        name: str = "",
+    ) -> str:
+        """Backward-compatible alias for pcb_add_zone()."""
+        return str(
+            pcb_add_zone(
+                net_name=net_name,
+                layer=layer,
+                corners=corners,
+                clearance_mm=clearance_mm,
+                min_width_mm=min_width_mm,
+                thermal_relief=thermal_relief,
+                thermal_gap_mm=thermal_gap_mm,
+                thermal_bridge_width_mm=thermal_bridge_width_mm,
+                priority=priority,
+                name=name,
+            )
+        )
 
     @mcp.tool()
     @requires_kicad_running

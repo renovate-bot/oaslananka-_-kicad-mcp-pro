@@ -67,6 +67,13 @@ def _zone_net_name(zone: _ZoneLike) -> str:
     return str(getattr(getattr(zone, "net", None), "name", "") or "")
 
 
+def _is_ground_like_net(net_name: str) -> bool:
+    normalized = net_name.strip().upper()
+    return normalized in {"GND", "AGND", "DGND", "PGND", "GROUND"} or normalized.startswith(
+        "GND_"
+    )
+
+
 def _footprint_reference(footprint: _FootprintLike) -> str:
     return str(footprint.reference_field.text.value)
 
@@ -79,7 +86,7 @@ def _footprint_position_mm(footprint: _FootprintLike) -> tuple[float, float]:
 
 
 def _gnd_zones() -> list[_ZoneLike]:
-    return [zone for zone in _board_zones() if _zone_net_name(zone).upper() == "GND"]
+    return [zone for zone in _board_zones() if _is_ground_like_net(_zone_net_name(zone))]
 
 
 def _tracks_for_net(net_name: str) -> list[_TrackLike]:
@@ -214,7 +221,8 @@ def _emc_check_return_path_text(signal_net: str, reference_plane_layer: str) -> 
         return "FAIL", f"No routed tracks were found for signal net '{signal_net}'."
     plane_layer = resolve_layer(reference_plane_layer)
     plane_exists = any(
-        _zone_net_name(zone).upper() == "GND" and plane_layer in getattr(zone, "layers", [])
+        _is_ground_like_net(_zone_net_name(zone))
+        and plane_layer in getattr(zone, "layers", [])
         for zone in _board_zones()
     )
     if not plane_exists:
@@ -231,7 +239,7 @@ def _emc_check_split_plane_text(signal_nets: list[str]) -> tuple[str, str]:
     planes_by_layer: dict[str, set[str]] = {}
     for zone in _board_zones():
         zone_net = _zone_net_name(zone)
-        if not zone_net or zone_net.upper() == "GND":
+        if not zone_net or _is_ground_like_net(zone_net):
             continue
         for layer in getattr(zone, "layers", []):
             planes_by_layer.setdefault(BoardLayer.Name(layer), set()).add(zone_net)

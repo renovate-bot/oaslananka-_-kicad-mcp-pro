@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 
 import structlog
@@ -37,6 +38,24 @@ from .utils.logging import setup_logging
 
 logger = structlog.get_logger(__name__)
 app = typer.Typer(help="KiCad MCP Pro server for PCB and schematic workflows.")
+
+
+class _SyncServerHandle:
+    """Compatibility wrapper that exposes sync-friendly discovery helpers."""
+
+    def __init__(self, server: FastMCP) -> None:
+        self._server = server
+
+    def list_tools(self) -> object:
+        """Return tool metadata synchronously when called outside an event loop."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.run(self._server.list_tools())
+        return self._server.list_tools()
+
+    def __getattr__(self, name: str) -> object:
+        return getattr(self._server, name)
 
 
 def build_server(profile: str | None = None) -> FastMCP:
@@ -92,6 +111,11 @@ def build_server(profile: str | None = None) -> FastMCP:
     board_state.register(server)
     workflows.register(server)
     return server
+
+
+def create_server(profile: str | None = None) -> _SyncServerHandle:
+    """Backward-compatible helper used by benchmark and verification scripts."""
+    return _SyncServerHandle(build_server(profile))
 
 
 def _ipc_status_summary() -> str:

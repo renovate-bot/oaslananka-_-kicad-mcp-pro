@@ -27,9 +27,12 @@ from ..models.schematic import (
     AnnotateInput,
     AutoPlaceSymbolsInput,
     CreateSheetInput,
+    DeleteSymbolInput,
+    DeleteWireInput,
     GetSheetInfoInput,
     GlobalLabelInput,
     HierarchicalLabelInput,
+    MoveSymbolInput,
     PowerSymbolInput,
     RouteWireBetweenPinsInput,
     TraceNetInput,
@@ -504,19 +507,47 @@ class _KicadSchApiBackend:
                 if key not in seen_labels:
                     labels.append(label)
 
+            wires: list[dict[str, Any]] = []
+            compatibility_wires = list(cast(list[dict[str, Any]], compatibility["wires"]))
+            compatibility_lookup = {
+                _wire_signature(wire["x1"], wire["y1"], wire["x2"], wire["y2"]): wire
+                for wire in compatibility_wires
+            }
+            seen_wire_signatures: set[tuple[tuple[float, float], tuple[float, float]]] = set()
+            for wire in cast(list[_WireLike], list(schematic.wires.all())):
+                parsed_wire = {
+                    "x1": round(float(wire.start.x), 4),
+                    "y1": round(float(wire.start.y), 4),
+                    "x2": round(float(wire.end.x), 4),
+                    "y2": round(float(wire.end.y), 4),
+                }
+                signature = _wire_signature(
+                    parsed_wire["x1"],
+                    parsed_wire["y1"],
+                    parsed_wire["x2"],
+                    parsed_wire["y2"],
+                )
+                seen_wire_signatures.add(signature)
+                compatibility_wire = compatibility_lookup.get(signature)
+                if compatibility_wire is not None and compatibility_wire.get("uuid"):
+                    parsed_wire["uuid"] = compatibility_wire["uuid"]
+                wires.append(parsed_wire)
+
+            for compat_wire in compatibility_wires:
+                signature = _wire_signature(
+                    compat_wire["x1"],
+                    compat_wire["y1"],
+                    compat_wire["x2"],
+                    compat_wire["y2"],
+                )
+                if signature not in seen_wire_signatures:
+                    wires.append(compat_wire)
+
             return {
                 "uuid": compatibility["uuid"],
                 "symbols": symbols,
                 "power_symbols": power_symbols,
-                "wires": [
-                    {
-                        "x1": round(float(wire.start.x), 4),
-                        "y1": round(float(wire.start.y), 4),
-                        "x2": round(float(wire.end.x), 4),
-                        "y2": round(float(wire.end.y), 4),
-                    }
-                    for wire in cast(list[_WireLike], list(schematic.wires.all()))
-                ],
+                "wires": wires,
                 "labels": labels,
                 "buses": compatibility["buses"],
             }
@@ -590,6 +621,7 @@ def new_uuid() -> str:
 
 
 _STRING_PATTERN = r'"((?:\\.|[^"\\])*)"'
+_FLOAT_PATTERN = r"-?\d+(?:\.\d+)?"
 
 
 def _snap_schematic_coord(value: float) -> float:
@@ -1311,6 +1343,7 @@ def _read_schematic_compatibility_data(sch_file: Path) -> dict[str, Any]:
     content = sch_file.read_text(encoding="utf-8", errors="ignore")
     return {
         "uuid": _extract_uuid(content),
+        "wires": _extract_wires(content),
         "labels": _extract_labels(content),
         "buses": _extract_buses(content),
     }
@@ -1324,6 +1357,21 @@ def parse_schematic_file(sch_file: Path) -> dict[str, Any]:
 def _extract_uuid(content: str) -> str:
     match = re.search(r'\(kicad_sch[^(]*\(uuid\s+"([^"]+)"', content)
     return match.group(1) if match else ""
+
+
+def _coord_pair_key(x: float, y: float) -> tuple[float, float]:
+    return round(float(x), 4), round(float(y), 4)
+
+
+def _wire_signature(
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    start = _coord_pair_key(x1, y1)
+    end = _coord_pair_key(x2, y2)
+    return (start, end) if start <= end else (end, start)
 
 
 def _parse_symbol_block(block: str) -> dict[str, Any] | None:
@@ -1362,6 +1410,37 @@ def _extract_buses(content: str) -> list[dict[str, float]]:
             }
         )
     return buses
+
+
+def _extract_wires(content: str) -> list[dict[str, Any]]:
+    wires: list[dict[str, Any]] = []
+    cursor = 0
+    while cursor < len(content):
+        if content[cursor:].startswith("(wire"):
+            block, length = _extract_block(content, cursor)
+            if block:
+                pts_match = re.search(
+                    (
+                        r"\(pts\s+\(xy\s+([-\d.]+)\s+([-\d.]+)\)\s+"
+                        r"\(xy\s+([-\d.]+)\s+([-\d.]+)\)\)"
+                    ),
+                    block,
+                )
+                if pts_match is not None:
+                    wire_record: dict[str, Any] = {
+                        "x1": float(pts_match.group(1)),
+                        "y1": float(pts_match.group(2)),
+                        "x2": float(pts_match.group(3)),
+                        "y2": float(pts_match.group(4)),
+                    }
+                    uuid_match = re.search(r'\(uuid\s+"([^"]+)"\)', block)
+                    if uuid_match is not None:
+                        wire_record["uuid"] = uuid_match.group(1)
+                    wires.append(wire_record)
+                cursor += length
+                continue
+        cursor += 1
+    return wires
 
 
 def _extract_labels(content: str) -> list[dict[str, Any]]:
@@ -2441,10 +2520,12 @@ def _validate_schematic_text(content: str) -> None:
         raise ValueError("Refusing to write an invalid schematic with unbalanced parentheses.")
 
 
-def _find_placed_symbol_block(
-    content: str, reference: str
-) -> tuple[str, int, int, dict[str, Any]] | None:
-    """Locate a placed symbol instance block by reference designator."""
+def _find_placed_symbol_blocks(
+    content: str,
+    reference: str,
+) -> list[tuple[str, int, int, dict[str, Any]]]:
+    """Locate placed symbol instance blocks by reference designator."""
+    matches: list[tuple[str, int, int, dict[str, Any]]] = []
     cursor = 0
     while cursor < len(content):
         if content[cursor:].startswith("(symbol"):
@@ -2452,11 +2533,20 @@ def _find_placed_symbol_block(
             if block:
                 parsed = _parse_symbol_block(block)
                 if parsed is not None and parsed["reference"] == reference:
-                    return block, cursor, cursor + length, parsed
+                    matches.append((block, cursor, cursor + length, parsed))
                 cursor += length
                 continue
         cursor += 1
-    return None
+    return matches
+
+
+def _find_placed_symbol_block(
+    content: str,
+    reference: str,
+) -> tuple[str, int, int, dict[str, Any]] | None:
+    """Locate the first placed symbol instance block by reference designator."""
+    matches = _find_placed_symbol_blocks(content, reference)
+    return matches[0] if matches else None
 
 
 def _transactional_write_to_schematic(mutator: Callable[[str], str]) -> str:
@@ -2522,6 +2612,81 @@ def _update_symbol_property_text_fallback(reference: str, field: str, value: str
 def update_symbol_property(reference: str, field: str, value: str) -> str:
     """Update a symbol property through the active backend adapter."""
     return get_schematic_backend().update_symbol_property(reference, field, value)
+
+
+def _parse_wire_block(block: str) -> dict[str, Any] | None:
+    pts_match = re.search(
+        (
+            r"\(pts\s+\(xy\s+([-\d.]+)\s+([-\d.]+)\)\s+"
+            r"\(xy\s+([-\d.]+)\s+([-\d.]+)\)\)"
+        ),
+        block,
+    )
+    if pts_match is None:
+        return None
+    parsed: dict[str, Any] = {
+        "x1": float(pts_match.group(1)),
+        "y1": float(pts_match.group(2)),
+        "x2": float(pts_match.group(3)),
+        "y2": float(pts_match.group(4)),
+    }
+    uuid_match = re.search(r'\(uuid\s+"([^"]+)"\)', block)
+    if uuid_match is not None:
+        parsed["uuid"] = uuid_match.group(1)
+    return parsed
+
+
+def _wire_id_matches(actual_id: str, requested_id: str) -> bool:
+    normalized_actual = actual_id.casefold()
+    normalized_requested = requested_id.casefold()
+    return (
+        normalized_actual == normalized_requested
+        or normalized_actual.startswith(normalized_requested)
+        or normalized_requested.startswith(normalized_actual)
+    )
+
+
+def _shift_symbol_block(block: str, dx_mm: float, dy_mm: float) -> str:
+    at_pattern = re.compile(
+        rf"(\(at\s+)({_FLOAT_PATTERN})\s+({_FLOAT_PATTERN})(\s+{_FLOAT_PATTERN}\))"
+    )
+
+    def repl(match: re.Match[str]) -> str:
+        shifted_x = float(match.group(2)) + dx_mm
+        shifted_y = float(match.group(3)) + dy_mm
+        return (
+            f"{match.group(1)}{_fmt_mm(shifted_x)} "
+            f"{_fmt_mm(shifted_y)}{match.group(4)}"
+        )
+
+    return at_pattern.sub(repl, block)
+
+
+def _symbol_connection_points(parsed: dict[str, Any]) -> set[tuple[float, float]]:
+    points = {_coord_pair_key(parsed["x"], parsed["y"])}
+    lib_id = str(parsed.get("lib_id", ""))
+    if lib_id.startswith("power:"):
+        return points
+    try:
+        library, symbol_name = _split_lib_id(lib_id)
+        pin_positions = get_pin_positions(
+            library,
+            symbol_name,
+            float(parsed["x"]),
+            float(parsed["y"]),
+            int(parsed["rotation"]),
+            int(parsed["unit"]),
+        )
+    except Exception as exc:
+        logger.debug(
+            "schematic_symbol_connection_points_failed",
+            reference=str(parsed.get("reference", "")),
+            error=str(exc),
+        )
+        return points
+
+    points.update(_coord_pair_key(x, y) for x, y in pin_positions.values())
+    return points
 
 
 def _reload_schematic_via_ipc() -> str:
@@ -2590,9 +2755,11 @@ def register(mcp: FastMCP) -> None:
         if not wires:
             return "The active schematic contains no wires."
         lines = [f"Wires ({len(wires)} total):"]
-        lines.extend(
-            f"- ({wire['x1']}, {wire['y1']}) -> ({wire['x2']}, {wire['y2']})" for wire in wires
-        )
+        for wire in wires:
+            identifier = f"{wire['uuid']} " if wire.get("uuid") else ""
+            lines.append(
+                f"- {identifier}({wire['x1']}, {wire['y1']}) -> ({wire['x2']}, {wire['y2']})"
+            )
         return "\n".join(lines)
 
     @mcp.tool()
@@ -2866,6 +3033,198 @@ def register(mcp: FastMCP) -> None:
         """Update a property on a placed symbol."""
         result = update_symbol_property(reference, field, value)
         return f"{result}\n{_reload_schematic()}"
+
+    @mcp.tool()
+    def sch_move_symbol(
+        reference: str,
+        x_mm: float,
+        y_mm: float,
+        snap_to_grid: bool = True,
+    ) -> str:
+        """Move an existing symbol instance to a new absolute coordinate."""
+        payload = MoveSymbolInput(
+            reference=reference,
+            x_mm=x_mm,
+            y_mm=y_mm,
+            snap_to_grid=snap_to_grid,
+        )
+        target_x, target_y = _snap_point(payload.x_mm, payload.y_mm, payload.snap_to_grid)
+        snap_note = _snap_notice((payload.x_mm, payload.y_mm), (target_x, target_y))
+        sch_file = _get_schematic_file()
+
+        try:
+            schematic = _load_kicad_schematic(sch_file)
+            component = schematic.components.get(payload.reference)
+            if component is None:
+                raise ValueError(f"Reference '{payload.reference}' was not found in the schematic.")
+            component.move(target_x, target_y)
+            schematic.save(sch_file, preserve_format=True)
+        except Exception as exc:
+            logger.debug(
+                "schematic_move_symbol_fallback",
+                reference=payload.reference,
+                error=str(exc),
+            )
+
+            def mutator(current: str) -> str:
+                match = _find_placed_symbol_block(current, payload.reference)
+                if match is None:
+                    raise ValueError(
+                        f"Reference '{payload.reference}' was not found in the schematic."
+                    )
+                block, start, end, parsed = match
+                shifted = _shift_symbol_block(
+                    block,
+                    dx_mm=target_x - float(parsed["x"]),
+                    dy_mm=target_y - float(parsed["y"]),
+                )
+                return current[:start] + shifted + current[end:]
+
+            try:
+                transactional_write(mutator)
+            except ValueError as fallback_exc:
+                return str(fallback_exc)
+
+        result = _reload_schematic()
+        lines = [
+            result,
+            f"Moved symbol '{payload.reference}' to ({target_x:.2f}, {target_y:.2f}) mm.",
+        ]
+        if snap_note:
+            lines.append(snap_note)
+        return "\n".join(lines)
+
+    @mcp.tool()
+    def sch_delete_wire(wire_id: str) -> str:
+        """Remove a specific wire segment using its UUID or unique UUID prefix."""
+        payload = DeleteWireInput(wire_id=wire_id)
+        sch_file = _get_schematic_file()
+        current = sch_file.read_text(encoding="utf-8", errors="ignore")
+        wire_records = _extract_wires(current)
+        matches = [
+            wire
+            for wire in wire_records
+            if wire.get("uuid") and _wire_id_matches(str(wire["uuid"]), payload.wire_id)
+        ]
+        if not matches:
+            return f"Wire '{payload.wire_id}' was not found in the active schematic."
+        if len(matches) > 1:
+            matching_ids = ", ".join(str(wire["uuid"]) for wire in matches[:5])
+            return (
+                f"Wire identifier '{payload.wire_id}' is ambiguous. "
+                f"Matching UUIDs: {matching_ids}"
+            )
+
+        target = matches[0]
+        target_signature = _wire_signature(
+            target["x1"],
+            target["y1"],
+            target["x2"],
+            target["y2"],
+        )
+
+        def mutator(current_text: str) -> str:
+            pieces: list[str] = []
+            cursor = 0
+            last = 0
+            removed = False
+            while cursor < len(current_text):
+                if current_text[cursor:].startswith("(wire"):
+                    block, length = _extract_block(current_text, cursor)
+                    parsed = _parse_wire_block(block) if block else None
+                    if parsed is not None:
+                        signature = _wire_signature(
+                            parsed["x1"],
+                            parsed["y1"],
+                            parsed["x2"],
+                            parsed["y2"],
+                        )
+                        parsed_uuid = str(parsed.get("uuid", ""))
+                        if (
+                            signature == target_signature
+                            and parsed_uuid
+                            and _wire_id_matches(parsed_uuid, str(target["uuid"]))
+                        ):
+                            pieces.append(current_text[last:cursor])
+                            cursor += length
+                            last = cursor
+                            removed = True
+                            continue
+                cursor += 1
+            pieces.append(current_text[last:])
+            if not removed:
+                raise ValueError(f"Wire '{payload.wire_id}' could not be removed.")
+            return "".join(pieces)
+
+        try:
+            transactional_write(mutator)
+        except ValueError as exc:
+            return str(exc)
+        return (
+            f"{_reload_schematic()}\n"
+            f"Deleted wire '{target['uuid']}' from "
+            f"({_fmt_mm(target['x1'])}, {_fmt_mm(target['y1'])}) to "
+            f"({_fmt_mm(target['x2'])}, {_fmt_mm(target['y2'])})."
+        )
+
+    @mcp.tool()
+    def sch_delete_symbol(reference: str) -> str:
+        """Remove a placed symbol and any directly attached wire segments."""
+        payload = DeleteSymbolInput(reference=reference)
+        removed_wire_count = 0
+        removed_symbol_count = 0
+
+        def mutator(current: str) -> str:
+            nonlocal removed_symbol_count, removed_wire_count
+
+            matches = _find_placed_symbol_blocks(current, payload.reference)
+            if not matches:
+                raise ValueError(f"Reference '{payload.reference}' was not found in the schematic.")
+            removed_symbol_count = len(matches)
+            connection_points = {
+                point
+                for _, _, _, parsed in matches
+                for point in _symbol_connection_points(parsed)
+            }
+
+            pieces: list[str] = []
+            cursor = 0
+            last = 0
+            while cursor < len(current):
+                if current[cursor:].startswith("(symbol"):
+                    block, length = _extract_block(current, cursor)
+                    parsed = _parse_symbol_block(block) if block else None
+                    if parsed is not None and parsed["reference"] == payload.reference:
+                        pieces.append(current[last:cursor])
+                        cursor += length
+                        last = cursor
+                        continue
+                if current[cursor:].startswith("(wire"):
+                    block, length = _extract_block(current, cursor)
+                    parsed_wire = _parse_wire_block(block) if block else None
+                    if parsed_wire is not None:
+                        start = _coord_pair_key(parsed_wire["x1"], parsed_wire["y1"])
+                        end = _coord_pair_key(parsed_wire["x2"], parsed_wire["y2"])
+                        if start in connection_points or end in connection_points:
+                            removed_wire_count += 1
+                            pieces.append(current[last:cursor])
+                            cursor += length
+                            last = cursor
+                            continue
+                cursor += 1
+            pieces.append(current[last:])
+            return "".join(pieces)
+
+        try:
+            transactional_write(mutator)
+        except ValueError as exc:
+            return str(exc)
+
+        return (
+            f"{_reload_schematic()}\n"
+            f"Deleted {removed_symbol_count} symbol block(s) for '{payload.reference}' "
+            f"and {removed_wire_count} directly connected wire(s)."
+        )
 
     @mcp.tool()
     def sch_analyze_net_compilation(

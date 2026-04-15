@@ -4,6 +4,7 @@ import re
 from types import SimpleNamespace
 
 import pytest
+from kipy.proto.board import board_types_pb2
 from kipy.proto.board.board_types_pb2 import BoardLayer, ViaType
 from kipy.proto.common import types as common_types
 
@@ -882,6 +883,38 @@ async def test_pcb_set_keepout_zone_creates_rule_area(mock_board) -> None:
 
 
 @pytest.mark.anyio
+async def test_pcb_add_zone_creates_copper_zone(mock_board) -> None:
+    server = build_server("pcb")
+
+    result = await call_tool_text(
+        server,
+        "pcb_add_zone",
+        {
+            "net_name": "GND_DIG",
+            "layer": "B_Cu",
+            "corners": [
+                {"x_mm": 0.0, "y_mm": 0.0},
+                {"x_mm": 20.0, "y_mm": 0.0},
+                {"x_mm": 20.0, "y_mm": 10.0},
+                {"x_mm": 0.0, "y_mm": 10.0},
+            ],
+            "priority": 2,
+            "name": "GND_DIG_SPLIT",
+        },
+    )
+
+    [[zone]] = mock_board.create_items.call_args.args
+    assert "Added copper zone 'GND_DIG_SPLIT'" in result
+    assert list(zone.layers) == [BoardLayer.BL_B_Cu]
+    assert zone.net.name == "GND_DIG"
+    assert zone.priority == 2
+    assert zone.proto.copper_settings.connection.zone_connection == board_types_pb2.ZCS_THERMAL
+    assert zone.proto.copper_settings.connection.thermal_spokes.gap.value_nm == 500_000
+    assert zone.proto.copper_settings.connection.thermal_spokes.width.value_nm == 500_000
+    mock_board.refill_zones.assert_called_once()
+
+
+@pytest.mark.anyio
 async def test_pcb_add_teardrops_creates_helper_zones(mock_board) -> None:
     mock_board.get_pads.return_value = [
         SimpleNamespace(
@@ -910,6 +943,38 @@ async def test_pcb_add_teardrops_creates_helper_zones(mock_board) -> None:
     assert "Added 1 teardrop helper zone(s)" in result
     assert len(zones) == 1
     mock_board.refill_zones.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_pcb_set_design_rules_writes_board_level_constraints(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("pcb")
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+
+    result = await call_tool_text(
+        server,
+        "pcb_set_design_rules",
+        {
+            "min_trace_width_mm": 0.15,
+            "min_clearance_mm": 0.15,
+            "min_via_drill_mm": 0.3,
+            "min_via_diameter_mm": 0.6,
+            "min_annular_ring_mm": 0.13,
+            "min_hole_to_hole_mm": 0.25,
+        },
+    )
+    dru_text = (sample_project / "demo.kicad_dru").read_text(encoding="utf-8")
+
+    assert "Board design rules written to" in result
+    assert "Board minimum track width" in dru_text
+    assert "(constraint track_width (min 0.1500mm) (opt 0.1500mm))" in dru_text
+    assert "(constraint clearance (min 0.1500mm))" in dru_text
+    assert "(constraint hole_size (min 0.3000mm))" in dru_text
+    assert "(constraint via_diameter (min 0.6000mm))" in dru_text
+    assert "(constraint annular_width (min 0.1300mm))" in dru_text
+    assert "(constraint hole_to_hole (min 0.2500mm))" in dru_text
 
 
 @pytest.mark.anyio

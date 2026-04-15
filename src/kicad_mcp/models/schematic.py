@@ -81,6 +81,27 @@ class UpdatePropertiesInput(BaseModel):
     value: str = Field(max_length=1000)
 
 
+class DeleteSymbolInput(BaseModel):
+    """Symbol removal parameters."""
+
+    reference: str = Field(min_length=1, max_length=64)
+
+
+class MoveSymbolInput(BaseModel):
+    """Symbol move parameters."""
+
+    reference: str = Field(min_length=1, max_length=64)
+    x_mm: CoordMM
+    y_mm: CoordMM
+    snap_to_grid: bool = True
+
+
+class DeleteWireInput(BaseModel):
+    """Wire removal parameters."""
+
+    wire_id: str = Field(min_length=1, max_length=120)
+
+
 class AddNoConnectInput(BaseModel):
     """No-connect marker parameters."""
 

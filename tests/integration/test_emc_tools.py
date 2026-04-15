@@ -158,3 +158,27 @@ async def test_emc_surface(sample_project, mock_board) -> None:
     assert "High-speed routing rule review" in routing
     assert "EMC compliance sweep (FCC)" in full
     assert "Checks run: 10" in full
+
+
+@pytest.mark.anyio
+async def test_emc_split_ground_names_are_treated_as_ground(sample_project, mock_board) -> None:
+    _configure_emc_board(mock_board)
+    zones = mock_board.get_zones.return_value
+    zones[0].net.name = "GND_DIG"
+    zones[1].net.name = "GND_ANA"
+    server = build_server("full")
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+
+    ground = await call_tool_text(
+        server,
+        "emc_check_ground_plane_voids",
+        {"max_void_area_mm2": 25.0},
+    )
+    return_path = await call_tool_text(
+        server,
+        "emc_check_return_path_continuity",
+        {"signal_net": "USB_DP", "reference_plane_layer": "B_Cu"},
+    )
+
+    assert "(PASS)" in ground
+    assert "No GND plane was found" not in return_path
