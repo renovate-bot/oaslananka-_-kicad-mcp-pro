@@ -1,6 +1,18 @@
 from __future__ import annotations
 
-from kicad_mcp.utils.component_search import ComponentRecord, JLCSearchClient, normalize_lcsc_code
+import io
+
+import pytest
+
+from kicad_mcp.utils.component_search import (
+    DEFAULT_USER_AGENT,
+    ComponentRecord,
+    DigiKeyClient,
+    JLCSearchClient,
+    NexarClient,
+    _request_json,
+    normalize_lcsc_code,
+)
 
 
 def test_normalize_lcsc_code_accepts_bare_digits() -> None:
@@ -70,3 +82,90 @@ def test_jlcsearch_get_part_prefers_exact_lcsc_match(monkeypatch) -> None:
 
     assert part is not None
     assert part.lcsc_code == "C25804"
+
+
+def test_request_json_rejects_non_https_urls() -> None:
+    with pytest.raises(ValueError, match="Only https"):
+        _request_json("http://example.com/search", {"q": "10k"})
+
+
+def test_request_json_builds_expected_request(monkeypatch) -> None:
+    seen: dict[str, object] = {}
+
+    class FakeResponse(io.StringIO):
+        def __enter__(self) -> FakeResponse:
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            _ = (exc_type, exc, tb)
+
+    def fake_urlopen(request, timeout: int):
+        seen["url"] = request.full_url
+        seen["user_agent"] = request.headers["User-agent"]
+        seen["timeout"] = timeout
+        return FakeResponse('{"components": []}')
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    payload = _request_json("https://example.com/search", {"q": "10k", "limit": 5, "empty": ""})
+
+    assert payload == {"components": []}
+    assert seen["url"] == "https://example.com/search?q=10k&limit=5"
+    assert seen["user_agent"] == DEFAULT_USER_AGENT
+    assert seen["timeout"] == 20
+
+
+def test_jlcsearch_get_part_falls_back_to_mpn_and_first_result(monkeypatch) -> None:
+    records = [
+        ComponentRecord(
+            source="jlcsearch",
+            lcsc_code="C11111",
+            mpn="ABC-123",
+            package="SOT-23",
+            description="driver",
+            stock=5,
+            price=None,
+            is_basic=False,
+            is_preferred=False,
+        ),
+        ComponentRecord(
+            source="jlcsearch",
+            lcsc_code="C22222",
+            mpn="XYZ-999",
+            package="SOT-23",
+            description="driver",
+            stock=5,
+            price=None,
+            is_basic=False,
+            is_preferred=False,
+        ),
+    ]
+    monkeypatch.setattr(
+        "kicad_mcp.utils.component_search.JLCSearchClient.search",
+        lambda self, keyword, **kwargs: records,
+    )
+
+    assert JLCSearchClient().get_part("abc-123").mpn == "ABC-123"
+    assert JLCSearchClient().get_part("unmatched").lcsc_code == "C11111"
+
+    monkeypatch.setattr(
+        "kicad_mcp.utils.component_search.JLCSearchClient.search",
+        lambda self, keyword, **kwargs: [],
+    )
+    assert JLCSearchClient().get_part("unmatched") is None
+
+
+def test_optional_search_clients_raise_clear_messages(monkeypatch) -> None:
+    monkeypatch.delenv("NEXAR_CLIENT_ID", raising=False)
+    monkeypatch.delenv("NEXAR_CLIENT_SECRET", raising=False)
+    with pytest.raises(RuntimeError, match="NEXAR_CLIENT_ID"):
+        NexarClient().search("accelerometer")
+    with pytest.raises(RuntimeError, match="detail lookups require authenticated deployment"):
+        NexarClient().get_part("C12345")
+
+    monkeypatch.delenv("DIGIKEY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("DIGIKEY_CLIENT_SECRET", raising=False)
+    with pytest.raises(RuntimeError, match="DIGIKEY_CLIENT_ID"):
+        DigiKeyClient().search("buzzer")
+    with pytest.raises(RuntimeError, match="detail lookups require authenticated deployment"):
+        DigiKeyClient().get_part("C12345")
