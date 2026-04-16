@@ -21,6 +21,7 @@ from mcp.server.fastmcp import FastMCP
 
 from .. import __version__
 from ..config import get_config
+from ..discovery import get_cli_capabilities
 from .metadata import headless_compatible
 
 logger = structlog.get_logger(__name__)
@@ -85,6 +86,45 @@ def _find_release_files(output_dir: Path) -> list[Path]:
     for pattern in patterns:
         files.extend(output_dir.glob(pattern))
     return sorted(set(files))
+
+
+def _import_output_dir(output_dir: str | None = None) -> Path:
+    cfg = get_config()
+    if output_dir:
+        return cfg.resolve_within_project(output_dir, allow_absolute=False)
+    return cfg.ensure_output_dir("imports")
+
+
+def _run_import_cli(import_kind: str, input_path: str, output_dir: str | None = None) -> str:
+    cfg = get_config()
+    in_path = cfg.resolve_within_project(input_path, allow_absolute=False)
+    if not in_path.exists():
+        return f"Input file was not found: {in_path}"
+
+    out_dir = _import_output_dir(output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    project_name = in_path.stem
+    out_project = out_dir / f"{project_name}.kicad_pro"
+
+    variants = [
+        ["pcb", "import", import_kind, "--output", str(out_dir), str(in_path)],
+        ["pcb", "import", import_kind, "--input", str(in_path), "--output", str(out_dir)],
+    ]
+
+    from .export import _run_cli_variants
+
+    code, stdout, stderr = _run_cli_variants(variants)
+    if code != 0:
+        return (
+            f"{import_kind} import failed: {stderr or stdout or 'unknown error'}\n"
+            f"Input: {in_path}\nOutput directory: {out_dir}"
+        )
+    return (
+        f"{import_kind} import completed.\n"
+        f"Input: {in_path}\n"
+        f"Output directory: {out_dir}\n"
+        f"Expected project file: {out_project}"
+    )
 
 
 def register(mcp: FastMCP) -> None:
@@ -563,3 +603,41 @@ def register(mcp: FastMCP) -> None:
             + "\n".join(preview_lines[:30])
             + ("\n…" if len(preview_lines) > 30 else "")
         )
+
+    @mcp.tool()
+    @headless_compatible
+    def mfg_check_import_support(format: str) -> str:
+        """Report whether the detected KiCad CLI advertises a given board-import format."""
+        caps = get_cli_capabilities(get_config().kicad_cli)
+        lookup = {
+            "allegro": caps.supports_allegro_import,
+            "pads": caps.supports_pads_import,
+            "geda": caps.supports_geda_import,
+        }
+        key = format.strip().casefold()
+        if key not in lookup:
+            return "Supported import formats: allegro, pads, geda."
+        version = caps.version or "unknown"
+        return (
+            f"Format: {key}\n"
+            f"Supported by detected CLI: {'yes' if lookup[key] else 'no'}\n"
+            f"Detected KiCad version: {version}"
+        )
+
+    @mcp.tool()
+    @headless_compatible
+    def mfg_import_allegro(allegro_brd_path: str, output_dir: str = "") -> str:
+        """Import an Allegro board into a KiCad project directory."""
+        return _run_import_cli("allegro", allegro_brd_path, output_dir or None)
+
+    @mcp.tool()
+    @headless_compatible
+    def mfg_import_pads(pads_pcb_path: str, output_dir: str = "") -> str:
+        """Import a PADS PCB into a KiCad project directory."""
+        return _run_import_cli("pads", pads_pcb_path, output_dir or None)
+
+    @mcp.tool()
+    @headless_compatible
+    def mfg_import_geda(geda_pcb_path: str, output_dir: str = "") -> str:
+        """Import a gEDA PCB into a KiCad project directory."""
+        return _run_import_cli("geda", geda_pcb_path, output_dir or None)

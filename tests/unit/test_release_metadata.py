@@ -27,7 +27,6 @@ def test_release_metadata_is_synchronised() -> None:
     security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
     bump_script = (ROOT / "scripts" / "bump_version.py").read_text(encoding="utf-8")
 
-    assert version == "2.1.0"
     assert server_json["$schema"] == REGISTRY_SCHEMA
     assert server_json["version"] == version
     assert server_json["packages"][0]["version"] == version
@@ -45,6 +44,8 @@ def test_built_distributions_include_runtime_entrypoint(tmp_path: Path) -> None:
     uv = shutil.which("uv")
     if uv is None:
         pytest.skip("uv is required for the packaging smoke test")
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    version = pyproject["project"]["version"]
 
     dist_dir = tmp_path / "dist"
     result = subprocess.run(
@@ -60,7 +61,7 @@ def test_built_distributions_include_runtime_entrypoint(tmp_path: Path) -> None:
     sdist = next(dist_dir.glob("*.tar.gz"))
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
-        entry_points = archive.read("kicad_mcp_pro-2.1.0.dist-info/entry_points.txt").decode()
+        entry_points = archive.read(f"kicad_mcp_pro-{version}.dist-info/entry_points.txt").decode()
 
     assert "kicad_mcp/server.py" in names
     assert "kicad_mcp/tools/export.py" in names

@@ -41,6 +41,20 @@ nav:
   - Client Configuration: client-configuration.md
   - Configuration: configuration.md
   - Tools Reference: tools-reference.md
+  - KiCad 10:
+      - Variants: kicad10/variants.md
+      - Time-Domain Tuning: kicad10/time-domain.md
+      - Graphical DRC: kicad10/graphical-drc.md
+  - Integration:
+      - KiCad Studio: integration/kicad-studio.md
+      - Claude Desktop: integration/claude-desktop.md
+      - Cursor: integration/cursor.md
+      - Claude Code: integration/claude-code.md
+  - Deployment:
+      - Azure DevOps CI/CD: deployment/azure-devops.md
+      - Docker: deployment/docker.md
+      - HTTP Mode: deployment/http-mode.md
+      - Security: deployment/security.md
   - Workflows:
       - First PCB: workflows/first-pcb.md
       - Schematic to PCB: workflows/schematic-to-pcb.md

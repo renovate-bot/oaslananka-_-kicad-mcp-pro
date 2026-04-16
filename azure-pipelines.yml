@@ -1,0 +1,124 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+parameters:
+  - name: publishToPackageIndex
+    displayName: Publish package from Azure DevOps
+    type: boolean
+    default: false
+  - name: packageIndex
+    displayName: Target package index
+    type: string
+    default: TestPyPI
+    values:
+      - TestPyPI
+      - PyPI
+
+variables:
+  pythonVersion: "3.12"
+
+stages:
+  - stage: Validate
+    displayName: Validate
+    jobs:
+      - job: lint_type_test
+        displayName: Ruff, mypy, and pytest
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "$(pythonVersion)"
+
+          - script: python -m pip install --upgrade pip uv
+            displayName: Install uv
+
+          - script: uv sync --all-extras --python $(pythonVersion)
+            displayName: Sync dependencies
+
+          - script: uv run --python $(pythonVersion) ruff check src/ tests/
+            displayName: Run ruff
+
+          - script: uv run --python $(pythonVersion) python -m mypy src/kicad_mcp/
+            displayName: Run mypy
+
+          - script: >
+              uv run --python $(pythonVersion)
+              python -m pytest tests/unit/ tests/integration/ tests/e2e/ -q
+              --cov=kicad_mcp --cov-report=term-missing --cov-fail-under=70
+            displayName: Run pytest
+
+  - stage: Build
+    displayName: Build
+    dependsOn: Validate
+    jobs:
+      - job: package
+        displayName: Build wheel and sdist
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "$(pythonVersion)"
+
+          - script: python -m pip install --upgrade pip uv
+            displayName: Install uv
+
+          - script: uv build
+            displayName: Build package
+
+          - publish: dist
+            artifact: python-dist
+            displayName: Publish build artifacts
+
+  - stage: Publish
+    displayName: Publish
+    dependsOn: Build
+    condition: and(succeeded(), eq('${{ parameters.publishToPackageIndex }}', 'true'))
+    jobs:
+      - deployment: publish_package
+        displayName: Publish package
+        environment: pypi
+        pool:
+          vmImage: ubuntu-latest
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - download: current
+                  artifact: python-dist
+                  displayName: Download package artifacts
+
+                - task: UsePythonVersion@0
+                  inputs:
+                    versionSpec: "$(pythonVersion)"
+
+                - script: python -m pip install --upgrade pip twine
+                  displayName: Install twine
+
+                - script: |
+                    set -euo pipefail
+
+                    if [ "${{ parameters.packageIndex }}" = "TestPyPI" ]; then
+                      python -m twine upload \
+                        --repository-url https://test.pypi.org/legacy/ \
+                        -u __token__ \
+                        -p "$TEST_PYPI_TOKEN" \
+                        "$(Pipeline.Workspace)/python-dist"/*
+                    else
+                      python -m twine upload \
+                        -u __token__ \
+                        -p "$PYPI_TOKEN" \
+                        "$(Pipeline.Workspace)/python-dist"/*
+                    fi
+                  displayName: Publish distribution
+                  env:
+                    PYPI_TOKEN: $(pypiToken)
+                    TEST_PYPI_TOKEN: $(testPyPIToken)

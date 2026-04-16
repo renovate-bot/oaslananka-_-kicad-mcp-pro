@@ -10,6 +10,7 @@ from kicad_mcp.utils.component_search import (
     DigiKeyClient,
     JLCSearchClient,
     NexarClient,
+    RateLimiter,
     _request_json,
     normalize_lcsc_code,
 )
@@ -169,3 +170,18 @@ def test_optional_search_clients_raise_clear_messages(monkeypatch) -> None:
         DigiKeyClient().search("buzzer")
     with pytest.raises(RuntimeError, match="detail lookups require authenticated deployment"):
         DigiKeyClient().get_part("C12345")
+
+
+def test_rate_limiter_waits_when_window_is_full(monkeypatch) -> None:
+    timeline = iter([0.0, 0.0, 0.1, 0.1, 0.2, 1.3, 1.3])
+    slept: list[float] = []
+
+    monkeypatch.setattr("kicad_mcp.utils.component_search.time.monotonic", lambda: next(timeline))
+    monkeypatch.setattr("kicad_mcp.utils.component_search.time.sleep", slept.append)
+
+    limiter = RateLimiter(max_calls=2, period_seconds=1.0)
+    limiter.acquire()
+    limiter.acquire()
+    limiter.acquire()
+
+    assert slept and slept[0] > 0.0

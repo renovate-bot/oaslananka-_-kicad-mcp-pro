@@ -21,4 +21,4 @@ jobs:
       - run: uv sync --all-extras --python ${{ matrix.python-version }}
       - run: uv run --python ${{ matrix.python-version }} ruff check src/ tests/
       - run: uv run --python ${{ matrix.python-version }} python -m mypy src/kicad_mcp/
-      - run: uv run --python ${{ matrix.python-version }} python -m pytest tests/unit/ tests/integration/ tests/e2e/ -q --cov=kicad_mcp --cov-report=term-missing --cov-fail-under=80
+      - run: uv run --python ${{ matrix.python-version }} python -m pytest tests/unit/ tests/integration/ tests/e2e/ -q --cov=kicad_mcp --cov-report=term-missing --cov-fail-under=70

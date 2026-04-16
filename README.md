@@ -5,7 +5,9 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Smithery](https://img.shields.io/badge/Smithery-ready-blue)](https://smithery.ai/)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
-[![KiCad 9+](https://img.shields.io/badge/KiCad-9%2B-success.svg)](https://www.kicad.org/download/)
+[![KiCad 10](https://img.shields.io/badge/KiCad-10-success.svg)](https://www.kicad.org)
+[![KiCad Studio](https://img.shields.io/badge/KiCad%20Studio-compatible-blue)](https://github.com/oaslananka/kicad-studio)
+[![Downloads](https://img.shields.io/pypi/dm/kicad-mcp-pro.svg)](https://pypi.org/project/kicad-mcp-pro/)
 [![MCP 1.6+](https://img.shields.io/badge/MCP-1.6%2B-purple.svg)](https://modelcontextprotocol.io/)
 
 > AI-powered PCB and schematic design with KiCad. Works with Claude, Cursor, VS Code, Claude Code, and any MCP-compatible client.
@@ -30,6 +32,59 @@ Primary CI/CD and release automation runs in Azure DevOps. GitHub Actions in thi
 - MCP resources for live board/project state, quality gates, fix queues, connectivity, and placement review.
 - Prompt workflows for first-board, schematic-to-PCB, manufacturing release, design review loops, and critic/fixer iterations.
 - Server profiles (`full`, `minimal`, `schematic_only`, `pcb_only`, `manufacturing`, `high_speed`, `power`, `simulation`, `analysis`) to reduce tool surface for clients. Legacy `pcb` and `schematic` aliases remain available.
+
+## KiCad 10 Feature Matrix
+
+| Feature area | KiCad 9.x | KiCad 10.x |
+|---|---|---|
+| Core PCB + schematic inspection | Yes | Yes |
+| Manufacturing exports | Yes | Yes |
+| Variant sidecar tools (`variant_*`) | Best effort | Yes |
+| Graphical DRC rule editing (`drc_rule_*`) | Best effort | Yes |
+| Time-domain routing helpers (`route_tune_time_domain`) | Fallback-to-length | Yes |
+| 3D PDF export (`pcb_export_3d_pdf`) | No | Yes |
+| Inner-layer footprint graphics | Limited | Yes |
+| Design blocks + barcode helpers | Sidecar/file-based | Yes |
+
+## Demo
+
+- First-board walkthrough script: [docs/workflows/first-pcb.md](docs/workflows/first-pcb.md)
+- KiCad Studio bridge setup: [docs/integration/kicad-studio.md](docs/integration/kicad-studio.md)
+- HTTP deployment notes: [docs/deployment/http-mode.md](docs/deployment/http-mode.md)
+
+## Comparison
+
+| Capability | kicad-mcp-pro | Generic KiCad scripts | Raw `kicad-cli` |
+|---|---|---|---|
+| MCP tools/resources/prompts | Yes | No | No |
+| Project quality gates | Yes | Rare | No |
+| KiCad Studio local bridge | Yes | No | No |
+| Variant-aware workflows | Yes | Rare | No |
+| Streamable HTTP transport | Yes | Rare | No |
+| DRC/DFM/manufacturing bundle | Yes | Partial | Partial |
+
+## KiCad Studio Integration
+
+`kicad-mcp-pro` can run as a local HTTP bridge for the TypeScript-based `kicad-studio` extension. The bridge now supports:
+
+- `studio_push_context()` for active file, DRC errors, selected net/reference, and cursor state.
+- `kicad://studio/context` as a resource that agents can read directly.
+- `KICAD_MCP_STUDIO_WATCH_DIR` for auto-project detection when `.kicad_pro` files change.
+- `/.well-known/mcp-server` discovery plus bearer-token auth and CORS configuration for local-only deployments.
+
+For Studio deployments, `27185` is a good dedicated local bridge port by convention. The server default remains `3334`, so either set `KICAD_MCP_PORT=27185` explicitly or keep the default and point the Studio client at that port.
+
+## CI/CD
+
+Azure DevOps is the canonical CI/CD system for this repository. The pipeline definition lives in [`azure-pipelines.yml`](azure-pipelines.yml) and covers linting, mypy, pytest, coverage, package builds, and optional manual publishing to TestPyPI or PyPI from Azure-managed secrets.
+
+GitHub Actions stays in the repository only as a manual fallback surface:
+
+- `.github/workflows/ci.yml`
+- `.github/workflows/security.yml`
+- `.github/workflows/publish.yml`
+
+None of those workflows are intended to be the primary automated path. If GitHub-hosted automation is unavailable, queue the Azure pipeline instead and keep GitHub releases/workflows manual.
 
 ## Quick Start
 
@@ -118,7 +173,7 @@ Use `.vscode/mcp.json` with the same server shape shown above, and keep
 
 ### Cursor
 
-Add a custom MCP server using `uvx` as the command and `kicad-mcp-pro` as the only argument. For remote-style usage, run `kicad-mcp-pro --transport http` and connect to `http://127.0.0.1:3334/mcp`.
+Add a custom MCP server using `uvx` as the command and `kicad-mcp-pro` as the only argument. For remote-style usage, run `kicad-mcp-pro --transport http` and connect to `http://127.0.0.1:3334/mcp`. If you want Cursor and KiCad Studio to share the same local bridge convention, set `KICAD_MCP_PORT=27185` and connect to `http://127.0.0.1:27185/mcp` instead.
 
 ### Claude Code
 
@@ -489,6 +544,7 @@ state before rolling files back to a checkpoint commit.
 - [First PCB](docs/workflows/first-pcb.md)
 - [Schematic to PCB](docs/workflows/schematic-to-pcb.md)
 - [Manufacturing Package Export](docs/workflows/manufacturing-export.md)
+- [Azure DevOps CI/CD](docs/deployment/azure-devops.md)
 
 The built-in MCP prompt set now also includes:
 

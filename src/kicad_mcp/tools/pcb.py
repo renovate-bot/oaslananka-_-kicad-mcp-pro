@@ -59,6 +59,7 @@ from ..models.pcb import (
     StackupLayerSpec,
     SyncPcbFromSchematicInput,
 )
+from ..utils.cache import clear_ttl_cache, ttl_cache
 from ..utils.impedance import TraceType, copper_thickness_mm, trace_impedance
 from ..utils.layers import CANONICAL_LAYER_NAMES, resolve_layer, resolve_layer_name
 from ..utils.placement import (
@@ -596,6 +597,7 @@ def _transactional_board_write(mutator: Callable[[str], str]) -> str:
         handle.write(updated)
         temp_path = Path(handle.name)
     temp_path.replace(board_file)
+    clear_ttl_cache()
     return str(board_file)
 
 
@@ -1155,6 +1157,86 @@ def _replace_board_blocks(
     return normalized
 
 
+def _pcb_state_path(filename: str) -> Path:
+    cfg = get_config()
+    if cfg.project_dir is None:
+        raise ValueError("No active project is configured.")
+    target = cfg.project_dir / ".kicad-mcp"
+    target.mkdir(parents=True, exist_ok=True)
+    return target / filename
+
+
+def _load_pcb_state(filename: str, default: dict[str, Any]) -> dict[str, Any]:
+    path = _pcb_state_path(filename)
+    if not path.exists():
+        path.write_text(json.dumps(default, indent=2), encoding="utf-8")
+        return dict(default)
+    return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+
+
+def _save_pcb_state(filename: str, payload: dict[str, Any]) -> Path:
+    path = _pcb_state_path(filename)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def _footprint_layers_from_block(block: str) -> list[str]:
+    layers = set(re.findall(r'\(layer\s+"([^"]+)"\)', block))
+    for match in re.findall(r'\(layers\s+([^)]+)\)', block):
+        layers.update(re.findall(r'"([^"]+)"', match))
+    return sorted(layers)
+
+
+def _append_to_footprint_block(block: str, child_block: str) -> str:
+    insert_at = block.rfind("\n)")
+    if insert_at == -1:
+        insert_at = block.rfind(")")
+    if insert_at == -1:
+        raise ValueError("Could not update the footprint block.")
+    return block[:insert_at] + "\n" + child_block + block[insert_at:]
+
+
+def _refresh_uuid_fields(block: str) -> str:
+    return re.sub(
+        r'(?<=\(uuid\s")[0-9a-fA-F-]{36}(?="\))',
+        lambda _match: str(uuid.uuid4()),
+        block,
+    )
+
+
+def _inner_layer_graphic_block(
+    shape_type: str,
+    layer: str,
+    x1_mm: float,
+    y1_mm: float,
+    x2_mm: float,
+    y2_mm: float,
+    text: str,
+    stroke_width_mm: float,
+) -> str:
+    layer_name = layer.replace("_", ".")
+    if shape_type == "line":
+        return (
+            f'\t(fp_line (start {x1_mm:.4f} {y1_mm:.4f}) (end {x2_mm:.4f} {y2_mm:.4f}) '
+            f'(stroke (width {stroke_width_mm:.4f}) (type solid)) (layer "{layer_name}") '
+            f'(uuid "{uuid.uuid4()}"))'
+        )
+    if shape_type == "rect":
+        return (
+            f'\t(fp_rect (start {x1_mm:.4f} {y1_mm:.4f}) (end {x2_mm:.4f} {y2_mm:.4f}) '
+            f'(stroke (width {stroke_width_mm:.4f}) (type solid)) (fill none) '
+            f'(layer "{layer_name}") (uuid "{uuid.uuid4()}"))'
+        )
+    if shape_type == "text":
+        rendered_text = text or "INNER"
+        return (
+            f'\t(fp_text user "{rendered_text}" (at {x1_mm:.4f} {y1_mm:.4f} 0) '
+            f'(layer "{layer_name}") (effects (font (size 1.0000 1.0000))) '
+            f'(uuid "{uuid.uuid4()}"))'
+        )
+    raise ValueError("shape_type must be one of: line, rect, text.")
+
+
 def _footprint_file(library: str, footprint: str) -> Path:
     cfg = get_config()
     if cfg.footprint_library_dir is None or not cfg.footprint_library_dir.exists():
@@ -1500,6 +1582,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @requires_kicad_running
+    @ttl_cache(ttl_seconds=5)
     def pcb_get_board_summary() -> str:
         """Summarize the current board."""
         board = get_board()
@@ -1613,6 +1696,20 @@ def register(mcp: FastMCP) -> None:
                 f"id={_format_selection_id(footprint)}"
             )
         return "\n".join(lines)
+
+    @mcp.tool()
+    @headless_compatible
+    def pcb_get_footprint_layers(reference: str) -> str:
+        """List every layer referenced by a footprint block, including inner layers."""
+        board_content = _normalize_board_content(
+            _get_pcb_file_for_sync().read_text(encoding="utf-8")
+        )
+        footprints = _parse_board_footprint_blocks(board_content)
+        entry = footprints.get(reference)
+        if entry is None:
+            return f"Footprint '{reference}' was not found in the board file."
+        layers = _footprint_layers_from_block(str(entry["block"]))
+        return json.dumps({"reference": reference, "layers": layers}, indent=2)
 
     @mcp.tool()
     @requires_kicad_running
@@ -2291,6 +2388,30 @@ def register(mcp: FastMCP) -> None:
         return "Board text added successfully."
 
     @mcp.tool()
+    @headless_compatible
+    def pcb_add_barcode(
+        content: str,
+        x_mm: float,
+        y_mm: float,
+        layer: str = "F.Fab",
+        barcode_type: str = "qr",
+        size_mm: float = 10.0,
+    ) -> str:
+        """Add a production barcode marker to the board file."""
+        normalized_type = barcode_type.casefold()
+        if normalized_type not in {"qr", "datamatrix"}:
+            return "barcode_type must be either 'qr' or 'datamatrix'."
+        board_block = (
+            f'(gr_text "{normalized_type.upper()}:{content}" (at {x_mm:.4f} {y_mm:.4f} 0) '
+            f'(layer "{layer}") (effects (font (size {size_mm / 4:.4f} {size_mm / 4:.4f}))))'
+        )
+        _transactional_board_write(lambda current: _append_board_blocks(current, [board_block]))
+        return (
+            f"Barcode marker added at ({x_mm:.2f}, {y_mm:.2f}) mm on {layer}. "
+            "The KiCad 10 native barcode renderer can refine the appearance in the GUI."
+        )
+
+    @mcp.tool()
     def pcb_delete_items(item_ids: list[str]) -> str:
         """Delete items by UUID."""
         from kipy.proto.common.types import KIID
@@ -2376,6 +2497,51 @@ def register(mcp: FastMCP) -> None:
         with board_transaction() as board:
             board.update_items([cast(BoardItem, footprint)])
         return f"Updated footprint '{reference}' to layer '{layer}'."
+
+    @mcp.tool()
+    @headless_compatible
+    def add_footprint_inner_layer_graphic(
+        reference: str,
+        layer: str,
+        shape_type: str,
+        x1_mm: float = 0.0,
+        y1_mm: float = 0.0,
+        x2_mm: float = 2.0,
+        y2_mm: float = 2.0,
+        text: str = "",
+        stroke_width_mm: float = 0.15,
+    ) -> str:
+        """Inject an inner-layer graphic primitive into a footprint block."""
+        canonical_layer = resolve_layer_name(layer)
+        if not canonical_layer.startswith("In") or not canonical_layer.endswith("_Cu"):
+            return "Inner-layer footprint graphics must target In1_Cu through In30_Cu."
+
+        board_content = _normalize_board_content(
+            _get_pcb_file_for_sync().read_text(encoding="utf-8")
+        )
+        footprints = _parse_board_footprint_blocks(board_content)
+        entry = footprints.get(reference)
+        if entry is None:
+            return f"Footprint '{reference}' was not found in the board file."
+
+        graphic = _inner_layer_graphic_block(
+            shape_type=shape_type.casefold(),
+            layer=canonical_layer,
+            x1_mm=x1_mm,
+            y1_mm=y1_mm,
+            x2_mm=x2_mm,
+            y2_mm=y2_mm,
+            text=text,
+            stroke_width_mm=stroke_width_mm,
+        )
+        updated_block = _append_to_footprint_block(str(entry["block"]), graphic)
+        _transactional_board_write(
+            lambda current: _replace_board_blocks(current, {reference: updated_block}, [])
+        )
+        return (
+            f"Added {shape_type} inner-layer graphic to footprint '{reference}' "
+            f"on {canonical_layer}."
+        )
 
     @mcp.tool()
     @headless_compatible
@@ -3183,6 +3349,102 @@ def register(mcp: FastMCP) -> None:
                 f"Added {len(additions)} fiducial mark(s): {', '.join(added_refs)}.",
                 _finalize_file_based_board_edit(payload.allow_open_board),
             ]
+        )
+
+    @mcp.tool()
+    @headless_compatible
+    def pcb_block_list() -> str:
+        """List stored PCB design blocks created from selected footprints."""
+        state = _load_pcb_state("pcb_blocks.json", {"blocks": {}})
+        blocks = cast(dict[str, dict[str, Any]], state.get("blocks", {}))
+        payload = {
+            name: {
+                "footprint_count": len(cast(list[object], block.get("footprints", []))),
+            }
+            for name, block in sorted(blocks.items())
+        }
+        return json.dumps(payload, indent=2)
+
+    @mcp.tool()
+    @headless_compatible
+    def pcb_block_create_from_selection(name: str, references: list[str]) -> str:
+        """Capture a reusable PCB design block from selected footprint references."""
+        if not references:
+            return "At least one footprint reference is required."
+
+        board_content = _normalize_board_content(
+            _get_pcb_file_for_sync().read_text(encoding="utf-8")
+        )
+        footprints = _parse_board_footprint_blocks(board_content)
+        missing = [reference for reference in references if reference not in footprints]
+        if missing:
+            return f"These references were not found on the board: {', '.join(missing)}"
+
+        selected = [footprints[reference] for reference in references]
+        min_x = min(float(item["x_mm"]) for item in selected if item["x_mm"] is not None)
+        min_y = min(float(item["y_mm"]) for item in selected if item["y_mm"] is not None)
+        state = _load_pcb_state("pcb_blocks.json", {"blocks": {}})
+        blocks = cast(dict[str, object], state.setdefault("blocks", {}))
+        blocks[name] = {
+            "footprints": [
+                {
+                    "reference": reference,
+                    "block": str(footprints[reference]["block"]),
+                    "dx_mm": float(footprints[reference]["x_mm"]) - min_x,
+                    "dy_mm": float(footprints[reference]["y_mm"]) - min_y,
+                    "rotation": int(footprints[reference]["rotation"]),
+                }
+                for reference in references
+            ]
+        }
+        path = _save_pcb_state("pcb_blocks.json", state)
+        return f"PCB block '{name}' saved to {path}."
+
+    @mcp.tool()
+    @headless_compatible
+    def pcb_block_place(
+        block_name: str,
+        x_mm: float,
+        y_mm: float,
+        rotation_deg: int = 0,
+    ) -> str:
+        """Place a stored PCB design block by cloning its saved footprint blocks."""
+        state = _load_pcb_state("pcb_blocks.json", {"blocks": {}})
+        blocks = cast(dict[str, dict[str, Any]], state.get("blocks", {}))
+        block = blocks.get(block_name)
+        if block is None:
+            return f"PCB block '{block_name}' was not found."
+
+        board_content = _normalize_board_content(
+            _get_pcb_file_for_sync().read_text(encoding="utf-8")
+        )
+        existing = _parse_board_footprint_blocks(board_content)
+        existing_refs = set(existing.keys())
+        additions: list[str] = []
+        radians = math.radians(rotation_deg)
+        for item in cast(list[dict[str, Any]], block.get("footprints", [])):
+            original_ref = str(item.get("reference", "U"))
+            prefix_match = re.match(r"([A-Za-z#]+)", original_ref)
+            prefix = prefix_match.group(1) if prefix_match else "U"
+            new_ref = _next_reference(existing_refs, prefix)
+            dx_mm = float(item.get("dx_mm", 0.0))
+            dy_mm = float(item.get("dy_mm", 0.0))
+            rotated_dx = (dx_mm * math.cos(radians)) - (dy_mm * math.sin(radians))
+            rotated_dy = (dx_mm * math.sin(radians)) + (dy_mm * math.cos(radians))
+            updated_block = _refresh_uuid_fields(str(item.get("block", "")))
+            updated_block = _replace_property_value(updated_block, "Reference", new_ref)
+            updated_block = _replace_root_at(
+                updated_block,
+                x_mm=x_mm + rotated_dx,
+                y_mm=y_mm + rotated_dy,
+                rotation=(int(item.get("rotation", 0)) + rotation_deg) % 360,
+            )
+            additions.append(updated_block)
+
+        _transactional_board_write(lambda current: _replace_board_blocks(current, {}, additions))
+        return (
+            f"Placed PCB block '{block_name}' at ({x_mm:.2f}, {y_mm:.2f}) mm "
+            f"with {len(additions)} cloned footprint(s)."
         )
 
     @mcp.tool()

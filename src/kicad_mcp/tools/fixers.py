@@ -155,3 +155,15 @@ def first_agent_action(gate_name: str) -> FixerAction | None:
         if not action.auto_applicable:
             return action
     return None
+
+
+def sampling_prompt_for_gate(gate_name: str, summary: str, details: list[str] | None = None) -> str:
+    """Build a compact prompt for MCP client-side sampling when supported."""
+    rendered_details = "\n".join(f"- {detail}" for detail in (details or [])[:8])
+    detail_block = f"\nDetails:\n{rendered_details}" if rendered_details else ""
+    return (
+        "You are a KiCad expert. Give a short, practical fix recommendation for "
+        "the following quality-gate failure.\n"
+        f"Gate: {gate_name}\n"
+        f"Summary: {summary}{detail_block}"
+    )

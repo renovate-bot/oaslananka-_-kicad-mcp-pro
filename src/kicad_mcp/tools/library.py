@@ -10,6 +10,7 @@ from typing import Any, cast
 from mcp.server.fastmcp import FastMCP
 
 from ..config import get_config
+from ..utils.cache import ttl_cache
 from ..utils.component_search import (
     ComponentRecord,
     ComponentSearchClient,
@@ -249,6 +250,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @headless_compatible
+    @ttl_cache(ttl_seconds=60)
     def lib_search_symbols(query: str, library_filter: str = "") -> str:
         """Search symbol libraries by name, description, or keywords."""
         index = _get_symbol_index()

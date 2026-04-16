@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from ..config import get_config
 from ..discovery import get_cli_capabilities
@@ -134,6 +135,20 @@ LOW_LEVEL_EXPORT_NOTICE = (
 
 def _with_low_level_export_notice(message: str) -> str:
     return f"{LOW_LEVEL_EXPORT_NOTICE}\n\n{message}"
+
+
+async def _report_progress(
+    ctx: Context[Any, Any, Any] | None,
+    progress: float,
+    total: float,
+    message: str,
+) -> None:
+    if ctx is None:
+        return
+    try:
+        await ctx.report_progress(progress, total, message)
+    except ValueError:
+        return
 
 
 def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
@@ -393,6 +408,50 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         """Alias for STEP export with an optional explicit output path."""
         return _with_low_level_export_notice(_export_step(output_path))
 
+    def _export_3d_pdf(output_path: str = "", board_only: bool = False) -> str:
+        pcb_file = _get_pcb_file()
+        caps = get_cli_capabilities(get_config().kicad_cli)
+        if not caps.supports_3d_pdf:
+            return "3D PDF export requires a KiCad 10-compatible kicad-cli."
+
+        try:
+            out_file = _resolve_output_file("3d", output_path, default_name="board-3d.pdf")
+        except ValueError as exc:
+            return f"Invalid output path: {exc}"
+
+        extra_args = ["--board-only"] if board_only else []
+        code, _, stderr = _run_cli_variants(
+            [
+                [
+                    "pcb",
+                    "export",
+                    "3dpdf",
+                    "--output",
+                    str(out_file),
+                    *extra_args,
+                    str(pcb_file),
+                ],
+                [
+                    "pcb",
+                    "export",
+                    "3dpdf",
+                    "--input",
+                    str(pcb_file),
+                    "--output",
+                    str(out_file),
+                    *extra_args,
+                ],
+            ]
+        )
+        if code != 0:
+            return f"3D PDF export failed: {stderr or 'unknown error'}"
+        return f"3D PDF exported to {out_file}"
+
+    @headless_compatible
+    def pcb_export_3d_pdf(output_path: str = "", board_only: bool = False) -> str:
+        """Export the active PCB as a KiCad 10 3D PDF."""
+        return _with_low_level_export_notice(_export_3d_pdf(output_path, board_only))
+
     def _export_3d_render(
         output_file: str = "render.png",
         side: str = "top",
@@ -602,10 +661,13 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         return stdout or "Board statistics were generated without a text report."
 
     @headless_compatible
-    def export_manufacturing_package() -> str:
+    async def export_manufacturing_package(
+        ctx: Context[Any, Any, Any] | None = None,
+    ) -> str:
         """Generate the standard set of manufacturing exports."""
         from .validation import _evaluate_project_gate, _render_project_gate_report
 
+        await _report_progress(ctx, 5, 100, "Running full project quality gate...")
         outcomes = _evaluate_project_gate()
         blocking = [outcome for outcome in outcomes if outcome.status != "PASS"]
         if blocking:
@@ -617,15 +679,28 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
                 ),
             )
 
+        await _report_progress(ctx, 25, 100, "Exporting Gerbers...")
         results = [
             _export_gerber(),
-            _export_drill(),
-            _export_bom(),
-            _export_pick_and_place(),
         ]
+        await _report_progress(ctx, 45, 100, "Exporting drill files...")
+        results.extend([_export_drill()])
+        await _report_progress(ctx, 65, 100, "Exporting BOM...")
+        results.extend(
+            [
+            _export_bom(),
+            ]
+        )
+        await _report_progress(ctx, 85, 100, "Exporting pick-and-place data...")
+        results.extend(
+            [
+            _export_pick_and_place(),
+            ]
+        )
         ipc_result = _export_ipc2581()
         if not ipc_result.startswith("IPC-2581 export is not supported"):
             results.append(ipc_result)
+        await _report_progress(ctx, 100, 100, "Manufacturing package complete.")
         return "\n\n".join(results)
 
     if include_low_level_exports:
@@ -638,6 +713,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         mcp.tool()(export_sch_pdf)
         mcp.tool()(export_3d_step)
         mcp.tool()(export_step)
+        mcp.tool()(pcb_export_3d_pdf)
         mcp.tool()(export_3d_render)
         mcp.tool()(export_pick_and_place)
         mcp.tool()(export_ipc2581)

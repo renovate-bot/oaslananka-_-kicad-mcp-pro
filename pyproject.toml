@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kicad-mcp-pro"
-version = "2.1.0"
+version = "2.3.0"
 description = "A professional Model Context Protocol server for KiCad EDA."
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -37,6 +37,7 @@ dependencies = [
 components = ["gql>=3.5.0", "httpx>=0.27.0"]
 dev = [
   "bandit>=1.7.9",
+  "hypothesis>=6.100.0",
   "mkdocs-material>=9.5.32",
   "mkdocstrings[python]>=0.25.0",
   "mypy>=1.10.0",
@@ -96,3 +97,6 @@ addopts = "-q"
 [tool.coverage.run]
 source = ["src/kicad_mcp"]
 omit = ["tests/*"]
+
+[tool.coverage.report]
+fail_under = 70

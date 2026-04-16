@@ -6,17 +6,12 @@ from typing import Final, cast
 
 from kipy.proto.board.board_types_pb2 import BoardLayer
 
+_INNER_COPPER_LAYERS: Final[tuple[str, ...]] = tuple(f"In{index}_Cu" for index in range(1, 31))
+
 CANONICAL_LAYER_NAMES: Final[tuple[str, ...]] = (
     "F_Cu",
+    *_INNER_COPPER_LAYERS,
     "B_Cu",
-    "In1_Cu",
-    "In2_Cu",
-    "In3_Cu",
-    "In4_Cu",
-    "In5_Cu",
-    "In6_Cu",
-    "In7_Cu",
-    "In8_Cu",
     "F_SilkS",
     "B_SilkS",
     "F_Mask",
@@ -34,15 +29,8 @@ CANONICAL_LAYER_NAMES: Final[tuple[str, ...]] = (
 
 _LAYER_ATTRS: Final[dict[str, str]] = {
     "F_Cu": "BL_F_Cu",
+    **{name: f"BL_{name}" for name in _INNER_COPPER_LAYERS},
     "B_Cu": "BL_B_Cu",
-    "In1_Cu": "BL_In1_Cu",
-    "In2_Cu": "BL_In2_Cu",
-    "In3_Cu": "BL_In3_Cu",
-    "In4_Cu": "BL_In4_Cu",
-    "In5_Cu": "BL_In5_Cu",
-    "In6_Cu": "BL_In6_Cu",
-    "In7_Cu": "BL_In7_Cu",
-    "In8_Cu": "BL_In8_Cu",
     "F_SilkS": "BL_F_SilkS",
     "B_SilkS": "BL_B_SilkS",
     "F_Mask": "BL_F_Mask",
@@ -61,6 +49,7 @@ _LAYER_ATTRS: Final[dict[str, str]] = {
 _ALIASES: Final[dict[str, str]] = {
     "F.Cu": "F_Cu",
     "B.Cu": "B_Cu",
+    **{f"In{index}.Cu": f"In{index}_Cu" for index in range(1, 31)},
     "Edge.Cuts": "Edge_Cuts",
     "F.SilkS": "F_SilkS",
     "B.SilkS": "B_SilkS",

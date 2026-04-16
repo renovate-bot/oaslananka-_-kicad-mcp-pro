@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from ..config import get_config
 from ..connection import KiCadConnectionError, get_board
 from ..models.component_contracts import find_component_contract
+from ..utils.sexpr import _extract_block, _sexpr_string
 from .export import _ensure_output_dir, _get_pcb_file, _get_sch_file, _run_cli_variants
 from .metadata import headless_compatible
 
@@ -1361,8 +1362,216 @@ def render_gate_by_name(
     )
 
 
+def _iter_rule_blocks(content: str) -> list[str]:
+    blocks: list[str] = []
+    cursor = 0
+    while cursor < len(content):
+        match = re.search(r'\(rule\s+"', content[cursor:])
+        if match is None:
+            break
+        start = cursor + match.start()
+        block, length = _extract_block(content, start)
+        if not block:
+            break
+        blocks.append(block)
+        cursor = start + length
+    return blocks
+
+
+def _drc_state_path() -> Path:
+    cfg = get_config()
+    if cfg.project_dir is None:
+        raise ValueError("No active project is configured.")
+    target = cfg.project_dir / ".kicad-mcp"
+    target.mkdir(parents=True, exist_ok=True)
+    return target / "drc_rules_state.json"
+
+
+def _load_drc_state() -> dict[str, object]:
+    path = _drc_state_path()
+    if not path.exists():
+        payload: dict[str, object] = {"enabled": {}, "severity": {}}
+        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return payload
+    return cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+
+
+def _save_drc_state(payload: dict[str, object]) -> Path:
+    path = _drc_state_path()
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def _remove_rule_block(content: str, rule_name: str) -> str:
+    search = f'(rule {_sexpr_string(rule_name)}'
+    index = content.find(search)
+    if index < 0:
+        raise ValueError(f"Rule '{rule_name}' was not found.")
+    block, consumed = _extract_block(content, index)
+    if not block or consumed == 0:
+        raise ValueError(f"Rule '{rule_name}' could not be parsed.")
+    return content[:index].rstrip() + "\n" + content[index + consumed :].lstrip()
+
+
+def _rule_payload(block: str, state: dict[str, object]) -> dict[str, object]:
+    name_match = re.search(r'\(rule\s+"([^"]+)"', block)
+    condition_match = re.search(r'\(condition\s+"([^"]+)"\)', block)
+    constraint_matches = re.findall(r"\(constraint\s+([a-zA-Z0-9_]+)", block)
+    severity_match = re.search(r"\(severity\s+([a-zA-Z_]+)\)", block)
+    rule_name = name_match.group(1) if name_match else "unknown"
+    enabled_state = cast(dict[str, bool], state.get("enabled", {}))
+    severity_state = cast(dict[str, str], state.get("severity", {}))
+    payload: dict[str, object] = {
+        "name": rule_name,
+        "condition": condition_match.group(1) if condition_match else "",
+        "constraints": constraint_matches,
+        "severity": severity_state.get(
+            rule_name,
+            severity_match.group(1) if severity_match else "error",
+        ),
+        "enabled": enabled_state.get(rule_name, True),
+    }
+    return payload
+
+
 def register(mcp: FastMCP) -> None:
     """Register validation tools."""
+
+    @mcp.tool()
+    @headless_compatible
+    def drc_list_rules(include_custom: bool = True) -> str:
+        """List known DRC rules from the active ``.kicad_dru`` file."""
+        from .routing import _load_rules_content, _rules_file_path
+
+        built_in = [
+            {"name": "clearance", "source": "built-in"},
+            {"name": "track_width", "source": "built-in"},
+            {"name": "via_diameter", "source": "built-in"},
+            {"name": "hole_to_hole", "source": "built-in"},
+        ]
+        if not include_custom:
+            return json.dumps({"rules": built_in}, indent=2)
+
+        content = _load_rules_content(_rules_file_path())
+        state = _load_drc_state()
+        custom = [_rule_payload(block, state) for block in _iter_rule_blocks(content)]
+        return json.dumps({"rules": [*built_in, *custom]}, indent=2)
+
+    @mcp.tool()
+    @headless_compatible
+    def drc_rule_create(
+        name: str,
+        constraint_type: str,
+        min_value: float | str | None = None,
+        max_value: float | str | None = None,
+        condition: str | None = None,
+        severity: str = "error",
+    ) -> str:
+        """Create or update a custom DRC rule in the active ``.kicad_dru`` file."""
+        from .routing import _load_rules_content, _rules_file_path, _upsert_rule
+
+        formatted_constraints: list[str] = []
+        if min_value is None and max_value is None:
+            formatted_constraints.append(f"  (constraint {constraint_type})")
+        elif min_value is not None and max_value is not None:
+            formatted_constraints.append(
+                f"  (constraint {constraint_type} (min {min_value}) (max {max_value}))"
+            )
+        elif min_value is not None:
+            formatted_constraints.append(f"  (constraint {constraint_type} (min {min_value}))")
+        else:
+            formatted_constraints.append(f"  (constraint {constraint_type} (max {max_value}))")
+
+        rule_body = "\n".join(
+            [
+                f'(rule {_sexpr_string(name)}',
+                f'  (condition "{condition or "A.Type != \'none\'"}")',
+                *formatted_constraints,
+                f"  (severity {severity})",
+                ")",
+            ]
+        )
+
+        path = _rules_file_path()
+        updated = _upsert_rule(_load_rules_content(path), name, rule_body)
+        path.write_text(updated, encoding="utf-8")
+        state = _load_drc_state()
+        cast(dict[str, bool], state.setdefault("enabled", {}))[name] = True
+        cast(dict[str, str], state.setdefault("severity", {}))[name] = severity
+        _save_drc_state(state)
+        return f"Custom DRC rule '{name}' written to {path}."
+
+    @mcp.tool()
+    @headless_compatible
+    def drc_rule_delete(rule_name: str) -> str:
+        """Delete a custom DRC rule from the active rules file."""
+        from .routing import _load_rules_content, _rules_file_path
+
+        path = _rules_file_path()
+        updated = _remove_rule_block(_load_rules_content(path), rule_name)
+        path.write_text(updated, encoding="utf-8")
+        state = _load_drc_state()
+        cast(dict[str, bool], state.setdefault("enabled", {})).pop(rule_name, None)
+        cast(dict[str, str], state.setdefault("severity", {})).pop(rule_name, None)
+        _save_drc_state(state)
+        return f"Deleted custom DRC rule '{rule_name}' from {path}."
+
+    @mcp.tool()
+    @headless_compatible
+    def drc_rule_enable(rule_name: str, enabled: bool = True) -> str:
+        """Enable or disable a custom DRC rule."""
+        from .routing import _load_rules_content, _rules_file_path, _upsert_rule
+
+        path = _rules_file_path()
+        content = _load_rules_content(path)
+        block = next(
+            (
+                candidate
+                for candidate in _iter_rule_blocks(content)
+                if f'(rule "{rule_name}"' in candidate
+            ),
+            None,
+        )
+        if block is None:
+            return f"Custom DRC rule '{rule_name}' was not found."
+
+        state = _load_drc_state()
+        severity_map = cast(dict[str, str], state.setdefault("severity", {}))
+        enabled_map = cast(dict[str, bool], state.setdefault("enabled", {}))
+        severity_match = re.search(r"\(severity\s+([a-zA-Z_]+)\)", block)
+        existing_severity = severity_map.get(rule_name) or (
+            severity_match.group(1) if severity_match else "error"
+        )
+        severity_map[rule_name] = existing_severity
+        enabled_map[rule_name] = enabled
+
+        normalized_block = re.sub(r"\s*\(severity\s+[a-zA-Z_]+\)", "", block)
+        replacement = (
+            normalized_block[:-1]
+            + f"\n  (severity {'ignore' if not enabled else existing_severity})\n)"
+        )
+        updated = _upsert_rule(content, rule_name, replacement)
+        path.write_text(updated, encoding="utf-8")
+        _save_drc_state(state)
+        state_text = "enabled" if enabled else "disabled"
+        return f"Custom DRC rule '{rule_name}' {state_text}."
+
+    @mcp.tool()
+    @headless_compatible
+    def drc_export_rules(output_path: str | None = None) -> str:
+        """Export the active custom DRC rules file for sharing or CI."""
+        from .routing import _rules_file_path
+
+        source = _rules_file_path()
+        cfg = get_config()
+        target = (
+            cfg.resolve_within_project(output_path, allow_absolute=False)
+            if output_path
+            else cfg.ensure_output_dir("drc") / source.name
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+        return f"Custom DRC rules exported to {target}."
 
     @mcp.tool()
     @headless_compatible

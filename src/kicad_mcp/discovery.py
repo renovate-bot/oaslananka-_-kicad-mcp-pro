@@ -1,11 +1,15 @@
 """KiCad installation and project discovery helpers."""
 
+from __future__ import annotations
+
 import inspect
 import json
 import platform
 import re
 import shutil
 import subprocess
+import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -15,6 +19,10 @@ from typing import cast
 import structlog
 
 logger = structlog.get_logger(__name__)
+_WATCHER_LOCK = threading.Lock()
+_WATCHER_THREAD: threading.Thread | None = None
+_WATCHER_STOP = threading.Event()
+_WATCHER_ROOT: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -30,9 +38,13 @@ class CliCapabilities:
     supports_dxf: bool = False
     supports_step: bool = False
     supports_render: bool = False
+    supports_3d_pdf: bool = False
     supports_spice_netlist: bool = False
     supports_specctra_export: bool = False
     supports_specctra_import: bool = False
+    supports_allegro_import: bool = False
+    supports_pads_import: bool = False
+    supports_geda_import: bool = False
 
 
 def _candidate_cli_paths() -> list[Path]:
@@ -161,9 +173,13 @@ def get_cli_capabilities(cli_path: Path) -> CliCapabilities:
         supports_dxf=" export dxf" in blob or " dxf " in blob,
         supports_step=" export step" in blob or " step " in blob,
         supports_render=" render " in blob,
+        supports_3d_pdf="3dpdf" in blob or "3d pdf" in blob,
         supports_spice_netlist="spice" in blob,
         supports_specctra_export="specctra" in blob or " dsn " in blob,
         supports_specctra_import="specctra" in blob or " ses " in blob,
+        supports_allegro_import="allegro" in blob,
+        supports_pads_import="pads" in blob,
+        supports_geda_import="geda" in blob,
     )
 
 
@@ -267,3 +283,117 @@ def scan_project_dir(directory: Path) -> dict[str, Path | None]:
         if matches:
             result[key] = matches[0]
     return result
+
+
+def _discover_project_root(candidate: Path) -> tuple[Path, dict[str, Path | None]] | None:
+    current = candidate if candidate.is_dir() else candidate.parent
+    for directory in [current, *current.parents]:
+        scan = scan_project_dir(directory)
+        if any(scan.values()):
+            return directory, scan
+    return None
+
+
+def auto_set_project_from_file(active_file: str | Path) -> Path | None:
+    """Detect a KiCad project from an opened file and make it active."""
+    candidate = Path(active_file).expanduser()
+    discovered = _discover_project_root(candidate)
+    if discovered is None:
+        return None
+
+    project_dir, scan = discovered
+
+    from .config import get_config
+    from .connection import reset_connection
+
+    cfg = get_config()
+    cfg.apply_project(
+        project_dir.resolve(),
+        project_file=scan.get("project"),
+        pcb_file=scan.get("pcb"),
+        sch_file=scan.get("schematic"),
+        output_dir=project_dir.resolve() / "output",
+    )
+    reset_connection()
+    logger.info("studio_project_auto_detected", project_dir=str(project_dir))
+    return project_dir.resolve()
+
+
+def poll_studio_watch_dir(
+    watch_dir: Path,
+    previous: dict[Path, float] | None = None,
+) -> dict[Path, float]:
+    """Poll a watch directory for changed ``.kicad_pro`` files and auto-select the project."""
+    baseline = previous or {}
+    current: dict[Path, float] = {}
+    latest_changed: Path | None = None
+    latest_mtime = -1.0
+
+    if not watch_dir.exists():
+        return current
+
+    for project_file in watch_dir.rglob("*.kicad_pro"):
+        try:
+            mtime = project_file.stat().st_mtime
+        except OSError:
+            continue
+        current[project_file.resolve()] = mtime
+        if baseline.get(project_file.resolve()) != mtime and mtime >= latest_mtime:
+            latest_changed = project_file.resolve()
+            latest_mtime = mtime
+
+    if latest_changed is not None:
+        try:
+            auto_set_project_from_file(latest_changed)
+        except Exception as exc:
+            logger.warning(
+                "studio_watch_auto_detect_failed",
+                path=str(latest_changed),
+                error=str(exc),
+            )
+
+    return current
+
+
+def ensure_studio_project_watcher(watch_dir: Path, poll_interval_seconds: float = 2.0) -> None:
+    """Start a lightweight polling watcher for KiCad Studio bridge workflows."""
+    global _WATCHER_THREAD, _WATCHER_ROOT
+
+    resolved_root = watch_dir.expanduser().resolve()
+    with _WATCHER_LOCK:
+        if (
+            _WATCHER_THREAD is not None
+            and _WATCHER_THREAD.is_alive()
+            and _WATCHER_ROOT == resolved_root
+        ):
+            return
+
+        stop_studio_project_watcher()
+        _WATCHER_STOP.clear()
+        _WATCHER_ROOT = resolved_root
+
+        def _worker() -> None:
+            previous: dict[Path, float] = {}
+            while not _WATCHER_STOP.is_set():
+                previous = poll_studio_watch_dir(resolved_root, previous)
+                time.sleep(poll_interval_seconds)
+
+        _WATCHER_THREAD = threading.Thread(
+            target=_worker,
+            name="kicad-mcp-studio-watch",
+            daemon=True,
+        )
+        _WATCHER_THREAD.start()
+        logger.info("studio_watch_started", watch_dir=str(resolved_root))
+
+
+def stop_studio_project_watcher() -> None:
+    """Stop the background studio watch thread if it is running."""
+    global _WATCHER_THREAD, _WATCHER_ROOT
+
+    with _WATCHER_LOCK:
+        _WATCHER_STOP.set()
+        if _WATCHER_THREAD is not None and _WATCHER_THREAD.is_alive():
+            _WATCHER_THREAD.join(timeout=0.5)
+        _WATCHER_THREAD = None
+        _WATCHER_ROOT = None

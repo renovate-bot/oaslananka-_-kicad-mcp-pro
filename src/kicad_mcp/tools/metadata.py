@@ -5,6 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from mcp.types import ToolAnnotations
+
 
 @dataclass(frozen=True)
 class ToolMetadata:
@@ -16,6 +18,32 @@ class ToolMetadata:
 
 
 _TOOL_METADATA: dict[str, ToolMetadata] = {}
+_READ_ONLY_PREFIXES = (
+    "get_",
+    "list_",
+    "search_",
+    "trace_",
+    "check_",
+    "validate_",
+    "score_",
+    "run_drc",
+    "run_erc",
+    "kicad_get_",
+    "project_get_",
+)
+_WRITE_PREFIXES = (
+    "add_",
+    "set_",
+    "update_",
+    "delete_",
+    "move_",
+    "create_",
+    "place_",
+    "apply_",
+    "import_",
+    "export_",
+    "sync_",
+)
 
 
 def _merge_metadata(
@@ -83,3 +111,64 @@ def requires_dependency(name: str) -> Callable[[Callable[..., object]], Callable
 def get_tool_metadata(tool_name: str) -> ToolMetadata | None:
     """Return discovery metadata for a registered tool name."""
     return _TOOL_METADATA.get(tool_name)
+
+
+def infer_tool_annotations(
+    tool_name: str,
+    explicit: ToolAnnotations | dict[str, object] | None = None,
+) -> ToolAnnotations:
+    """Infer MCP 2026-style annotations from existing tool metadata and naming."""
+    metadata = get_tool_metadata(tool_name) or ToolMetadata()
+    normalized = tool_name.casefold()
+
+    is_write = (
+        normalized.startswith(_WRITE_PREFIXES)
+        or any(token in normalized for token in ("_add_", "_set_", "_update_", "_delete_"))
+        or any(
+            token in normalized
+            for token in (
+                "annotate",
+                "autofix",
+                "auto_fix",
+                "autoroute",
+                "panelize",
+                "restore_checkpoint",
+                "commit_checkpoint",
+            )
+        )
+    )
+    is_read_only = not is_write and (
+        normalized.startswith(_READ_ONLY_PREFIXES)
+        or normalized.startswith("lib_search_")
+        or normalized.startswith("pcb_get_")
+        or normalized.startswith("sch_get_")
+        or normalized.endswith("_quality_gate")
+    )
+
+    annotations: dict[str, object] = {}
+    if is_read_only:
+        annotations["readOnlyHint"] = True
+        annotations["idempotentHint"] = True
+    if is_write:
+        annotations["destructiveHint"] = True
+    if metadata.requires_kicad_running:
+        annotations["requiresKiCadRunning"] = True
+    if any(
+        token in normalized
+        for token in (
+            "export",
+            "generate_release_manifest",
+            "panelize",
+            "render",
+            "import_",
+        )
+    ):
+        annotations["openWorldHint"] = True
+    if explicit:
+        explicit_values = (
+            explicit.model_dump(exclude_none=True)
+            if isinstance(explicit, ToolAnnotations)
+            else dict(explicit)
+        )
+        annotations.update(explicit_values)
+    return ToolAnnotations.model_validate(annotations)

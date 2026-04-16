@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 import json
+import sys
 from collections.abc import Iterable
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
 
 
 def tool_text(result: object) -> str:
@@ -64,9 +70,11 @@ def reset_globals(monkeypatch: pytest.MonkeyPatch) -> None:
     """Reset cached config and KiCad connection state before every test."""
     from kicad_mcp.config import reset_config
     from kicad_mcp.connection import reset_connection
+    from kicad_mcp.utils.cache import clear_ttl_cache
 
     reset_config()
     reset_connection()
+    clear_ttl_cache()
     monkeypatch.delenv("KICAD_MCP_PROJECT_DIR", raising=False)
     monkeypatch.delenv("KICAD_MCP_PROJECT_FILE", raising=False)
     monkeypatch.delenv("KICAD_MCP_PCB_FILE", raising=False)

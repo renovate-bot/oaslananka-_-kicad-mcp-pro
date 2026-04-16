@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import structlog
 from kipy.board_types import Net, Track
 from kipy.geometry import Vector2
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from ..config import get_config
 from ..connection import board_transaction, get_board
@@ -24,6 +25,9 @@ from .export import _get_pcb_file
 from .metadata import headless_compatible, requires_dependency, requires_kicad_running
 
 logger = structlog.get_logger(__name__)
+_STATE_DIRNAME = ".kicad-mcp"
+_TUNING_PROFILES_FILENAME = "tuning_profiles.json"
+_TUNING_ASSIGNMENTS_FILENAME = "tuning_profile_assignments.json"
 
 
 def _find_pad(reference: str, pad_number: str) -> _PadLike | None:
@@ -273,6 +277,57 @@ def _relative_project_path(path: Path) -> str:
         return str(path.resolve())
 
 
+def _routing_state_dir() -> Path:
+    cfg = get_config()
+    if cfg.project_dir is None:
+        raise ValueError(
+            "No active project directory is configured. "
+            "Call kicad_set_project() first."
+        )
+    target = cfg.project_dir / _STATE_DIRNAME
+    target.mkdir(parents=True, exist_ok=True)
+    return target
+
+
+def _load_state_file(filename: str, default: dict[str, object]) -> dict[str, object]:
+    path = _routing_state_dir() / filename
+    if not path.exists():
+        path.write_text(json.dumps(default, indent=2), encoding="utf-8")
+        return dict(default)
+    return cast(dict[str, object], json.loads(path.read_text(encoding="utf-8")))
+
+
+def _save_state_file(filename: str, payload: dict[str, object]) -> Path:
+    path = _routing_state_dir() / filename
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def _net_pattern_condition(net_pattern: str) -> str:
+    if "*" in net_pattern:
+        regex = re.escape(net_pattern).replace(r"\*", ".*")
+        return f"A.NetName =~ '{regex}'"
+    return f"A.NetName == '{net_pattern}'"
+
+
+def _delay_to_length_mm(delay_ps: float, propagation_speed_factor: float) -> float:
+    return delay_ps * 0.299792458 * propagation_speed_factor
+
+
+async def _report_progress(
+    ctx: Context[Any, Any, Any] | None,
+    progress: float,
+    total: float,
+    message: str,
+) -> None:
+    if ctx is None:
+        return
+    try:
+        await ctx.report_progress(progress, total, message)
+    except ValueError:
+        return
+
+
 def register(mcp: FastMCP) -> None:
     """Register routing tools."""
 
@@ -404,7 +459,7 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     @headless_compatible
     @requires_dependency("freerouting")
-    def route_autoroute_freerouting(
+    async def route_autoroute_freerouting(
         dsn_path: str = "output/routing/board.dsn",
         ses_path: str = "output/routing/board.ses",
         net_classes_to_ignore: list[str] | None = None,
@@ -412,6 +467,7 @@ def register(mcp: FastMCP) -> None:
         thread_count: int = 4,
         use_docker: bool = True,
         freerouting_jar_path: str | None = None,
+        ctx: Context[Any, Any, Any] | None = None,
     ) -> str:
         """Run FreeRouting on a Specctra DSN file and stage the resulting SES session."""
         cfg = get_config()
@@ -421,7 +477,9 @@ def register(mcp: FastMCP) -> None:
         ses_target = cfg.resolve_within_project(Path(ses_path))
 
         try:
+            await _report_progress(ctx, 10, 100, "Exporting DSN for FreeRouting...")
             dsn_file = runner.export_dsn(pcb_file, dsn_target)
+            await _report_progress(ctx, 40, 100, "Running FreeRouting...")
             result = runner.run_freerouting(
                 dsn_file,
                 ses_target,
@@ -466,11 +524,13 @@ def register(mcp: FastMCP) -> None:
             )
 
         try:
+            await _report_progress(ctx, 85, 100, "Staging SES session for KiCad import...")
             staged = runner.import_ses(pcb_file, ses_path_obj)
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             return f"FreeRouting autoroute failed while staging the SES file: {exc}"
 
         ignore_text = ", ".join(net_classes_to_ignore or []) or "none"
+        await _report_progress(ctx, 100, 100, "FreeRouting autoroute complete.")
         return (
             "FreeRouting completed successfully.\n"
             f"Mode: {result.mode}\n"
@@ -574,6 +634,109 @@ def register(mcp: FastMCP) -> None:
             f"Target length: {target_mm:.3f} mm\n"
             f"Delta: {delta:.3f} mm ({status})\n"
             f"Suggested meander amplitude: {meander_amplitude_mm:.3f} mm"
+        )
+
+    @mcp.tool()
+    @headless_compatible
+    def route_create_tuning_profile(
+        name: str,
+        layer: str,
+        trace_impedance_ohm: float,
+        propagation_speed_factor: float,
+    ) -> str:
+        """Create or update a KiCad 10-style time-domain tuning profile."""
+        if not 0.05 <= propagation_speed_factor <= 1.0:
+            raise ValueError("propagation_speed_factor must be between 0.05 and 1.0.")
+        resolved_layer = resolve_layer(layer)
+        _ = resolved_layer
+        state = _load_state_file(_TUNING_PROFILES_FILENAME, {"profiles": {}})
+        profiles = cast(dict[str, object], state.setdefault("profiles", {}))
+        profiles[name] = {
+            "layer": layer,
+            "trace_impedance_ohm": trace_impedance_ohm,
+            "propagation_speed_factor": propagation_speed_factor,
+        }
+        path = _save_state_file(_TUNING_PROFILES_FILENAME, state)
+        return f"Tuning profile '{name}' saved to {path}."
+
+    @mcp.tool()
+    @headless_compatible
+    def route_list_tuning_profiles() -> str:
+        """List configured time-domain tuning profiles."""
+        state = _load_state_file(_TUNING_PROFILES_FILENAME, {"profiles": {}})
+        return json.dumps(state.get("profiles", {}), indent=2)
+
+    @mcp.tool()
+    @headless_compatible
+    def route_apply_tuning_profile(net_pattern: str, profile_name: str) -> str:
+        """Assign a named tuning profile to a net or wildcard net group."""
+        profiles_state = _load_state_file(_TUNING_PROFILES_FILENAME, {"profiles": {}})
+        profiles = cast(dict[str, dict[str, object]], profiles_state.get("profiles", {}))
+        profile = profiles.get(profile_name)
+        if profile is None:
+            return f"Tuning profile '{profile_name}' was not found."
+
+        assignments_state = _load_state_file(_TUNING_ASSIGNMENTS_FILENAME, {"assignments": {}})
+        assignments = cast(dict[str, object], assignments_state.setdefault("assignments", {}))
+        assignments[net_pattern] = {
+            "profile_name": profile_name,
+            "layer": profile.get("layer", ""),
+        }
+        path = _save_state_file(_TUNING_ASSIGNMENTS_FILENAME, assignments_state)
+        return (
+            f"Tuning profile '{profile_name}' assigned to '{net_pattern}'.\n"
+            f"Assignments file: {path}"
+        )
+
+    @mcp.tool()
+    @headless_compatible
+    def route_tune_time_domain(
+        net_or_group: str,
+        target_delay_ps: float,
+        tolerance_ps: float = 10.0,
+        layer: str | None = None,
+    ) -> str:
+        """Create a KiCad 10-inspired time-domain tuning rule with a length fallback."""
+        profiles_state = _load_state_file(_TUNING_PROFILES_FILENAME, {"profiles": {}})
+        profiles = cast(dict[str, dict[str, object]], profiles_state.get("profiles", {}))
+        propagation_speed_factor = 0.5
+        if layer:
+            matching = next(
+                (
+                    item for item in profiles.values()
+                    if str(item.get("layer", "")).casefold() == layer.casefold()
+                ),
+                None,
+            )
+            if matching is not None:
+                raw_factor = matching.get("propagation_speed_factor", propagation_speed_factor)
+                if isinstance(raw_factor, (int, float)):
+                    propagation_speed_factor = float(raw_factor)
+
+        target_mm = _delay_to_length_mm(target_delay_ps, propagation_speed_factor)
+        tolerance_mm = _delay_to_length_mm(tolerance_ps, propagation_speed_factor)
+        rule_name = f"Time-domain tune {net_or_group}"
+        condition = _net_pattern_condition(net_or_group)
+        rule_body = "\n".join(
+            [
+                f'(rule {_sexpr_string(rule_name)}',
+                f'  (condition "{condition}")',
+                f"  (constraint length (min {_mm(max(target_mm - tolerance_mm, 0.0))}) "
+                f"(opt {_mm(target_mm)}) (max {_mm(target_mm + tolerance_mm)}))",
+                f"  (constraint delay (min {max(target_delay_ps - tolerance_ps, 0.0):.3f}ps) "
+                f"(opt {target_delay_ps:.3f}ps) (max {target_delay_ps + tolerance_ps:.3f}ps))",
+                ")",
+            ]
+        )
+        try:
+            path = _write_rule(rule_name, rule_body)
+        except (OSError, ValueError) as exc:
+            return f"Time-domain tuning rule update failed: {exc}"
+        return (
+            f"Time-domain tuning rule '{rule_name}' written to {path}.\n"
+            f"Target delay: {target_delay_ps:.3f} ps\n"
+            f"Tolerance: {tolerance_ps:.3f} ps\n"
+            f"Fallback target length: {target_mm:.3f} mm"
         )
 
     @mcp.tool()

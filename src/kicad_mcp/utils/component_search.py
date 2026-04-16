@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.parse
 import urllib.request
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, Protocol, cast
 
@@ -40,6 +42,31 @@ class ComponentSearchClient(Protocol):
     ) -> list[ComponentRecord]: ...
 
     def get_part(self, lcsc_code_or_mpn: str) -> ComponentRecord | None: ...
+
+
+class RateLimiter:
+    """Simple synchronous sliding-window limiter for external component APIs."""
+
+    def __init__(self, max_calls: int, period_seconds: float) -> None:
+        self.max_calls = max_calls
+        self.period_seconds = period_seconds
+        self.calls: deque[float] = deque()
+
+    def acquire(self) -> None:
+        now = time.monotonic()
+        while self.calls and now - self.calls[0] > self.period_seconds:
+            self.calls.popleft()
+        if len(self.calls) >= self.max_calls:
+            wait_seconds = self.period_seconds - (now - self.calls[0])
+            if wait_seconds > 0:
+                time.sleep(wait_seconds)
+            now = time.monotonic()
+            while self.calls and now - self.calls[0] > self.period_seconds:
+                self.calls.popleft()
+        self.calls.append(time.monotonic())
+
+
+_jlcsearch_limiter = RateLimiter(max_calls=5, period_seconds=1.0)
 
 
 def normalize_lcsc_code(value: str | int) -> str:
@@ -95,6 +122,7 @@ class JLCSearchClient:
         only_basic: bool = True,
         limit: int = 20,
     ) -> list[ComponentRecord]:
+        _jlcsearch_limiter.acquire()
         payload = _request_json(
             f"{self.BASE}/api/search",
             {

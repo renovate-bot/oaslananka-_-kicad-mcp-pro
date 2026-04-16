@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-04-16
+
+### Added
+
+- KiCad 10 sidecar-backed design variants with BOM diff/export helpers.
+- Time-domain routing helpers, tuning profiles, graphical DRC rule management, 3D PDF export, and manufacturing import commands.
+- KiCad Studio context resource support, local HTTP bridge documentation, `.well-known` discovery metadata, and Azure DevOps pipeline definition.
+- Unit/property tests and KiCad 10 benchmark fixtures for new routing, variant, design-intent, and studio flows.
+
+### Changed
+
+- Added inferred MCP tool annotations, progress reporting for long-running tools, and client-side sampling integration in the auto-fix loop.
+- Hardened cache invalidation, path handling, release documentation, and manual GitHub fallback guidance around Azure DevOps-first CI/CD.
+- Normalized project documentation and user-facing messages to consistent English wording.
+
+### Fixed
+
+- Removed stale TTL cache behavior across project/schematic/PCB mutations and test runs.
+- Stabilized schematic move behavior to use deterministic file-based updates during automated flows.
+- Aligned quality gates, router profile declarations, lint/type expectations, and release metadata for full-suite validation.
+
 ## [2.0.2] - 2026-04-14
 
 ### Fixed

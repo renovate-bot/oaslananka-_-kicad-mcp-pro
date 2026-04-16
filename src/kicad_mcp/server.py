@@ -1,21 +1,31 @@
 """KiCad MCP Pro server entrypoint."""
+# mypy: disable-error-code=untyped-decorator
 
 from __future__ import annotations
 
 import asyncio
 import os
+import secrets
+from collections.abc import Callable
 
 import structlog
 import typer
+from mcp.server.auth.provider import AccessToken
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
+from mcp.types import Icon, ToolAnnotations
+from starlette.applications import Starlette
+from starlette.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 from typer.models import OptionInfo
 
 from . import __version__
 from .config import KiCadMCPConfig, get_config, reset_config
 from .connection import KiCadConnectionError, get_board
-from .discovery import find_kicad_version
+from .discovery import ensure_studio_project_watcher, find_kicad_version
 from .prompts import workflows
-from .resources import board_state
+from .resources import board_state, studio_context
 from .tools import (
     dfm,
     emc_compliance,
@@ -31,13 +41,17 @@ from .tools import (
     signal_integrity,
     simulation,
     validation,
+    variants,
     version_control,
 )
+from .tools.metadata import infer_tool_annotations
 from .tools.router import available_profiles, categories_for_profile
 from .utils.logging import setup_logging
+from .wellknown import get_wellknown_metadata
 
 logger = structlog.get_logger(__name__)
 app = typer.Typer(help="KiCad MCP Pro server for PCB and schematic workflows.")
+AnyFunction = Callable[..., object]
 
 
 class _SyncServerHandle:
@@ -58,24 +72,103 @@ class _SyncServerHandle:
         return getattr(self._server, name)
 
 
+class _StaticTokenVerifier:
+    """Simple bearer-token verifier for local HTTP bridge deployments."""
+
+    def __init__(self, expected_token: str) -> None:
+        self._expected_token = expected_token
+
+    async def verify_token(self, token: str) -> AccessToken | None:
+        if secrets.compare_digest(token, self._expected_token):
+            return AccessToken(token=token, client_id="kicad-studio", scopes=["mcp"])
+        return None
+
+
+class KiCadFastMCP(FastMCP):
+    """FastMCP extension that auto-infers tool annotations and adds CORS support."""
+
+    def tool(
+        self,
+        name: str | None = None,
+        title: str | None = None,
+        description: str | None = None,
+        annotations: ToolAnnotations | None = None,
+        icons: list[Icon] | None = None,
+        meta: dict[str, object] | None = None,
+        structured_output: bool | None = None,
+    ) -> Callable[[AnyFunction], AnyFunction]:
+        def decorator(func: AnyFunction) -> AnyFunction:
+            merged = infer_tool_annotations(name or func.__name__, explicit=annotations)
+            return super(KiCadFastMCP, self).tool(
+                name=name,
+                title=title,
+                description=description,
+                annotations=merged or None,
+                icons=icons,
+                meta=meta,
+                structured_output=structured_output,
+            )(func)
+
+        return decorator
+
+    def streamable_http_app(self) -> Starlette:
+        app = super().streamable_http_app()
+        origins = get_config().cors_origin_list
+        if origins:
+            app.add_middleware(
+                CORSMiddleware,
+                allow_origins=origins,
+                allow_methods=["GET", "POST", "OPTIONS"],
+                allow_headers=["Authorization", "Content-Type", "MCP-Protocol-Version"],
+            )
+        return app
+
+
+def _server_base_url(cfg: KiCadMCPConfig) -> str:
+    host = cfg.host if cfg.host not in {"0.0.0.0", "::"} else "127.0.0.1"  # noqa: S104
+    return f"http://{host}:{cfg.port}"
+
+
 def build_server(profile: str | None = None) -> FastMCP:
     """Build a FastMCP server instance for the active profile."""
     cfg = get_config()
     selected_profile = profile or cfg.profile
-    server = FastMCP(
+    token_verifier = _StaticTokenVerifier(cfg.auth_token) if cfg.auth_token else None
+    auth = None
+    if cfg.auth_token:
+        base_url = _server_base_url(cfg)
+        auth = AuthSettings(
+            issuer_url=base_url,
+            resource_server_url=base_url,
+            required_scopes=["mcp"],
+        )
+
+    server = KiCadFastMCP(
         name="kicad-mcp-pro",
         instructions=(
             "KiCad MCP Pro Server for project setup, schematic capture, PCB editing, "
             "validation, and manufacturing export. Start with kicad_get_version(), "
             "kicad_set_project(), and project_get_design_spec()."
         ),
+        website_url="https://oaslananka.github.io/kicad-mcp-pro",
         host=cfg.host,
         port=cfg.port,
         streamable_http_path=cfg.mount_path,
         mount_path=cfg.mount_path,
         log_level=cfg.log_level,
         json_response=True,
+        stateless_http=True,
+        auth=auth,
+        token_verifier=token_verifier,
     )
+
+    @server.custom_route("/.well-known/mcp-server", methods=["GET"], include_in_schema=False)
+    async def _well_known_mcp(_request: Request) -> JSONResponse:
+        return JSONResponse(get_wellknown_metadata())
+
+    @server.custom_route("/well-known/mcp-server", methods=["GET"], include_in_schema=False)
+    async def _well_known_mcp_compat(_request: Request) -> JSONResponse:
+        return JSONResponse(get_wellknown_metadata())
 
     router.register(server)
     project.register(server)
@@ -85,6 +178,7 @@ def build_server(profile: str | None = None) -> FastMCP:
         pcb.register(server)
     if "schematic" in enabled:
         schematic.register(server)
+        variants.register(server)
     if "library" in enabled:
         library.register(server)
     if "export" in enabled or "release_export" in enabled:
@@ -109,7 +203,12 @@ def build_server(profile: str | None = None) -> FastMCP:
         manufacturing.register(server)
 
     board_state.register(server)
+    studio_context.register(server)
     workflows.register(server)
+
+    if cfg.studio_watch_dir is not None:
+        ensure_studio_project_watcher(cfg.studio_watch_dir)
+
     return server
 
 

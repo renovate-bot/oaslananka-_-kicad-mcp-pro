@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 from pathlib import Path
+from typing import Any
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 
 from ..config import get_config
 from ..models.simulation import (
@@ -21,6 +22,20 @@ from .export import _ensure_output_dir, _get_sch_file, _run_cli_variants
 from .metadata import headless_compatible
 
 DIRECTIVE_FILENAME = ".kicad_mcp_spice_directives.cir"
+
+
+async def _report_progress(
+    ctx: Context[Any, Any, Any] | None,
+    progress: float,
+    total: float,
+    message: str,
+) -> None:
+    if ctx is None:
+        return
+    try:
+        await ctx.report_progress(progress, total, message)
+    except ValueError:
+        return
 
 
 def _simulation_output_dir() -> Path:
@@ -73,7 +88,7 @@ def _resolve_netlist_path(raw_path: str) -> Path:
     cfg = get_config()
     if not raw_path:
         return _export_spice_netlist_file()
-    candidate = cfg.resolve_within_project(raw_path, allow_absolute=True)
+    candidate = cfg.resolve_within_project(raw_path, allow_absolute=False)
     if not candidate.exists():
         raise FileNotFoundError(f"SPICE netlist file was not found: {candidate}")
     return candidate
@@ -284,11 +299,12 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @headless_compatible
-    def sim_run_transient(
+    async def sim_run_transient(
         stop_time_s: float,
         step_time_s: float,
         probe_nets: list[str] | None = None,
         netlist_path: str = "",
+        ctx: Context[Any, Any, Any] | None = None,
     ) -> str:
         """Run a transient time-domain simulation."""
         payload = TransientAnalysisInput(
@@ -297,7 +313,9 @@ def register(mcp: FastMCP) -> None:
             probe_nets=probe_nets or [],
             netlist_path=netlist_path,
         )
+        await _report_progress(ctx, 5, 100, "Preparing SPICE transient netlist...")
         prepared = _prepare_run_netlist(payload.netlist_path)
+        await _report_progress(ctx, 35, 100, "Running ngspice transient analysis...")
         result = _runner().run_transient_analysis(
             prepared,
             _simulation_output_dir(),
@@ -305,6 +323,7 @@ def register(mcp: FastMCP) -> None:
             stop_time_s=payload.stop_time_s,
             step_time_s=payload.step_time_s,
         )
+        await _report_progress(ctx, 100, 100, "Transient analysis complete.")
         return _format_series_result("Transient analysis", result)
 
     @mcp.tool()

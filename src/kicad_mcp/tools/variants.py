@@ -1,0 +1,259 @@
+"""Design-variant helpers backed by a project-local sidecar file."""
+
+from __future__ import annotations
+
+import csv
+import json
+from io import StringIO
+from pathlib import Path
+from typing import Any, cast
+
+from mcp.server.fastmcp import FastMCP
+
+from ..config import get_config
+from .metadata import headless_compatible
+from .schematic import parse_schematic_file
+
+_VARIANTS_DIRNAME = ".kicad-mcp"
+_VARIANTS_FILENAME = "variants.json"
+
+
+def _variants_path() -> Path:
+    cfg = get_config()
+    if cfg.project_dir is None:
+        raise ValueError(
+            "No active project directory is configured.\n"
+            "Resolution: call kicad_set_project('/absolute/path/to/project') first.\n"
+            "Help: https://oaslananka.github.io/kicad-mcp-pro/installation/"
+        )
+    target = cfg.project_dir / _VARIANTS_DIRNAME
+    target.mkdir(parents=True, exist_ok=True)
+    return target / _VARIANTS_FILENAME
+
+
+def _base_components() -> dict[str, dict[str, Any]]:
+    cfg = get_config()
+    if cfg.sch_file is None or not cfg.sch_file.exists():
+        raise ValueError("No schematic file is configured. Call kicad_set_project() first.")
+    data = parse_schematic_file(cfg.sch_file)
+    components: dict[str, dict[str, Any]] = {}
+    for symbol in data.get("symbols", []):
+        reference = str(symbol.get("reference", "")).strip()
+        if not reference or reference.startswith("#PWR"):
+            continue
+        components[reference] = {
+            "reference": reference,
+            "value": str(symbol.get("value", "")),
+            "footprint": str(symbol.get("footprint", "")),
+            "enabled": True,
+        }
+    return components
+
+
+def _default_state() -> dict[str, Any]:
+    return {
+        "default_variant": "default",
+        "active_variant": "default",
+        "variants": {
+            "default": {
+                "overrides": {},
+            }
+        },
+    }
+
+
+def _load_state() -> dict[str, Any]:
+    path = _variants_path()
+    if not path.exists():
+        state = _default_state()
+        path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+        return state
+    return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+
+
+def _save_state(state: dict[str, Any]) -> Path:
+    path = _variants_path()
+    path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    return path
+
+
+def _variant_names(state: dict[str, Any]) -> list[str]:
+    return sorted(str(name) for name in state.get("variants", {}).keys())
+
+
+def _ensure_variant(state: dict[str, Any], name: str) -> dict[str, Any]:
+    variants = cast(dict[str, dict[str, Any]], state.setdefault("variants", {}))
+    if name not in variants:
+        raise ValueError(
+            f"Variant '{name}' was not found. "
+            f"Existing variants: {', '.join(_variant_names(state))}"
+        )
+    return variants[name]
+
+
+def _render_variant_components(state: dict[str, Any], name: str) -> dict[str, dict[str, Any]]:
+    base = _base_components()
+    variant = _ensure_variant(state, name)
+    overrides = variant.get("overrides", {})
+    rendered = {reference: dict(component) for reference, component in base.items()}
+    for reference, override in overrides.items():
+        if reference not in rendered:
+            rendered[reference] = {
+                "reference": reference,
+                "value": "",
+                "footprint": "",
+                "enabled": True,
+            }
+        rendered[reference].update(override)
+    return rendered
+
+
+def _bom_rows(state: dict[str, Any], name: str) -> list[dict[str, Any]]:
+    rows = []
+    for reference, component in sorted(_render_variant_components(state, name).items()):
+        if not component.get("enabled", True):
+            continue
+        rows.append(
+            {
+                "reference": reference,
+                "value": str(component.get("value", "")),
+                "footprint": str(component.get("footprint", "")),
+            }
+        )
+    return rows
+
+
+def _write_bom(path: Path, rows: list[dict[str, Any]], format_name: str) -> Path:
+    if format_name == "json":
+        path.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+        return path
+
+    buffer = StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=["reference", "value", "footprint"])
+    writer.writeheader()
+    writer.writerows(rows)
+    path.write_text(buffer.getvalue(), encoding="utf-8")
+    return path
+
+
+def register(mcp: FastMCP) -> None:
+    """Register design-variant tools."""
+
+    @mcp.tool()
+    @headless_compatible
+    def variant_list() -> str:
+        """List available design variants and basic component counts."""
+        state = _load_state()
+        payload = {
+            "default_variant": state.get("default_variant", "default"),
+            "active_variant": state.get("active_variant", "default"),
+            "variants": [
+                {
+                    "name": name,
+                    "component_count": len(_bom_rows(state, name)),
+                }
+                for name in _variant_names(state)
+            ],
+        }
+        return json.dumps(payload, indent=2)
+
+    @mcp.tool()
+    @headless_compatible
+    def variant_create(name: str, base_variant: str | None = None) -> str:
+        """Create a new design variant, optionally cloning an existing variant."""
+        if not name.strip():
+            raise ValueError("Variant name must not be empty.")
+        state = _load_state()
+        variants = state.setdefault("variants", {})
+        if name in variants:
+            raise ValueError(f"Variant '{name}' already exists.")
+        source = (
+            dict(_ensure_variant(state, base_variant))
+            if base_variant
+            else {"overrides": {}}
+        )
+        variants[name] = {
+            "overrides": dict(source.get("overrides", {})),
+        }
+        path = _save_state(state)
+        return f"Created design variant '{name}' in {path}."
+
+    @mcp.tool()
+    @headless_compatible
+    def variant_set_active(name: str) -> str:
+        """Set the active design variant for the current project."""
+        state = _load_state()
+        _ensure_variant(state, name)
+        state["active_variant"] = name
+        path = _save_state(state)
+        return f"Active variant set to '{name}' in {path}."
+
+    @mcp.tool()
+    @headless_compatible
+    def variant_set_component_override(
+        variant: str,
+        reference: str,
+        enabled: bool,
+        value: str | None = None,
+        footprint: str | None = None,
+    ) -> str:
+        """Override component population, value, or footprint in a variant."""
+        state = _load_state()
+        _ensure_variant(state, variant)
+        if reference not in _base_components():
+            raise ValueError(f"Reference '{reference}' was not found in the active schematic.")
+        overrides = state["variants"][variant].setdefault("overrides", {})
+        payload: dict[str, Any] = {"enabled": enabled}
+        if value is not None:
+            payload["value"] = value
+        if footprint is not None:
+            payload["footprint"] = footprint
+        overrides[reference] = payload
+        _save_state(state)
+        return f"Updated variant override for '{reference}' in variant '{variant}'."
+
+    @mcp.tool()
+    @headless_compatible
+    def variant_diff_bom(variant_a: str, variant_b: str) -> str:
+        """Diff the effective BOM between two design variants."""
+        state = _load_state()
+        bom_a = {item["reference"]: item for item in _bom_rows(state, variant_a)}
+        bom_b = {item["reference"]: item for item in _bom_rows(state, variant_b)}
+        added = [bom_b[ref] for ref in sorted(set(bom_b) - set(bom_a))]
+        removed = [bom_a[ref] for ref in sorted(set(bom_a) - set(bom_b))]
+        changed = []
+        for reference in sorted(set(bom_a) & set(bom_b)):
+            if bom_a[reference] != bom_b[reference]:
+                changed.append(
+                    {
+                        "reference": reference,
+                        "from": bom_a[reference],
+                        "to": bom_b[reference],
+                    }
+                )
+        return json.dumps(
+            {
+                "variant_a": variant_a,
+                "variant_b": variant_b,
+                "added": added,
+                "removed": removed,
+                "changed": changed,
+            },
+            indent=2,
+        )
+
+    @mcp.tool()
+    @headless_compatible
+    def variant_export_bom(variant: str, format: str = "csv") -> str:
+        """Export a variant-specific BOM into the project output directory."""
+        fmt = format.casefold()
+        if fmt not in {"csv", "json"}:
+            raise ValueError("Only csv and json BOM export formats are supported.")
+        state = _load_state()
+        _ensure_variant(state, variant)
+        cfg = get_config()
+        out_dir = cfg.ensure_output_dir("variants")
+        out_file = out_dir / f"{variant}_bom.{fmt}"
+        rows = _bom_rows(state, variant)
+        _write_bom(out_file, rows, fmt)
+        return f"Variant BOM exported to {out_file} ({len(rows)} populated component(s))."

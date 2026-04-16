@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import structlog
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from pydantic import BaseModel, Field
 
 from .. import __version__
@@ -26,7 +26,8 @@ from ..models.intent import (
     PowerRailSpec,
     ThermalEnvelope,
 )
-from .fixers import fixers_for_gate
+from ..utils.cache import clear_ttl_cache, ttl_cache
+from .fixers import fixers_for_gate, sampling_prompt_for_gate
 from .metadata import headless_compatible
 from .router import TOOL_CATEGORIES, available_profiles
 
@@ -170,6 +171,7 @@ class AutoFixAction(BaseModel):
     auto_fix_description: str = ""
     agent_tool: str = ""
     agent_description: str = ""
+    sampling_guidance: str = ""
 
 
 class AutoFixLoopPayload(BaseModel):
@@ -832,6 +834,7 @@ def register(mcp: FastMCP) -> None:
             sch_file=selected_sch,
             output_dir=selected_output,
         )
+        clear_ttl_cache()
         reset_connection()
         return _render_project_info()
 
@@ -935,6 +938,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @headless_compatible
+    @ttl_cache(ttl_seconds=2)
     def project_get_design_intent() -> str:
         """Show the persisted project design intent used by placement and release gates."""
         intent = load_design_intent()
@@ -1010,8 +1014,9 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @headless_compatible
-    def project_auto_fix_loop(
+    async def project_auto_fix_loop(
         max_iterations: int = 5,
+        ctx: Context[Any, Any, Any] | None = None,
     ) -> AutoFixLoopPayload:
         """Run the project quality gate and automatically apply server-side fixes.
 
@@ -1054,6 +1059,45 @@ def register(mcp: FastMCP) -> None:
             except Exception:
                 return None
 
+        async def _sample_guidance(outcome: GateOutcome) -> str:
+            if ctx is None:
+                return ""
+            sample = getattr(ctx, "sample", None)
+            if not callable(sample):
+                return ""
+            try:
+                result = await sample(
+                    messages=[
+                        {
+                            "role": "user",
+                            "content": sampling_prompt_for_gate(
+                                outcome.name,
+                                outcome.summary,
+                                outcome.details,
+                            ),
+                        }
+                    ],
+                    max_tokens=256,
+                    system_prompt="You are a KiCad expert. Reply briefly and directly.",
+                )
+            except Exception:
+                return ""
+
+            content = getattr(result, "content", None)
+            if isinstance(content, list) and content:
+                return str(getattr(content[0], "text", "") or "")
+            return ""
+
+        async def _report_progress(progress: float, total: float, message: str) -> None:
+            if ctx is None:
+                return
+            try:
+                await ctx.report_progress(progress, total, message)
+            except ValueError:
+                return
+
+        await _report_progress(0, 100, "Project quality gate is being evaluated...")
+
         outcomes = _evaluate_project_gate()
         iterations_used += 1
 
@@ -1087,6 +1131,12 @@ def register(mcp: FastMCP) -> None:
                 break  # Nothing left for the server to do — hand off to agent
 
             # Re-evaluate after applying fixes
+            progress = min(90, 10 + (iterations_used * 15))
+            await _report_progress(
+                progress,
+                100,
+                f"Re-evaluating quality gates after iteration {iterations_used}...",
+            )
             outcomes = _evaluate_project_gate()
             iterations_used += 1
 
@@ -1103,6 +1153,7 @@ def register(mcp: FastMCP) -> None:
             fixers = fixers_for_gate(outcome.name)
             auto_fixer = next((f for f in fixers if f.auto_applicable), None)
             agent_fixer = next((f for f in fixers if not f.auto_applicable), None)
+            sampling_guidance = await _sample_guidance(outcome)
             actions.append(
                 AutoFixAction(
                     gate=outcome.name,
@@ -1119,6 +1170,7 @@ def register(mcp: FastMCP) -> None:
                         (agent_fixer.description if agent_fixer is not None else "")
                         or (auto_fixer.description if auto_fixer is not None else "")
                     ),
+                    sampling_guidance=sampling_guidance,
                 )
             )
 
@@ -1143,6 +1195,8 @@ def register(mcp: FastMCP) -> None:
                     f"  [AGENT] {action.gate}: call {action.agent_tool}() "
                     f"— {action.agent_description}"
                 )
+                if action.sampling_guidance:
+                    lines.append(f"    Sampling guidance: {action.sampling_guidance}")
             lines.append(
                 "After applying the recommended tool, call project_auto_fix_loop() again."
             )
@@ -1158,6 +1212,8 @@ def register(mcp: FastMCP) -> None:
                 for o in outcomes
             ]
         )
+
+        await _report_progress(100, 100, "Project auto-fix loop completed.")
 
         return AutoFixLoopPayload(
             text="\n".join(lines),

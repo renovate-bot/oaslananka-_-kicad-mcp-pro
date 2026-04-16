@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 import re
 import uuid
@@ -38,6 +39,7 @@ from ..models.schematic import (
     TraceNetInput,
     UpdatePropertiesInput,
 )
+from ..utils.cache import clear_ttl_cache, ttl_cache
 from ..utils.sexpr import (
     _escape_sexpr_string,
     _extract_block,
@@ -93,6 +95,7 @@ POWER_NET_NAMES = {
     "-12V",
 }
 logger = structlog.get_logger(__name__)
+_SCHEMATIC_STATE_DIRNAME = ".kicad-mcp"
 
 SchematicCapabilityStatus = Literal["native", "wrapper_needed"]
 
@@ -2206,8 +2209,10 @@ def _point_on_segment(point: tuple[float, float], wire: dict[str, float]) -> boo
 
 
 def _split_lib_id(lib_id: str) -> tuple[str, str]:
-    library, _, symbol_name = lib_id.partition(":")
-    return library, symbol_name or lib_id
+    if ":" not in lib_id:
+        raise ValueError(f"Library identifier '{lib_id}' is invalid.")
+    library, symbol_name = lib_id.split(":", 1)
+    return library, symbol_name
 
 
 def _build_connectivity_groups(sch_file: Path) -> list[dict[str, Any]]:
@@ -2549,6 +2554,52 @@ def _find_placed_symbol_block(
     return matches[0] if matches else None
 
 
+def _schematic_state_path(filename: str) -> Path:
+    cfg = get_config()
+    if cfg.project_dir is None:
+        raise ValueError("No active project is configured.")
+    target = cfg.project_dir / _SCHEMATIC_STATE_DIRNAME
+    target.mkdir(parents=True, exist_ok=True)
+    return target / filename
+
+
+def _load_schematic_state(filename: str, default: dict[str, Any]) -> dict[str, Any]:
+    path = _schematic_state_path(filename)
+    if not path.exists():
+        path.write_text(json.dumps(default, indent=2), encoding="utf-8")
+        return dict(default)
+    return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
+
+
+def _save_schematic_state(filename: str, payload: dict[str, Any]) -> Path:
+    path = _schematic_state_path(filename)
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    return path
+
+
+def _symbol_by_reference(reference: str) -> dict[str, Any]:
+    symbols = parse_schematic_file(_get_schematic_file())["symbols"]
+    match = next(
+        (symbol for symbol in symbols if str(symbol.get("reference", "")) == reference),
+        None,
+    )
+    if match is None:
+        raise ValueError(f"Reference '{reference}' was not found in the schematic.")
+    return cast(dict[str, Any], match)
+
+
+def _next_reference(prefix: str) -> str:
+    symbols = parse_schematic_file(_get_schematic_file())["symbols"]
+    highest = 0
+    pattern = re.compile(rf"^{re.escape(prefix)}(\d+)$")
+    for symbol in symbols:
+        reference = str(symbol.get("reference", ""))
+        match = pattern.match(reference)
+        if match is not None:
+            highest = max(highest, int(match.group(1)))
+    return f"{prefix}{highest + 1}"
+
+
 def _transactional_write_to_schematic(mutator: Callable[[str], str]) -> str:
     """Read, mutate, validate, and atomically rewrite the active schematic."""
     sch_file = _get_schematic_file()
@@ -2559,6 +2610,7 @@ def _transactional_write_to_schematic(mutator: Callable[[str], str]) -> str:
         handle.write(updated)
         temp_path = Path(handle.name)
     temp_path.replace(sch_file)
+    clear_ttl_cache()
     return str(sch_file)
 
 
@@ -2724,6 +2776,7 @@ def register(mcp: FastMCP) -> None:
     """Register schematic tools."""
 
     @mcp.tool()
+    @ttl_cache(ttl_seconds=5)
     def sch_get_symbols() -> str:
         """List all schematic symbols."""
         data = parse_schematic_file(_get_schematic_file())
@@ -2833,7 +2886,7 @@ def register(mcp: FastMCP) -> None:
         project_name = cfg.project_file.stem if cfg.project_file is not None else "KiCadMCP"
         lib_id = f"{payload.library}:{payload.symbol_name}"
 
-        # Çakışma uyarısı — mevcut sembollerle çarpışıyor mu?
+        # Collision warning: does the insertion point overlap existing symbols?
         all_existing = sch_data["symbols"] + sch_data["power_symbols"]
         overlap_warning = _point_near_existing(symbol_x, symbol_y, all_existing)
 
@@ -3029,6 +3082,122 @@ def register(mcp: FastMCP) -> None:
         return f"{result}\n{snap_note}" if snap_note else result
 
     @mcp.tool()
+    @headless_compatible
+    def sch_list_swappable_pins(component_ref: str) -> str:
+        """List candidate pins and units that can participate in a swap workflow."""
+        symbol = _symbol_by_reference(component_ref)
+        library, symbol_name = _split_lib_id(str(symbol.get("lib_id", "")))
+        pins = sorted(
+            {
+                alias
+                for alias in get_pin_alias_positions(
+                    library,
+                    symbol_name,
+                    float(symbol.get("x", 0.0)),
+                    float(symbol.get("y", 0.0)),
+                    int(symbol.get("rotation", 0)),
+                    int(symbol.get("unit", 1)),
+                )
+                if alias and alias.isdigit()
+            },
+            key=lambda item: int(item),
+        )
+
+        units = []
+        sym_file = _get_symbol_library_dir() / f"{library}.kicad_sym"
+        if sym_file.exists():
+            content = sym_file.read_text(encoding="utf-8", errors="ignore")
+            symbol_blocks = _collect_symbol_blocks(content, symbol_name)
+            units = sorted(_available_units_from_blocks(symbol_blocks))
+
+        return json.dumps(
+            {
+                "reference": component_ref,
+                "pins": pins,
+                "gates": units,
+                "note": "Recorded swaps are stored as back-annotation intents in .kicad-mcp.",
+            },
+            indent=2,
+        )
+
+    @mcp.tool()
+    @headless_compatible
+    def sch_swap_pins(component_ref: str, pin_a: str, pin_b: str) -> str:
+        """Record a pin-swap back-annotation intent for a component."""
+        swappable = json.loads(sch_list_swappable_pins(component_ref))
+        pins = cast(list[str], swappable.get("pins", []))
+        if pin_a not in pins or pin_b not in pins:
+            return (
+                f"Pins '{pin_a}' and/or '{pin_b}' are not swappable candidates "
+                f"for '{component_ref}'."
+            )
+
+        state = _load_schematic_state("pin_swaps.json", {"swaps": []})
+        swaps = cast(list[dict[str, str]], state.setdefault("swaps", []))
+        swaps.append(
+            {
+                "reference": component_ref,
+                "pin_a": pin_a,
+                "pin_b": pin_b,
+            }
+        )
+        path = _save_schematic_state("pin_swaps.json", state)
+        return f"Recorded pin swap {component_ref}:{pin_a}<->{pin_b} in {path}."
+
+    @mcp.tool()
+    @headless_compatible
+    def sch_swap_gates(component_ref: str, gate_a: int, gate_b: int) -> str:
+        """Record a gate-swap back-annotation intent for a multi-unit component."""
+        swappable = json.loads(sch_list_swappable_pins(component_ref))
+        gates = cast(list[int], swappable.get("gates", []))
+        if gate_a not in gates or gate_b not in gates:
+            return f"Gates '{gate_a}' and/or '{gate_b}' are not available on '{component_ref}'."
+
+        state = _load_schematic_state("gate_swaps.json", {"swaps": []})
+        swaps = cast(list[dict[str, object]], state.setdefault("swaps", []))
+        swaps.append(
+            {
+                "reference": component_ref,
+                "gate_a": gate_a,
+                "gate_b": gate_b,
+            }
+        )
+        path = _save_schematic_state("gate_swaps.json", state)
+        return f"Recorded gate swap {component_ref}:{gate_a}<->{gate_b} in {path}."
+
+    @mcp.tool()
+    def sch_add_jumper(
+        x_mm: float,
+        y_mm: float,
+        pins: int = 2,
+        open_by_default: bool = True,
+        snap_to_grid: bool = True,
+    ) -> str:
+        """Add a jumper symbol to the schematic."""
+        if pins < 2 or pins > 3:
+            raise ValueError("Only 2-pin and 3-pin jumpers are supported.")
+        target_x, target_y = _snap_point(x_mm, y_mm, snap_to_grid)
+        snap_note = _snap_notice((x_mm, y_mm), (target_x, target_y))
+        reference = _next_reference("JP")
+        value = f"Jumper_{pins}_{'Open' if open_by_default else 'Closed'}"
+        lib_id = f"Jumper:{value}"
+        transactional_write(
+            lambda current: _append_before_sheet_instances(
+                current,
+                place_symbol_block(
+                    lib_id=lib_id,
+                    x=target_x,
+                    y=target_y,
+                    reference=reference,
+                    value=value,
+                ),
+            )
+        )
+        result = _reload_schematic()
+        detail = f"Added jumper '{reference}' ({value}) at ({target_x:.2f}, {target_y:.2f}) mm."
+        return f"{detail}\n{result}\n{snap_note}" if snap_note else f"{detail}\n{result}"
+
+    @mcp.tool()
     def sch_update_properties(reference: str, field: str, value: str) -> str:
         """Update a property on a placed symbol."""
         result = update_symbol_property(reference, field, value)
@@ -3050,40 +3219,22 @@ def register(mcp: FastMCP) -> None:
         )
         target_x, target_y = _snap_point(payload.x_mm, payload.y_mm, payload.snap_to_grid)
         snap_note = _snap_notice((payload.x_mm, payload.y_mm), (target_x, target_y))
-        sch_file = _get_schematic_file()
+        def mutator(current: str) -> str:
+            match = _find_placed_symbol_block(current, payload.reference)
+            if match is None:
+                raise ValueError(f"Reference '{payload.reference}' was not found in the schematic.")
+            block, start, end, parsed = match
+            shifted = _shift_symbol_block(
+                block,
+                dx_mm=target_x - float(parsed["x"]),
+                dy_mm=target_y - float(parsed["y"]),
+            )
+            return current[:start] + shifted + current[end:]
 
         try:
-            schematic = _load_kicad_schematic(sch_file)
-            component = schematic.components.get(payload.reference)
-            if component is None:
-                raise ValueError(f"Reference '{payload.reference}' was not found in the schematic.")
-            component.move(target_x, target_y)
-            schematic.save(sch_file, preserve_format=True)
-        except Exception as exc:
-            logger.debug(
-                "schematic_move_symbol_fallback",
-                reference=payload.reference,
-                error=str(exc),
-            )
-
-            def mutator(current: str) -> str:
-                match = _find_placed_symbol_block(current, payload.reference)
-                if match is None:
-                    raise ValueError(
-                        f"Reference '{payload.reference}' was not found in the schematic."
-                    )
-                block, start, end, parsed = match
-                shifted = _shift_symbol_block(
-                    block,
-                    dx_mm=target_x - float(parsed["x"]),
-                    dy_mm=target_y - float(parsed["y"]),
-                )
-                return current[:start] + shifted + current[end:]
-
-            try:
-                transactional_write(mutator)
-            except ValueError as fallback_exc:
-                return str(fallback_exc)
+            transactional_write(mutator)
+        except ValueError as exc:
+            return str(exc)
 
         result = _reload_schematic()
         lines = [

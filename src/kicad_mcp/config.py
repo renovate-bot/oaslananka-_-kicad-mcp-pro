@@ -56,6 +56,9 @@ class KiCadMCPConfig(BaseSettings):
     host: str = Field(default="127.0.0.1")
     port: int = Field(default=3334)
     mount_path: str = Field(default="/mcp")
+    cors_origins: str = Field(default="")
+    auth_token: str | None = Field(default=None)
+    studio_watch_dir: Path | None = Field(default=None)
     profile: Literal[
         "full",
         "minimal",
@@ -126,6 +129,13 @@ class KiCadMCPConfig(BaseSettings):
     @classmethod
     def _normalize_mount_path(cls, value: str) -> str:
         return value if value.startswith("/") else f"/{value}"
+
+    @field_validator("transport", mode="before")
+    @classmethod
+    def _normalize_transport(cls, value: object) -> object:
+        if isinstance(value, str) and value.casefold() == "http":
+            return "streamable-http"
+        return value
 
     @field_validator("kicad_cli")
     @classmethod
@@ -224,6 +234,11 @@ class KiCadMCPConfig(BaseSettings):
         self.sch_file = sch_file.resolve() if sch_file else None
         self.output_dir = output_dir.resolve() if output_dir else self.project_dir / "output"
         self._refresh_paths()
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """Return configured CORS origins as a normalized list."""
+        return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
 
 
 _config_lock = threading.Lock()
