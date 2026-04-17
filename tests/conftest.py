@@ -70,10 +70,12 @@ def reset_globals(monkeypatch: pytest.MonkeyPatch) -> None:
     """Reset cached config and KiCad connection state before every test."""
     from kicad_mcp.config import reset_config
     from kicad_mcp.connection import reset_connection
+    from kicad_mcp.discovery import stop_studio_project_watcher
     from kicad_mcp.utils.cache import clear_ttl_cache
 
     reset_config()
     reset_connection()
+    stop_studio_project_watcher()
     clear_ttl_cache()
     monkeypatch.delenv("KICAD_MCP_PROJECT_DIR", raising=False)
     monkeypatch.delenv("KICAD_MCP_PROJECT_FILE", raising=False)
@@ -84,6 +86,11 @@ def reset_globals(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("KICAD_MCP_FOOTPRINT_LIBRARY_DIR", raising=False)
     monkeypatch.delenv("KICAD_MCP_KICAD_CLI", raising=False)
     monkeypatch.delenv("KICAD_MCP_TRANSPORT", raising=False)
+    monkeypatch.delenv("KICAD_MCP_LEGACY_SSE", raising=False)
+    monkeypatch.delenv("KICAD_MCP_STATEFUL_HTTP", raising=False)
+    monkeypatch.delenv("KICAD_MCP_ENABLE_METRICS", raising=False)
+    monkeypatch.delenv("KICAD_MCP_CORS_ORIGINS", raising=False)
+    monkeypatch.delenv("KICAD_MCP_AUTH_TOKEN", raising=False)
     monkeypatch.delenv("KICAD_MCP_HOST", raising=False)
     monkeypatch.delenv("KICAD_MCP_PORT", raising=False)
     monkeypatch.delenv("KICAD_MCP_LOG_LEVEL", raising=False)

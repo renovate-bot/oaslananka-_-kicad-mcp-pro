@@ -96,6 +96,9 @@ def test_version_control_helper_functions(monkeypatch, tmp_path: Path) -> None:
         version_control._stash_project_state(project_dir, ".", "abc123")
         == "Saved working directory"
     )
+    assert version_control._has_session_scraps(["?? demo.kicad_pro.lock"]) == "demo.kicad_pro.lock"
+    assert version_control._has_session_scraps(["?? notes/~$demo.xlsx"]) == "notes/~$demo.xlsx"
+    assert version_control._has_session_scraps([" M demo.kicad_pcb"]) is None
 
 
 def test_commit_blocked_by_drc_branches(monkeypatch, tmp_path: Path) -> None:
@@ -149,6 +152,7 @@ def test_register_version_control_tools(monkeypatch, tmp_path: Path) -> None:
     vcs_list_checkpoints = mcp.tools["vcs_list_checkpoints"]
     vcs_restore_checkpoint = mcp.tools["vcs_restore_checkpoint"]
     vcs_diff_with_checkpoint = mcp.tools["vcs_diff_with_checkpoint"]
+    vcs_tag_release = mcp.tools["vcs_tag_release"]
 
     monkeypatch.setattr(version_control, "_resolve_project_dir", lambda path=None: project_dir)
     monkeypatch.setattr(version_control, "_git_repo_root", lambda _path: None)
@@ -231,6 +235,14 @@ def test_register_version_control_tools(monkeypatch, tmp_path: Path) -> None:
 
     monkeypatch.setattr(
         version_control,
+        "_project_status",
+        lambda *_args: ["?? project/demo.kicad_pro.lock"],
+    )
+    with pytest.raises(ValueError, match="session scrap files"):
+        vcs_commit_checkpoint("checkpoint", auto_drc=False)
+
+    monkeypatch.setattr(
+        version_control,
         "_run_git",
         lambda _repo, *args, **kwargs: subprocess.CompletedProcess(
             ["git"], 0, stdout="", stderr=""
@@ -256,6 +268,11 @@ def test_register_version_control_tools(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(version_control, "_stash_project_state", lambda *_args: "stash@{0}")
     monkeypatch.setattr(
         version_control,
+        "_create_restore_branch",
+        lambda *_args: "mcp-restore-deadbee",
+    )
+    monkeypatch.setattr(
+        version_control,
         "_run_git",
         lambda _repo, *args, **kwargs: subprocess.CompletedProcess(
             ["git"], 0, stdout="", stderr=""
@@ -263,6 +280,7 @@ def test_register_version_control_tools(monkeypatch, tmp_path: Path) -> None:
     )
     restored = vcs_restore_checkpoint("deadbeef")
     assert "Previous uncommitted state was backed up: stash@{0}" in restored
+    assert "Recovery branch: mcp-restore-deadbee" in restored
 
     monkeypatch.setattr(version_control, "_stash_project_state", lambda *_args: None)
     assert "already clean" in vcs_restore_checkpoint("deadbeef")
@@ -296,3 +314,46 @@ def test_register_version_control_tools(monkeypatch, tmp_path: Path) -> None:
     assert "Diff versus checkpoint deadbeef:" in diff_text
     assert "M\tproject/demo.kicad_pcb" in diff_text
     assert "1 file changed" in diff_text
+
+    with pytest.raises(ValueError, match="Release tag must not be empty"):
+        vcs_tag_release(" ", "release")
+    with pytest.raises(ValueError, match="message must not be empty"):
+        vcs_tag_release("v2.4.0", " ")
+
+    monkeypatch.setattr(version_control, "_combined_status", lambda _outcomes: "FAIL")
+    monkeypatch.setattr(version_control, "_evaluate_project_gate", lambda: [])
+    with pytest.raises(ValueError, match="project_quality_gate\\(\\) returns PASS"):
+        vcs_tag_release("v2.4.0", "release")
+
+    monkeypatch.setattr(version_control, "_combined_status", lambda _outcomes: "PASS")
+
+    def tag_exists(
+        _repo: Path,
+        *args: str,
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = kwargs
+        if args[:2] == ("tag", "--list"):
+            return subprocess.CompletedProcess(["git"], 0, stdout="v2.4.0\n", stderr="")
+        return subprocess.CompletedProcess(["git"], 0, stdout="", stderr="")
+
+    monkeypatch.setattr(version_control, "_run_git", tag_exists)
+    with pytest.raises(ValueError, match="already exists"):
+        vcs_tag_release("v2.4.0", "release")
+
+    def create_tag(
+        _repo: Path,
+        *args: str,
+        **kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = kwargs
+        if args[:2] == ("tag", "--list"):
+            return subprocess.CompletedProcess(["git"], 0, stdout="", stderr="")
+        if args == ("rev-parse", "HEAD"):
+            return subprocess.CompletedProcess(["git"], 0, stdout="deadbeef\n", stderr="")
+        return subprocess.CompletedProcess(["git"], 0, stdout="", stderr="")
+
+    monkeypatch.setattr(version_control, "_run_git", create_tag)
+    tag_text = vcs_tag_release("v2.4.0", "release")
+    assert "Release tag created." in tag_text
+    assert "deadbeef" in tag_text

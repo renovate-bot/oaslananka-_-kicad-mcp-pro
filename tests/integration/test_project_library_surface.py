@@ -117,6 +117,7 @@ async def test_project_resources_prompts_and_library_surface(
     assert "dfm_run_manufacturer_check" in dfm_tools
     assert "vcs_init_git [HEADLESS]" in vcs_tools
     assert "vcs_restore_checkpoint" in vcs_tools
+    assert "vcs_tag_release [HEADLESS]" in vcs_tools
     assert "export_manufacturing_package [HEADLESS]" in release_export_tools
     assert "get_board_stats [HEADLESS]" in release_export_tools
 
@@ -128,13 +129,20 @@ async def test_project_resources_prompts_and_library_surface(
     assert "Created project 'fresh_project'" in created
 
     project_resource = await read_resource_text(server, "kicad://project/info")
+    project_manifest_resource = await read_resource_text(server, "kicad://project/manifest")
     project_spec_resource = await read_resource_text(server, "kicad://project/spec")
+    project_design_intent_resource = await read_resource_text(
+        server,
+        "kicad://project/design_intent",
+    )
     project_next_action_resource = await read_resource_text(server, "kicad://project/next_action")
     board_summary = await read_resource_text(server, "kicad://board/summary")
     board_netlist = await read_resource_text(server, "kicad://board/netlist")
     quality_gate_resource = await read_resource_text(server, "kicad://project/quality_gate")
+    gate_history_resource = await read_resource_text(server, "kicad://project/gate_history")
     fix_queue_resource = await read_resource_text(server, "kicad://project/fix_queue")
     connectivity_resource = await read_resource_text(server, "kicad://schematic/connectivity")
+    layer_coverage_resource = await read_resource_text(server, "kicad://board/layer_coverage")
     placement_resource = await read_resource_text(server, "kicad://board/placement_quality")
     placement_gate_resource = await read_resource_text(server, "kicad://gate/placement")
     first_pcb = await get_prompt_text(
@@ -147,15 +155,23 @@ async def test_project_resources_prompts_and_library_surface(
     design_review_loop = await get_prompt_text(server, "design_review_loop", {})
     fix_blocking_issues = await get_prompt_text(server, "fix_blocking_issues", {})
     release_checklist = await get_prompt_text(server, "manufacturing_release_checklist", {})
+    high_speed_review = await get_prompt_text(server, "high_speed_review_loop", {})
+    new_board = await get_prompt_text(server, "new_board_bringup", {})
+    dfm_polish = await get_prompt_text(server, "dfm_polish_loop", {})
+    regression = await get_prompt_text(server, "regression_sweep", {})
 
     assert "Project directory:" in project_resource
+    assert '"file_count"' in project_manifest_resource
     assert "Project design spec resolution:" in project_spec_resource
+    assert '"critical_nets"' in project_design_intent_resource
     assert "Project next action:" in project_next_action_resource
     assert "Board summary" in board_summary
     assert "(kicad_pcb)" in board_netlist
     assert "Project quality gate:" in quality_gate_resource
+    assert '"history"' in gate_history_resource
     assert "Project fix queue" in fix_queue_resource
     assert "Schematic connectivity quality gate:" in connectivity_resource
+    assert '"layers"' in layer_coverage_resource
     assert "Placement score:" in placement_resource
     assert "Placement quality gate:" in placement_gate_resource
     assert "20x20" in first_pcb
@@ -174,6 +190,10 @@ async def test_project_resources_prompts_and_library_surface(
     assert "export_manufacturing_package" in release_checklist
     assert "pcb_transfer_quality_gate" in release_checklist
     assert "broader profile" in release_checklist
+    assert "high-speed review" in high_speed_review.lower()
+    assert "new board" in new_board.lower()
+    assert "manufacturer profile" in dfm_polish.lower()
+    assert "regression sweep" in regression.lower()
 
     design_spec = await call_tool_payload(server, "project_get_design_spec", {})
     design_spec_validation = await call_tool_payload(server, "project_validate_design_spec", {})

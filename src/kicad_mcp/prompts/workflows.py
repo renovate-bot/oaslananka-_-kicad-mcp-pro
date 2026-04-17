@@ -138,3 +138,65 @@ Treat manufacturing release as a gated handoff.
 6. Release with `export_manufacturing_package()` only after every gate is clean.
 """.strip()
         return [TextContent(type="text", text=text)]
+
+    @mcp.prompt()
+    def high_speed_review_loop() -> list[TextContent]:
+        """Agent loop for SI, stackup, routing, and high-speed checkpoint review."""
+        text = """
+Run a high-speed review loop for critical nets.
+
+1. Read `kicad://project/design_intent` and confirm `critical_nets`.
+2. Run `pcb_get_stackup()` and check dielectric/copper assumptions.
+3. Run `route_tune_time_domain()` for each timing-critical net.
+4. Run `si_check_via_stub()` and look for critical-frequency resonance warnings.
+5. Run `emc_check_return_path_continuity(reference_plane_layer="auto")`.
+6. Re-route or add stitching vias where the return path is weak.
+7. Run `route_autoroute_freerouting()` only when DSN/SES staging is ready.
+8. Re-check SI/EMC and create a `vcs_commit_checkpoint()` when the board improves.
+""".strip()
+        return [TextContent(type="text", text=text)]
+
+    @mcp.prompt()
+    def new_board_bringup() -> list[TextContent]:
+        """Agent loop for starting a new board from schematic through first DRC."""
+        text = """
+Bring up a new board in small reversible steps.
+
+1. Set or create the project with `kicad_set_project()` / `kicad_create_new_project()`.
+2. Capture or import the schematic and run `run_erc()`.
+3. Assign footprints and verify `validate_footprints_vs_schematic()`.
+4. Define board outline, stackup, and basic design rules.
+5. Run `pcb_auto_place_by_schematic()` and inspect `pcb_score_placement()`.
+6. Route critical nets first, refill zones, and run `run_drc()`.
+7. Commit checkpoints after every clean gate.
+""".strip()
+        return [TextContent(type="text", text=text)]
+
+    @mcp.prompt()
+    def dfm_polish_loop() -> list[TextContent]:
+        """Agent loop for manufacturer-specific DFM cleanup."""
+        text = """
+Polish the design against a manufacturer profile.
+
+1. Load the target profile with `dfm_load_manufacturer_profile()`.
+2. Run `dfm_run_manufacturer_check()` and `project_quality_gate()`.
+3. Fix hard blockers first: trace/space, drill, annular ring, silk, courtyard.
+4. Re-run DFM after each fix and read `kicad://project/fix_queue`.
+5. Stop for human review if a warning requires a fab-specific decision.
+6. Export only with `export_manufacturing_package()` after the gates pass.
+""".strip()
+        return [TextContent(type="text", text=text)]
+
+    @mcp.prompt()
+    def regression_sweep() -> list[TextContent]:
+        """CI-style prompt for repeatable ERC, DRC, and quality-gate regression checks."""
+        text = """
+Run a repeatable project regression sweep.
+
+1. Read `kicad://project/manifest` to capture the file/hash baseline.
+2. Run `run_erc()` and `run_drc()`.
+3. Run `project_quality_gate()` and `project_quality_gate_report()`.
+4. Read `kicad://project/gate_history` and compare current outcomes.
+5. Report any new FAIL/BLOCKED gate before release work continues.
+""".strip()
+        return [TextContent(type="text", text=text)]

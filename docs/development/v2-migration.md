@@ -148,11 +148,14 @@ v2 adds a Git-backed checkpoint surface:
 - `vcs_commit_checkpoint`
 - `vcs_list_checkpoints`
 - `vcs_restore_checkpoint`
+- `vcs_tag_release`
 - `vcs_diff_with_checkpoint`
 
 The restore path is intentionally conservative: when the project is dirty, the
 tool first creates a stash backup for the project scope and only then restores
-files from the requested checkpoint commit.
+files from the requested checkpoint commit. In v2.4.0 the restore flow also
+creates a `mcp-restore-<short-sha>` recovery branch for the stash snapshot, and
+release tagging is blocked unless the full project quality gate is `PASS`.
 
 ## Profiles And Tool Metadata
 

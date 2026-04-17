@@ -223,6 +223,11 @@ class ComplianceTarget(BaseModel):
     """Regulatory compliance requirement that should be tracked through layout and DFM."""
 
     kind: ComplianceKind = Field(description="Compliance standard identifier.")
+    extra_standards: list[str] = Field(
+        default_factory=list,
+        max_length=10,
+        description="Additional free-form standards or safety targets.",
+    )
     notes: str = Field(default="", max_length=500)
 
 
@@ -266,6 +271,12 @@ class ThermalEnvelope(BaseModel):
         default=85.0, ge=0.0, le=200.0, description="Maximum allowed component case temp in °C."
     )
     airflow: AirflowKind = Field(default="natural")
+    ambient_airflow_m_s: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=50.0,
+        description="Measured or expected ambient airflow in m/s.",
+    )
     thermal_resistance_target_c_per_w: float | None = Field(
         default=None, gt=0.0, description="System-level thermal resistance target (°C/W)."
     )

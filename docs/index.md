@@ -17,6 +17,7 @@ Use the documentation in this folder for installation, client configuration, too
 - [Azure DevOps CI/CD](deployment/azure-devops.md)
 - [HTTP Mode](deployment/http-mode.md)
 - [First PCB Workflow](workflows/first-pcb.md)
+- [High-Speed Review Workflow](workflows/high-speed-review.md)
 - [Schematic To PCB Workflow](workflows/schematic-to-pcb.md)
 - [Manufacturing Export Workflow](workflows/manufacturing-export.md)
 - [Architecture](development/architecture.md)

@@ -11,6 +11,7 @@ The algorithm is unit-free; callers supply coordinates in mm and receive mm back
 from __future__ import annotations
 
 import math
+import time
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
@@ -54,6 +55,9 @@ class ForceDirectedConfig:
     board_w: float = 100.0     # board width (mm) — soft boundary
     board_h: float = 80.0      # board height (mm) — soft boundary
     seed: int = 42
+    grid_mm: float = 0.5
+    max_seconds: float = 10.0
+    keepout_regions: list[tuple[float, float, float, float]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +70,105 @@ def _centroid(comps: list[PlacementComponent], refs: list[str]) -> Point:
     if not xs:
         return Point(0.0, 0.0)
     return Point(sum(xs) / len(xs), sum(ys) / len(ys))
+
+
+def _snap(value: float, grid_mm: float) -> float:
+    if grid_mm <= 0:
+        return value
+    return round(round(value / grid_mm) * grid_mm, 4)
+
+
+def _component_bounds(
+    x: float,
+    y: float,
+    component: PlacementComponent,
+) -> tuple[float, float, float, float]:
+    return (
+        x - (component.w / 2.0),
+        y - (component.h / 2.0),
+        x + (component.w / 2.0),
+        y + (component.h / 2.0),
+    )
+
+
+def _inside_board(
+    x: float,
+    y: float,
+    component: PlacementComponent,
+    cfg: ForceDirectedConfig,
+) -> bool:
+    left, top, right, bottom = _component_bounds(x, y, component)
+    return left >= 0.0 and top >= 0.0 and right <= cfg.board_w and bottom <= cfg.board_h
+
+
+def _hits_keepout(
+    x: float,
+    y: float,
+    component: PlacementComponent,
+    cfg: ForceDirectedConfig,
+) -> bool:
+    left, top, right, bottom = _component_bounds(x, y, component)
+    for x1, y1, x2, y2 in cfg.keepout_regions:
+        keepout_left = min(x1, x2)
+        keepout_top = min(y1, y2)
+        keepout_right = max(x1, x2)
+        keepout_bottom = max(y1, y2)
+        if not (
+            right <= keepout_left
+            or left >= keepout_right
+            or bottom <= keepout_top
+            or top >= keepout_bottom
+        ):
+            return True
+    return False
+
+
+def _resolve_candidate_position(
+    x: float,
+    y: float,
+    component: PlacementComponent,
+    cfg: ForceDirectedConfig,
+    *,
+    snap_to_grid: bool,
+) -> tuple[float, float]:
+    def normalize(candidate_x: float, candidate_y: float) -> tuple[float, float]:
+        resolved_x = candidate_x
+        resolved_y = candidate_y
+        if snap_to_grid:
+            resolved_x = _snap(resolved_x, cfg.grid_mm)
+            resolved_y = _snap(resolved_y, cfg.grid_mm)
+        return resolved_x, resolved_y
+
+    candidate = normalize(x, y)
+    if _inside_board(*candidate, component, cfg) and not _hits_keepout(*candidate, component, cfg):
+        return candidate
+
+    search_step = max(cfg.grid_mm / 2.0, 0.25)
+    phase = cfg.seed % 4
+    directions = [
+        (1, 0),
+        (0, 1),
+        (-1, 0),
+        (0, -1),
+    ]
+    directions = directions[phase:] + directions[:phase]
+    for ring in range(1, 33):
+        for dx, dy in directions:
+            for offset in range(-ring, ring + 1):
+                if dx == 0:
+                    candidate = normalize(x + (offset * search_step), y + (dy * ring * search_step))
+                else:
+                    candidate = normalize(x + (dx * ring * search_step), y + (offset * search_step))
+                if _inside_board(*candidate, component, cfg) and not _hits_keepout(
+                    *candidate,
+                    component,
+                    cfg,
+                ):
+                    return candidate
+
+    safe_x = min(max(component.w / 2.0, x), cfg.board_w - component.w / 2.0)
+    safe_y = min(max(component.h / 2.0, y), cfg.board_h - component.h / 2.0)
+    return normalize(safe_x, safe_y)
 
 
 def force_directed_placement(
@@ -86,6 +189,7 @@ def force_directed_placement(
     # Velocity storage (for momentum)
     vx: list[float] = [0.0] * len(comps)
     vy: list[float] = [0.0] * len(comps)
+    start_time = time.perf_counter()
 
     # Build adjacency: for each component, which other components are connected?
     adjacency: dict[str, list[tuple[str, float]]] = {c.ref: [] for c in comps}
@@ -98,6 +202,8 @@ def force_directed_placement(
     step_size = min(cfg.board_w, cfg.board_h) * 0.05  # initial max displacement
 
     for iteration in range(cfg.iterations):
+        if time.perf_counter() - start_time >= cfg.max_seconds:
+            break
         # Cooling: reduce step size over time
         temperature = step_size * (1.0 - iteration / cfg.iterations) + 0.1
 
@@ -166,11 +272,24 @@ def force_directed_placement(
             if speed > temperature:
                 vx[i] = vx[i] / speed * temperature
                 vy[i] = vy[i] / speed * temperature
-            comp.x += vx[i]
-            comp.y += vy[i]
-            # Hard clamp to board
-            comp.x = max(comp.w * 0.5, min(cfg.board_w - comp.w * 0.5, comp.x))
-            comp.y = max(comp.h * 0.5, min(cfg.board_h - comp.h * 0.5, comp.y))
+            comp.x, comp.y = _resolve_candidate_position(
+                comp.x + vx[i],
+                comp.y + vy[i],
+                comp,
+                cfg,
+                snap_to_grid=False,
+            )
+
+    for component in comps:
+        if component.fixed:
+            continue
+        component.x, component.y = _resolve_candidate_position(
+            component.x,
+            component.y,
+            component,
+            cfg,
+            snap_to_grid=True,
+        )
 
     return comps
 

@@ -45,7 +45,11 @@ class PowerPlaneInput(BaseModel):
 class ThermalViaInput(BaseModel):
     """Thermal via count request."""
 
-    power_w: float = Field(gt=0.0, le=10_000.0)
+    power_w: float | None = Field(default=None, gt=0.0, le=10_000.0)
+    package_power_w: float | None = Field(default=None, gt=0.0, le=10_000.0)
+    ambient_c: float = Field(default=25.0, ge=-55.0, le=200.0)
+    max_junction_c: float = Field(default=125.0, gt=-55.0, le=250.0)
+    theta_ja_deg_c_w: float = Field(default=40.0, gt=0.1, le=1_000.0)
     via_diameter_mm: float = Field(default=0.3, gt=0.05, le=5.0)
     thermal_resistance_target: float = Field(default=5.0, gt=0.1, le=1_000.0)
 

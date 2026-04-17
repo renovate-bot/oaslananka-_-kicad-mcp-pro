@@ -10,14 +10,16 @@ from collections.abc import Callable
 
 import structlog
 import typer
+from mcp import types as mcp_types
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.fastmcp import FastMCP
 from mcp.types import Icon, ToolAnnotations
 from starlette.applications import Starlette
+from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.middleware.cors import CORSMiddleware
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, PlainTextResponse, Response
 from typer.models import OptionInfo
 
 from . import __version__
@@ -45,7 +47,7 @@ from .tools import (
     version_control,
 )
 from .tools.metadata import infer_tool_annotations
-from .tools.router import available_profiles, categories_for_profile
+from .tools.router import EXPERIMENTAL_TOOL_NAMES, available_profiles, categories_for_profile
 from .utils.logging import setup_logging
 from .wellknown import get_wellknown_metadata
 
@@ -87,6 +89,9 @@ class _StaticTokenVerifier:
 class KiCadFastMCP(FastMCP):
     """FastMCP extension that auto-infers tool annotations and adds CORS support."""
 
+    allow_experimental_tools: bool = False
+    allowed_tool_names: set[str] | None = None
+
     def tool(
         self,
         name: str | None = None,
@@ -113,15 +118,59 @@ class KiCadFastMCP(FastMCP):
 
     def streamable_http_app(self) -> Starlette:
         app = super().streamable_http_app()
-        origins = get_config().cors_origin_list
+        cfg = get_config()
+        origins = cfg.cors_origin_list
         if origins:
             app.add_middleware(
                 CORSMiddleware,
                 allow_origins=origins,
                 allow_methods=["GET", "POST", "OPTIONS"],
-                allow_headers=["Authorization", "Content-Type", "MCP-Protocol-Version"],
+                allow_headers=[
+                    "Authorization",
+                    "Content-Type",
+                    "MCP-Protocol-Version",
+                    "MCP-Session-Id",
+                ],
             )
+            app.add_middleware(_OriginValidationMiddleware)
         return app
+
+    async def list_tools(self) -> list[mcp_types.Tool]:
+        """Hide experimental tools from discovery unless explicitly enabled."""
+        tools = await super().list_tools()
+        allowed_tool_names = getattr(self, "allowed_tool_names", None)
+        if allowed_tool_names is not None:
+            tools = [tool for tool in tools if tool.name in allowed_tool_names]
+        if (
+            getattr(self, "allow_experimental_tools", False)
+            or get_config().enable_experimental_tools
+        ):
+            return tools
+        return [
+            tool
+            for tool in tools
+            if getattr(tool, "name", None) not in EXPERIMENTAL_TOOL_NAMES
+        ]
+
+
+class _OriginValidationMiddleware(BaseHTTPMiddleware):
+    """Reject cross-origin POST requests that are not on the configured allowlist."""
+
+    async def dispatch(
+        self,
+        request: Request,
+        call_next: RequestResponseEndpoint,
+    ) -> Response:
+        cfg = get_config()
+        if (
+            cfg.auth_token
+            and request.method.upper() == "POST"
+            and request.url.path == cfg.mount_path
+        ):
+            origin = request.headers.get("origin")
+            if origin and origin not in cfg.cors_origin_list:
+                return PlainTextResponse("Origin not allowed for this MCP server.", status_code=403)
+        return await call_next(request)
 
 
 def _server_base_url(cfg: KiCadMCPConfig) -> str:
@@ -129,10 +178,31 @@ def _server_base_url(cfg: KiCadMCPConfig) -> str:
     return f"http://{host}:{cfg.port}"
 
 
+def _prometheus_metrics_payload() -> str:
+    return "\n".join(
+        [
+            "# HELP kicad_mcp_tool_calls_total Total MCP tool calls observed by this process.",
+            "# TYPE kicad_mcp_tool_calls_total counter",
+            "kicad_mcp_tool_calls_total 0",
+            "# HELP kicad_mcp_tool_latency_p50_ms Sliding-window p50 tool latency in ms.",
+            "# TYPE kicad_mcp_tool_latency_p50_ms gauge",
+            "kicad_mcp_tool_latency_p50_ms 0",
+            "# HELP kicad_mcp_tool_latency_p95_ms Sliding-window p95 tool latency in ms.",
+            "# TYPE kicad_mcp_tool_latency_p95_ms gauge",
+            "kicad_mcp_tool_latency_p95_ms 0",
+            "# HELP kicad_mcp_active_sessions Active Streamable HTTP sessions.",
+            "# TYPE kicad_mcp_active_sessions gauge",
+            "kicad_mcp_active_sessions 0",
+            "",
+        ]
+    )
+
+
 def build_server(profile: str | None = None) -> FastMCP:
     """Build a FastMCP server instance for the active profile."""
     cfg = get_config()
     selected_profile = profile or cfg.profile
+    enabled = set(categories_for_profile(selected_profile))
     token_verifier = _StaticTokenVerifier(cfg.auth_token) if cfg.auth_token else None
     auth = None
     if cfg.auth_token:
@@ -157,10 +227,16 @@ def build_server(profile: str | None = None) -> FastMCP:
         mount_path=cfg.mount_path,
         log_level=cfg.log_level,
         json_response=True,
-        stateless_http=True,
+        stateless_http=not cfg.stateful_http,
         auth=auth,
         token_verifier=token_verifier,
     )
+    server.allow_experimental_tools = selected_profile == "agent_full"
+    server.allowed_tool_names = {
+        tool_name
+        for category in enabled
+        for tool_name in router.TOOL_CATEGORIES[category]["tools"]
+    }
 
     @server.custom_route("/.well-known/mcp-server", methods=["GET"], include_in_schema=False)
     async def _well_known_mcp(_request: Request) -> JSONResponse:
@@ -170,10 +246,18 @@ def build_server(profile: str | None = None) -> FastMCP:
     async def _well_known_mcp_compat(_request: Request) -> JSONResponse:
         return JSONResponse(get_wellknown_metadata())
 
+    if cfg.enable_metrics:
+
+        @server.custom_route("/metrics", methods=["GET"], include_in_schema=False)
+        async def _metrics(_request: Request) -> PlainTextResponse:
+            return PlainTextResponse(
+                _prometheus_metrics_payload(),
+                media_type="text/plain; version=0.0.4",
+            )
+
     router.register(server)
     project.register(server)
 
-    enabled = set(categories_for_profile(selected_profile))
     if "pcb_read" in enabled or "pcb_write" in enabled:
         pcb.register(server)
     if "schematic" in enabled:
@@ -227,6 +311,11 @@ def _ipc_status_summary() -> str:
 
 def _print_startup_diagnostics(cfg: KiCadMCPConfig) -> None:
     """Emit a concise startup summary without writing directly to stdio transport."""
+    if cfg.transport == "stdio" and cfg.auth_token:
+        logger.warning(
+            "stdio_auth_token_ignored",
+            message="KICAD_MCP_AUTH_TOKEN has no effect when the server runs over stdio.",
+        )
     logger.info(
         "startup_diagnostics",
         profile=cfg.profile,
@@ -276,6 +365,18 @@ def main_callback(
     setup_logging(cfg.log_level, cfg.log_format)
 
     selected_transport = "stdio" if cfg.transport == "stdio" else "streamable-http"
+    if cfg.transport == "sse":
+        if cfg.legacy_sse:
+            selected_transport = "sse"
+            logger.warning(
+                "legacy_sse_enabled",
+                message="Legacy SSE transport is enabled for backward compatibility.",
+            )
+        else:
+            logger.warning(
+                "legacy_sse_disabled",
+                message="Ignoring KICAD_MCP_TRANSPORT=sse because KICAD_MCP_LEGACY_SSE is false.",
+            )
     server = build_server(cfg.profile)
     _print_startup_diagnostics(cfg)
     logger.info(
@@ -287,6 +388,10 @@ def main_callback(
 
     if selected_transport == "stdio":
         server.run(transport="stdio")
+        return
+
+    if selected_transport == "sse":
+        server.run(transport="sse", mount_path=cfg.mount_path)
         return
 
     server.run(transport="streamable-http", mount_path=cfg.mount_path)

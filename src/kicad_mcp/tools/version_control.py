@@ -10,7 +10,7 @@ from mcp.server.fastmcp import FastMCP
 
 from ..config import get_config
 from .metadata import headless_compatible
-from .validation import _entries, _run_drc_report
+from .validation import _combined_status, _entries, _evaluate_project_gate, _run_drc_report
 
 _CHECKPOINT_TRAILER = "KiCad-MCP-Checkpoint: true"
 _DEFAULT_GIT_NAME = "KiCad MCP Pro"
@@ -105,6 +105,24 @@ def _project_status(repo_root: Path, pathspec: str) -> list[str]:
     return [line for line in result.stdout.splitlines() if line.strip()]
 
 
+def _tracked_path_from_status_line(line: str) -> str:
+    parts = line.split(maxsplit=1)
+    if len(parts) == 1:
+        return ""
+    return parts[1].strip()
+
+
+def _has_session_scraps(status_lines: list[str]) -> str | None:
+    for line in status_lines:
+        path = _tracked_path_from_status_line(line)
+        if path.endswith(".kicad_pro.lock"):
+            return path
+        for segment in Path(path).parts:
+            if segment.startswith("~$"):
+                return path
+    return None
+
+
 def _checkpoint_log_args(repo_root: Path, pathspec: str) -> list[str]:
     return [
         "log",
@@ -135,6 +153,12 @@ def _stash_project_state(repo_root: Path, pathspec: str, checkpoint_hash: str) -
     if not output:
         return message
     return output
+
+
+def _create_restore_branch(repo_root: Path, checkpoint_hash: str) -> str:
+    branch_name = f"mcp-restore-{checkpoint_hash[:7]}"
+    _run_git(repo_root, "branch", "-f", branch_name, "refs/stash")
+    return branch_name
 
 
 def _commit_blocked_by_drc() -> str | None:
@@ -206,6 +230,11 @@ def register(mcp: FastMCP) -> None:
         status_lines = _project_status(repo_root, pathspec)
         if not status_lines:
             return "No project changes were detected, so no checkpoint commit was created."
+        if scrap_path := _has_session_scraps(status_lines):
+            raise ValueError(
+                "Refusing to commit KiCad session scrap files. Remove the lock/temp file first: "
+                f"{scrap_path}"
+            )
 
         body = f"{_CHECKPOINT_TRAILER}\nProject-Path: {pathspec}"
         _run_git(repo_root, "commit", "-m", message.strip(), "-m", body, "--", pathspec)
@@ -245,7 +274,7 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     @headless_compatible
     def vcs_restore_checkpoint(commit_hash: str) -> str:
-        """Restore project files from a previous checkpoint commit."""
+        """Restore project files and keep a recovery branch for the stashed pre-restore state."""
         if not commit_hash.strip():
             raise ValueError("Commit hash must not be empty.")
         project_dir = _resolve_project_dir()
@@ -271,7 +300,9 @@ def register(mcp: FastMCP) -> None:
             f"- Path scope: {pathspec}",
         ]
         if stash_note is not None:
+            recovery_branch = _create_restore_branch(repo_root, commit_hash)
             lines.append(f"- Previous uncommitted state was backed up: {stash_note}")
+            lines.append(f"- Recovery branch: {recovery_branch}")
         else:
             lines.append("- Previous uncommitted state was already clean.")
         return "\n".join(lines)
@@ -306,5 +337,36 @@ def register(mcp: FastMCP) -> None:
                 "",
                 "Stat summary:",
                 summary or "(no summary available)",
+            ]
+        )
+
+    @mcp.tool()
+    @headless_compatible
+    def vcs_tag_release(tag: str, message: str) -> str:
+        """Create an annotated release tag after the full project quality gate passes."""
+        if not tag.strip():
+            raise ValueError("Release tag must not be empty.")
+        if not message.strip():
+            raise ValueError("Release tag message must not be empty.")
+        project_dir = _resolve_project_dir()
+        repo_root = _git_repo_root(project_dir)
+        if repo_root is None:
+            raise ValueError("No Git repository was found. Run vcs_init_git() first.")
+        if _combined_status(_evaluate_project_gate()) != "PASS":
+            raise ValueError(
+                "Release tagging is only allowed after project_quality_gate() returns PASS."
+            )
+        _run_git(repo_root, "rev-parse", "--verify", "HEAD")
+        existing = _run_git(repo_root, "tag", "--list", tag.strip(), check=False).stdout.strip()
+        if existing:
+            raise ValueError(f"Git tag '{tag.strip()}' already exists.")
+        _run_git(repo_root, "tag", "-a", tag.strip(), "-m", message.strip())
+        commit_hash = _run_git(repo_root, "rev-parse", "HEAD").stdout.strip()
+        return "\n".join(
+            [
+                "Release tag created.",
+                f"- Tag: {tag.strip()}",
+                f"- Commit: {commit_hash}",
+                f"- Message: {message.strip()}",
             ]
         )

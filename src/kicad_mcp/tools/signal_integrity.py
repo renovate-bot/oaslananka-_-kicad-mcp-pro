@@ -666,18 +666,37 @@ def register(mcp: FastMCP) -> None:
             f"- Assumed board thickness: {board_thickness_mm:.3f} mm",
             f"- Effective dielectric constant: {payload.er:.3f}",
         ]
+        try:
+            from .project import load_design_intent
+
+            critical_frequencies_mhz = load_design_intent().critical_frequencies_mhz
+        except ValueError:
+            critical_frequencies_mhz = []
         for via in vias[: get_config().max_items_per_response]:
             x_mm, y_mm = _via_position_mm(via)
             stub_mm = _via_stub_length_mm(via)
             resonance_ghz = via_stub_resonance_ghz(stub_mm, er=payload.er)
+            resonance_mhz = resonance_ghz * 1_000.0
             risk = via_stub_risk_level(stub_mm, payload.frequency_ghz, er=payload.er)
             net_name = str(getattr(getattr(via, "net", None), "name", "") or "(no net)")
             drill_mm = nm_to_mm(int(getattr(via, "drill_diameter", 0)))
             via_type_name = ViaType.Name(int(getattr(via, "type", ViaType.VT_THROUGH)))
+            critical_matches = [
+                frequency
+                for frequency in critical_frequencies_mhz
+                if abs(resonance_mhz - frequency) <= frequency * 0.10
+            ]
+            critical_note = (
+                " | CRITICAL resonance near "
+                + ", ".join(f"{frequency:.1f} MHz" for frequency in critical_matches)
+                if critical_matches
+                else ""
+            )
             lines.append(
                 f"- {net_name} @ ({x_mm:.3f}, {y_mm:.3f}) mm | type={via_type_name} | "
                 f"drill={drill_mm:.3f} mm | stub={stub_mm:.3f} mm | "
                 f"quarter-wave resonance={resonance_ghz:.2f} GHz | risk={risk}"
+                f"{critical_note}"
             )
         return "\n".join(lines)
 

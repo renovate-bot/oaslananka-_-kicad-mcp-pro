@@ -106,6 +106,11 @@ async def test_emc_surface(sample_project, mock_board) -> None:
     _configure_emc_board(mock_board)
     server = build_server("full")
     await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+    await call_tool_text(
+        server,
+        "project_set_design_intent",
+        {"critical_nets": ["USB_DP", "USB_DN"]},
+    )
 
     ground = await call_tool_text(
         server,
@@ -116,6 +121,11 @@ async def test_emc_surface(sample_project, mock_board) -> None:
         server,
         "emc_check_return_path_continuity",
         {"signal_net": "USB_DP", "reference_plane_layer": "B_Cu"},
+    )
+    critical_return_path = await call_tool_text(
+        server,
+        "emc_check_return_path_continuity",
+        {"reference_plane_layer": "auto", "search_radius_mm": 2.0},
     )
     split_plane = await call_tool_text(
         server,
@@ -151,6 +161,7 @@ async def test_emc_surface(sample_project, mock_board) -> None:
     assert "Ground plane void review" in ground
     assert "(PASS)" in ground
     assert "Return path continuity" in return_path
+    assert "All 2 checked net(s)" in critical_return_path
     assert "Split-plane crossing review" in split_plane
     assert "Decoupling placement review" in decoupling
     assert "Via stitching review" in stitching

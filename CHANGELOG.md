@@ -5,7 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.4.0] - 2026-04-17
+
+### Added
+
+- Project manifest, gate-history, design-intent, and layer-coverage MCP resources plus high-speed, bringup, DFM polish, and regression prompt workflows.
+- An opt-in Prometheus `/metrics` endpoint for Streamable HTTP deployments when `KICAD_MCP_ENABLE_METRICS=true`.
+- `Dockerfile.kicad10` for CI images that extract `kicad-cli` from an official KiCad 10 AppImage supplied at build time.
+- `vcs_tag_release()` plus recovery-branch creation during checkpoint restore.
+
+### Changed
+
+- Extended schematic spatial tooling so bounding boxes now include actual pin extents, `sch_find_free_placement` can honor rectangular keepout regions, and `sch_auto_place_functional` can preserve anchored symbols while applying project-spec functional spacing.
+- Expanded subcircuit template inspection output to include declared left/right pin lists for each bundled template.
+- Upgraded placement scoring with critical-net Manhattan proxy metrics and thermal-hotspot proximity scoring, and hardened the headless force-directed placer with keepout-aware constraints, grid snapping, and wall-clock budgets.
+- Hardened FreeRouting orchestration with a pinned Docker image default, Docker-to-JAR fallback, FreeRouting 2.x CLI flags, timeout control, DRC report output support, and structured routing telemetry.
+- Extended high-speed preflight checks with critical-frequency via-stub resonance warnings, package-envelope thermal via sizing, and design-intent-driven EMC return-path continuity sweeps.
+- Expanded Azure validation with a Windows unit-test job and dependency audit gates for release readiness.
+
+### Fixed
+
+- Added SPICE directive validation for simulation sidecar entries while keeping existing analysis directives backward compatible.
+- Blocked checkpoint commits that include KiCad session scrap files such as `.kicad_pro.lock` and `~$*` artifacts.
 
 ## [2.3.2] - 2026-04-16
 

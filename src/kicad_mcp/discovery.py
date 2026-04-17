@@ -2,19 +2,19 @@
 
 from __future__ import annotations
 
+import atexit
 import inspect
 import json
 import platform
+import random
 import re
 import shutil
 import subprocess
 import threading
-import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from functools import lru_cache
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import structlog
 
@@ -23,6 +23,7 @@ _WATCHER_LOCK = threading.Lock()
 _WATCHER_THREAD: threading.Thread | None = None
 _WATCHER_STOP = threading.Event()
 _WATCHER_ROOT: Path | None = None
+_CLI_CAPABILITIES_CACHE: dict[tuple[Path, int | None], CliCapabilities] = {}
 
 
 @dataclass(frozen=True)
@@ -132,12 +133,18 @@ def find_kicad_version(cli_path: Path) -> str | None:
     return text or None
 
 
-@lru_cache(maxsize=16)
 def get_cli_capabilities(cli_path: Path) -> CliCapabilities:
     """Inspect the local CLI and cache supported commands."""
+    cache_key = _cli_capabilities_cache_key(cli_path)
+    cached = _CLI_CAPABILITIES_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     version = find_kicad_version(cli_path)
     if not cli_path.exists():
-        return CliCapabilities(version=version)
+        capabilities = CliCapabilities(version=version)
+        _CLI_CAPABILITIES_CACHE[cache_key] = capabilities
+        return capabilities
 
     help_outputs: list[str] = []
     commands = (
@@ -164,7 +171,7 @@ def get_cli_capabilities(cli_path: Path) -> CliCapabilities:
     gerber_command = "gerbers" if "gerbers" in tokens else "gerber"
     position_command = "positions" if "positions" in tokens else "pos"
 
-    return CliCapabilities(
+    capabilities = CliCapabilities(
         version=version,
         gerber_command=gerber_command,
         position_command=position_command,
@@ -181,6 +188,24 @@ def get_cli_capabilities(cli_path: Path) -> CliCapabilities:
         supports_pads_import="pads" in blob,
         supports_geda_import="geda" in blob,
     )
+    _CLI_CAPABILITIES_CACHE[cache_key] = capabilities
+    return capabilities
+
+
+def _cli_capabilities_cache_key(cli_path: Path) -> tuple[Path, int | None]:
+    resolved = cli_path.expanduser().resolve(strict=False)
+    try:
+        mtime_ns = resolved.stat().st_mtime_ns
+    except OSError:
+        mtime_ns = None
+    return resolved, mtime_ns
+
+
+def _clear_cli_capabilities_cache() -> None:
+    _CLI_CAPABILITIES_CACHE.clear()
+
+
+cast(Any, get_cli_capabilities).cache_clear = _clear_cli_capabilities_cache
 
 
 def discover_library_paths(cli_path: Path) -> dict[str, Path | None]:
@@ -360,6 +385,7 @@ def ensure_studio_project_watcher(watch_dir: Path, poll_interval_seconds: float 
     global _WATCHER_THREAD, _WATCHER_ROOT
 
     resolved_root = watch_dir.expanduser().resolve()
+    stop_studio_project_watcher()
     with _WATCHER_LOCK:
         if (
             _WATCHER_THREAD is not None
@@ -368,15 +394,29 @@ def ensure_studio_project_watcher(watch_dir: Path, poll_interval_seconds: float 
         ):
             return
 
-        stop_studio_project_watcher()
         _WATCHER_STOP.clear()
         _WATCHER_ROOT = resolved_root
 
         def _worker() -> None:
             previous: dict[Path, float] = {}
+            interval = poll_interval_seconds
             while not _WATCHER_STOP.is_set():
-                previous = poll_studio_watch_dir(resolved_root, previous)
-                time.sleep(poll_interval_seconds)
+                if resolved_root.exists():
+                    previous = poll_studio_watch_dir(resolved_root, previous)
+                    interval = poll_interval_seconds
+                else:
+                    previous = {}
+                    interval = min(max(poll_interval_seconds, interval) * 2.0, 30.0)
+                    logger.warning(
+                        "studio_watch_dir_missing",
+                        watch_dir=str(resolved_root),
+                        retry_in_seconds=round(interval, 2),
+                    )
+                sleep_for = max(
+                    0.1,
+                    interval * random.uniform(0.9, 1.1),  # noqa: S311 - scheduler jitter only
+                )
+                _WATCHER_STOP.wait(sleep_for)
 
         _WATCHER_THREAD = threading.Thread(
             target=_worker,
@@ -397,3 +437,6 @@ def stop_studio_project_watcher() -> None:
             _WATCHER_THREAD.join(timeout=0.5)
         _WATCHER_THREAD = None
         _WATCHER_ROOT = None
+
+
+atexit.register(stop_studio_project_watcher)

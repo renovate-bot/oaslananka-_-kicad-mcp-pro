@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 import subprocess
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -27,6 +29,13 @@ class FreeRoutingResult:
     returncode: int
     stdout: str
     stderr: str
+    routed_pct: float
+    total_nets: int
+    unrouted_nets: list[str]
+    pass_count: int
+    wall_seconds: float
+    stdout_tail: str
+    ses_path: Path
 
 
 def _sanitize_text(text: str) -> str:
@@ -45,6 +54,60 @@ def _common_parent(paths: list[Path]) -> Path:
 
 def _container_relpath(base: Path, target: Path) -> str:
     return target.resolve().relative_to(base.resolve()).as_posix()
+
+
+def _tail(text: str, limit: int = 4096) -> str:
+    return text[-limit:]
+
+
+def _coerce_process_output(value: str | bytes | None) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value
+
+
+def _count_dsn_nets(dsn_path: Path) -> int:
+    try:
+        content = dsn_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return 0
+    return len(re.findall(r"\(\s*net\b", content, flags=re.IGNORECASE))
+
+
+def _parse_unrouted_nets(text: str) -> list[str]:
+    names: list[str] = []
+    for match in re.finditer(
+        r"(?:unrouted|failed)\s+(?:net|connection)\s+['\"]?([A-Za-z0-9_.$:+/-]+)",
+        text,
+        flags=re.IGNORECASE,
+    ):
+        name = match.group(1)
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def _parse_pass_count(text: str) -> int:
+    passes = [
+        int(match.group(1))
+        for match in re.finditer(r"\bpass(?:es)?\s*[:#]?\s*(\d+)", text, flags=re.IGNORECASE)
+    ]
+    return max(passes) if passes else 0
+
+
+def _parse_routed_pct(text: str, total_nets: int, unrouted_nets: list[str], ses_ok: bool) -> float:
+    pct_match = re.search(r"(\d+(?:\.\d+)?)\s*%\s*(?:routed|completed)", text, re.IGNORECASE)
+    if pct_match is not None:
+        return round(float(pct_match.group(1)), 2)
+    if total_nets > 0 and unrouted_nets:
+        return round(((total_nets - len(unrouted_nets)) / total_nets) * 100.0, 2)
+    return 100.0 if ses_ok else 0.0
+
+
+def _docker_available(executable: str) -> bool:
+    return shutil.which(executable) is not None
 
 
 class FreeRoutingRunner:
@@ -107,6 +170,8 @@ class FreeRoutingRunner:
         use_docker: bool = True,
         freerouting_jar_path: Path | None = None,
         net_classes_to_ignore: list[str] | None = None,
+        exclude_nets: list[str] | None = None,
+        drc_report_path: Path | None = None,
         timeout: float | None = None,
     ) -> FreeRoutingResult:
         """Run FreeRouting via Docker or a local JAR and return the normalized result."""
@@ -116,12 +181,31 @@ class FreeRoutingRunner:
 
         output = ses_path.resolve()
         output.parent.mkdir(parents=True, exist_ok=True)
-        ignore_arg = ",".join(net_classes_to_ignore or [])
+        ignored = [*(net_classes_to_ignore or []), *(exclude_nets or [])]
+        ignore_arg = ",".join(dict.fromkeys(ignored))
+        drc_output = drc_report_path.resolve() if drc_report_path is not None else None
+        if drc_output is not None:
+            drc_output.parent.mkdir(parents=True, exist_ok=True)
 
-        if use_docker:
-            mount_root = _common_parent([dsn_path, output])
+        selected_docker = use_docker
+        jar_path = freerouting_jar_path or cfg.freerouting_jar
+        if selected_docker and not _docker_available(self._docker_executable):
+            if jar_path is None:
+                raise RuntimeError(
+                    "Docker was requested for FreeRouting but was not found, and no "
+                    "FreeRouting JAR fallback is configured. Install Docker or set "
+                    "KICAD_MCP_FREEROUTING_JAR."
+                )
+            selected_docker = False
+
+        if selected_docker:
+            mount_paths = [dsn_path, output]
+            if drc_output is not None:
+                mount_paths.append(drc_output)
+            mount_root = _common_parent(mount_paths)
             dsn_arg = _container_relpath(mount_root, dsn_path)
             ses_arg = _container_relpath(mount_root, output)
+            drc_arg = _container_relpath(mount_root, drc_output) if drc_output is not None else None
             command = [
                 self._docker_executable,
                 "run",
@@ -137,12 +221,16 @@ class FreeRoutingRunner:
                 ses_arg,
                 "-mp",
                 str(max_passes),
+                "-mt",
+                str(thread_count),
+                f"--router.max_passes={max_passes}",
             ]
             if ignore_arg:
                 command.extend(["-inc", ignore_arg])
+            if drc_arg is not None:
+                command.extend(["-drc", drc_arg])
             mode = "docker"
         else:
-            jar_path = (freerouting_jar_path or cfg.freerouting_jar)
             if jar_path is None:
                 raise RuntimeError(
                     "FreeRouting JAR path is required when use_docker=False. "
@@ -158,33 +246,52 @@ class FreeRoutingRunner:
                 str(output),
                 "-mp",
                 str(max_passes),
+                "-mt",
+                str(thread_count),
+                f"--router.max_passes={max_passes}",
             ]
             if ignore_arg:
                 command.extend(["-inc", ignore_arg])
+            if drc_output is not None:
+                command.extend(["-drc", str(drc_output)])
             mode = "jar"
 
-        if thread_count > 1:
-            logger.debug("freerouting_thread_count_advisory", thread_count=thread_count, mode=mode)
-
+        start_time = time.perf_counter()
         try:
             result = subprocess.run(
                 command,
                 capture_output=True,
                 text=True,
-                timeout=timeout or max(cfg.cli_timeout, 300.0),
+                timeout=timeout or cfg.freerouting_timeout_sec,
                 check=False,
             )
         except FileNotFoundError as exc:
-            missing = self._docker_executable if use_docker else self._java_executable
+            missing = self._docker_executable if selected_docker else self._java_executable
             raise RuntimeError(
                 f"{missing} was not found. Install the required runtime or switch "
-                f"{'use_docker' if use_docker else 'to Docker mode'}."
+                f"{'use_docker' if selected_docker else 'to Docker mode'}."
             ) from exc
         except subprocess.TimeoutExpired as exc:
+            logger.warning(
+                "freerouting_timeout",
+                timeout_seconds=exc.timeout,
+                dsn=dsn_path.name,
+                stdout_tail=_tail(_sanitize_text(_coerce_process_output(exc.stdout))),
+                stderr_tail=_tail(_sanitize_text(_coerce_process_output(exc.stderr))),
+            )
             raise RuntimeError(
                 "FreeRouting timed out after "
                 f"{exc.timeout} seconds while processing {dsn_path.name}."
             ) from exc
+        wall_seconds = time.perf_counter() - start_time
+
+        sanitized_stdout = _sanitize_text(result.stdout)
+        sanitized_stderr = _sanitize_text(result.stderr)
+        combined_output = f"{sanitized_stdout}\n{sanitized_stderr}"
+        total_nets = _count_dsn_nets(dsn_path)
+        unrouted_nets = _parse_unrouted_nets(combined_output)
+        ses_ok = output.exists() and output.stat().st_size > 0
+        routed_pct = _parse_routed_pct(combined_output, total_nets, unrouted_nets, ses_ok)
 
         return FreeRoutingResult(
             mode=mode,
@@ -192,8 +299,15 @@ class FreeRoutingRunner:
             input_dsn=dsn_path.resolve(),
             output_ses=output,
             returncode=result.returncode,
-            stdout=_sanitize_text(result.stdout),
-            stderr=_sanitize_text(result.stderr),
+            stdout=sanitized_stdout,
+            stderr=sanitized_stderr,
+            routed_pct=routed_pct,
+            total_nets=total_nets,
+            unrouted_nets=unrouted_nets,
+            pass_count=_parse_pass_count(combined_output),
+            wall_seconds=round(wall_seconds, 3),
+            stdout_tail=_tail(sanitized_stdout),
+            ses_path=output,
         )
 
     def import_ses(self, pcb_path: Path, ses_path: Path) -> Path:

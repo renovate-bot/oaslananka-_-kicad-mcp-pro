@@ -18,6 +18,7 @@ from ..models.export import (
     ExportRenderInput,
 )
 from .metadata import headless_compatible
+from .variants import variant_apply_to_kicad_cli_args
 
 DEFAULT_PCB_PDF_LAYERS = ["F.Cu", "Edge.Cuts"]
 
@@ -137,6 +138,13 @@ def _with_low_level_export_notice(message: str) -> str:
     return f"{LOW_LEVEL_EXPORT_NOTICE}\n\n{message}"
 
 
+def _active_variant_args() -> list[str]:
+    try:
+        return variant_apply_to_kicad_cli_args()
+    except ValueError:
+        return []
+
+
 async def _report_progress(
     ctx: Context[Any, Any, Any] | None,
     progress: float,
@@ -166,6 +174,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         layer_args = []
         if payload.layers:
             layer_args = ["--layers", ",".join(payload.layers)]
+        variant_args = _active_variant_args()
 
         gerber_commands = ["gerbers", "gerber"]
         if caps.gerber_command not in gerber_commands:
@@ -178,6 +187,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
                         "pcb",
                         "export",
                         gerber_command,
+                        *variant_args,
                         "--output",
                         str(out_dir),
                         *layer_args,
@@ -187,6 +197,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
                         "pcb",
                         "export",
                         gerber_command,
+                        *variant_args,
                         "--input",
                         str(pcb_file),
                         "--output",
@@ -214,13 +225,23 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         except ValueError as exc:
             return f"Invalid output path: {exc}"
         caps = get_cli_capabilities(get_config().kicad_cli)
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
-                ["pcb", "export", caps.drill_command, "--output", str(out_dir), str(pcb_file)],
                 [
                     "pcb",
                     "export",
                     caps.drill_command,
+                    *variant_args,
+                    "--output",
+                    str(out_dir),
+                    str(pcb_file),
+                ],
+                [
+                    "pcb",
+                    "export",
+                    caps.drill_command,
+                    *variant_args,
                     "--input",
                     str(pcb_file),
                     "--output",
@@ -244,12 +265,14 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         out_dir = _ensure_output_dir()
         suffix = "csv" if payload.format == "csv" else "xml"
         out_file = out_dir / f"bom.{suffix}"
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
                 [
                     "sch",
                     "export",
                     "bom",
+                    *variant_args,
                     "--output",
                     str(out_file),
                     "--format-preset",
@@ -260,6 +283,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
                     "sch",
                     "export",
                     "bom",
+                    *variant_args,
                     "--input",
                     str(sch_file),
                     "--output",
@@ -291,12 +315,14 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
             "orcadpcb2": "orcadpcb2",
         }
         out_file = out_dir / f"netlist.{extension_map[payload.format]}"
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
                 [
                     "sch",
                     "export",
                     "netlist",
+                    *variant_args,
                     "--format",
                     cli_format_map[payload.format],
                     "--output",
@@ -325,12 +351,14 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         out_dir = _ensure_output_dir()
         out_file = out_dir / "board.pdf"
         layers_arg = ",".join(payload.layers or DEFAULT_PCB_PDF_LAYERS)
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
                 [
                     "pcb",
                     "export",
                     "pdf",
+                    *variant_args,
                     "--output",
                     str(out_file),
                     "--layers",
@@ -341,6 +369,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
                     "pcb",
                     "export",
                     "pdf",
+                    *variant_args,
                     "--input",
                     str(pcb_file),
                     "--output",
@@ -363,10 +392,20 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         sch_file = _get_sch_file()
         out_dir = _ensure_output_dir()
         out_file = out_dir / "schematic.pdf"
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
-                ["sch", "export", "pdf", "--output", str(out_file), str(sch_file)],
-                ["sch", "export", "pdf", "--input", str(sch_file), "--output", str(out_file)],
+                ["sch", "export", "pdf", *variant_args, "--output", str(out_file), str(sch_file)],
+                [
+                    "sch",
+                    "export",
+                    "pdf",
+                    *variant_args,
+                    "--input",
+                    str(sch_file),
+                    "--output",
+                    str(out_file),
+                ],
             ]
         )
         if code != 0:
@@ -388,10 +427,20 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
             out_file = _resolve_output_file("3d", output_path, default_name="board.step")
         except ValueError as exc:
             return f"Invalid output path: {exc}"
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
-                ["pcb", "export", "step", "--output", str(out_file), str(pcb_file)],
-                ["pcb", "export", "step", "--input", str(pcb_file), "--output", str(out_file)],
+                ["pcb", "export", "step", *variant_args, "--output", str(out_file), str(pcb_file)],
+                [
+                    "pcb",
+                    "export",
+                    "step",
+                    *variant_args,
+                    "--input",
+                    str(pcb_file),
+                    "--output",
+                    str(out_file),
+                ],
             ]
         )
         if code != 0:
@@ -412,7 +461,10 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         pcb_file = _get_pcb_file()
         caps = get_cli_capabilities(get_config().kicad_cli)
         if not caps.supports_3d_pdf:
-            return "3D PDF export requires a KiCad 10-compatible kicad-cli."
+            return (
+                "3D PDF export requires CliCapabilities.supports_3d_pdf from a "
+                "KiCad 10-compatible kicad-cli."
+            )
 
         try:
             out_file = _resolve_output_file("3d", output_path, default_name="board-3d.pdf")
@@ -420,12 +472,14 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
             return f"Invalid output path: {exc}"
 
         extra_args = ["--board-only"] if board_only else []
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
                 [
                     "pcb",
                     "export",
                     "3dpdf",
+                    *variant_args,
                     "--output",
                     str(out_file),
                     *extra_args,
@@ -435,6 +489,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
                     "pcb",
                     "export",
                     "3dpdf",
+                    *variant_args,
                     "--input",
                     str(pcb_file),
                     "--output",
@@ -512,12 +567,14 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         out_dir = _ensure_output_dir("assembly")
         out_file = out_dir / f"pick_and_place.{format}"
         caps = get_cli_capabilities(get_config().kicad_cli)
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
                 [
                     "pcb",
                     "export",
                     caps.position_command,
+                    *variant_args,
                     "--format",
                     format,
                     "--output",
@@ -528,6 +585,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
                     "pcb",
                     "export",
                     caps.position_command,
+                    *variant_args,
                     "--input",
                     str(pcb_file),
                     "--format",
@@ -535,7 +593,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
                     "--output",
                     str(out_file),
                 ],
-                ["pcb", "export", "pos", "--output", str(out_file), str(pcb_file)],
+                ["pcb", "export", "pos", *variant_args, "--output", str(out_file), str(pcb_file)],
             ]
         )
         if code != 0:
@@ -554,10 +612,28 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
             return "IPC-2581 export is not supported by the detected KiCad CLI."
 
         out_file = _ensure_output_dir("manufacturing") / "board.xml"
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
-                ["pcb", "export", "ipc2581", "--output", str(out_file), str(pcb_file)],
-                ["pcb", "export", "ipc2581", "--input", str(pcb_file), "--output", str(out_file)],
+                [
+                    "pcb",
+                    "export",
+                    "ipc2581",
+                    *variant_args,
+                    "--output",
+                    str(out_file),
+                    str(pcb_file),
+                ],
+                [
+                    "pcb",
+                    "export",
+                    "ipc2581",
+                    *variant_args,
+                    "--input",
+                    str(pcb_file),
+                    "--output",
+                    str(out_file),
+                ],
             ]
         )
         if code != 0:
@@ -576,12 +652,14 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
             return "SVG export is not supported by the detected KiCad CLI."
 
         out_dir = _ensure_output_dir("svg")
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
                 [
                     "pcb",
                     "export",
                     "svg",
+                    *variant_args,
                     "--mode-multi",
                     "--layers",
                     layer,
@@ -608,12 +686,14 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
             return "DXF export is not supported by the detected KiCad CLI."
 
         out_dir = _ensure_output_dir("dxf")
+        variant_args = _active_variant_args()
         code, _, stderr = _run_cli_variants(
             [
                 [
                     "pcb",
                     "export",
                     "dxf",
+                    *variant_args,
                     "--layers",
                     layer,
                     "--output",
@@ -624,6 +704,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
                     "pcb",
                     "export",
                     "dxf",
+                    *variant_args,
                     "--input",
                     str(pcb_file),
                     "--layers",

@@ -282,6 +282,73 @@ async def test_pcb_placement_quality_gate_passes_clean_intent_aware_board(
     assert "- Power-tree refs checked: 3" in score
     assert "- Analog refs checked: 0" in score
     assert "- Sensor-cluster refs checked: 2" in score
+    assert "- Critical-net Manhattan proxy:" in score
+    assert "- Thermal hotspot proximity:" in score
+
+
+@pytest.mark.anyio
+async def test_pcb_score_placement_reports_signal_length_proxy(
+    sample_project: Path,
+    mock_kicad,
+) -> None:
+    _ = mock_kicad
+    _write_board(
+        sample_project,
+        _footprint_block(
+            "J1",
+            "Conn",
+            2.0,
+            15.0,
+            name="Connector_Generic:Conn_01x02",
+            net_name="USB_DP",
+        ),
+        _footprint_block(
+            "U1",
+            "MCU",
+            20.0,
+            15.0,
+            name="Package_QFP:TQFP-48",
+            net_name="USB_DP",
+        ),
+        _footprint_block(
+            "U2",
+            "PHY",
+            38.0,
+            15.0,
+            name="Package_SO:SOIC-8",
+            net_name="USB_DP",
+        ),
+    )
+    server = build_server("full")
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+    await call_tool_text(server, "project_set_design_intent", {"critical_nets": ["USB_DP"]})
+
+    score = await call_tool_text(server, "pcb_score_placement", {})
+
+    assert "- Critical-net Manhattan proxy: 36.00 mm" in score
+    assert "- Critical-net proxy density: 30.00 mm per 1000 mm^2" in score
+
+
+@pytest.mark.anyio
+async def test_pcb_score_placement_warns_on_tight_thermal_hotspots(
+    sample_project: Path,
+    mock_kicad,
+) -> None:
+    _ = mock_kicad
+    _write_board(
+        sample_project,
+        _footprint_block("U1", "HotA", 10.0, 10.0, name="Package_SO:SOIC-8"),
+        _footprint_block("U2", "HotB", 14.5, 10.0, name="Package_SO:SOIC-8"),
+    )
+    server = build_server("full")
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+    await call_tool_text(server, "project_set_design_intent", {"thermal_hotspots": ["U1", "U2"]})
+
+    score = await call_tool_text(server, "pcb_score_placement", {})
+
+    assert "- Thermal hotspot refs checked: 2" in score
+    assert "- Thermal hotspot proximity: 0.2222" in score
+    assert "WARN: Thermal hotspots are clustered tightly" in score
 
 
 @pytest.mark.anyio

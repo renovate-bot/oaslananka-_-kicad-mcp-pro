@@ -1,4 +1,4 @@
-"""Design-variant helpers backed by a project-local sidecar file."""
+"""Design-variant helpers backed by KiCad 10 project metadata when available."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from .schematic import parse_schematic_file
 
 _VARIANTS_DIRNAME = ".kicad-mcp"
 _VARIANTS_FILENAME = "variants.json"
+_PROJECT_VARIANTS_KEY = "variants"
 
 
 def _variants_path() -> Path:
@@ -29,6 +30,13 @@ def _variants_path() -> Path:
     target = cfg.project_dir / _VARIANTS_DIRNAME
     target.mkdir(parents=True, exist_ok=True)
     return target / _VARIANTS_FILENAME
+
+
+def _project_variants_path() -> Path | None:
+    cfg = get_config()
+    if cfg.project_file is None or not cfg.project_file.exists():
+        return None
+    return cfg.project_file
 
 
 def _base_components() -> dict[str, dict[str, Any]]:
@@ -62,7 +70,17 @@ def _default_state() -> dict[str, Any]:
     }
 
 
-def _load_state() -> dict[str, Any]:
+def _load_project_payload(path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Project file '{path}' does not contain valid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"Project file '{path}' must contain a JSON object at the root.")
+    return cast(dict[str, Any], payload)
+
+
+def _load_sidecar_state() -> dict[str, Any]:
     path = _variants_path()
     if not path.exists():
         state = _default_state()
@@ -71,7 +89,46 @@ def _load_state() -> dict[str, Any]:
     return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
 
 
+def _project_state_from_payload(payload: dict[str, Any]) -> dict[str, Any] | None:
+    section = payload.get(_PROJECT_VARIANTS_KEY)
+    if not isinstance(section, dict):
+        return None
+    variants = section.get("variants")
+    if not isinstance(variants, dict):
+        return None
+    default_variant = str(section.get("default_variant", "default"))
+    active_variant = str(section.get("active_variant", default_variant))
+    return {
+        "default_variant": default_variant,
+        "active_variant": active_variant,
+        "variants": cast(dict[str, Any], variants),
+    }
+
+
+def _load_state() -> dict[str, Any]:
+    if (project_path := _project_variants_path()) is not None:
+        project_payload = _load_project_payload(project_path)
+        if (project_state := _project_state_from_payload(project_payload)) is not None:
+            return project_state
+        sidecar_path = _variants_path()
+        if sidecar_path.exists():
+            return _load_sidecar_state()
+        return _default_state()
+    return _load_sidecar_state()
+
+
 def _save_state(state: dict[str, Any]) -> Path:
+    if (project_path := _project_variants_path()) is not None:
+        payload = _load_project_payload(project_path)
+        default_variant = str(state.get("default_variant", "default"))
+        active_variant = str(state.get("active_variant", default_variant))
+        payload[_PROJECT_VARIANTS_KEY] = {
+            "default_variant": default_variant,
+            "active_variant": active_variant,
+            "variants": cast(dict[str, Any], state.get("variants", {})),
+        }
+        project_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return project_path
     path = _variants_path()
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
     return path
@@ -79,6 +136,11 @@ def _save_state(state: dict[str, Any]) -> Path:
 
 def _variant_names(state: dict[str, Any]) -> list[str]:
     return sorted(str(name) for name in state.get("variants", {}).keys())
+
+
+def _active_variant_name(state: dict[str, Any]) -> str | None:
+    active = str(state.get("active_variant", "")).strip()
+    return active or None
 
 
 def _ensure_variant(state: dict[str, Any], name: str) -> dict[str, Any]:
@@ -134,6 +196,16 @@ def _write_bom(path: Path, rows: list[dict[str, Any]], format_name: str) -> Path
     writer.writerows(rows)
     path.write_text(buffer.getvalue(), encoding="utf-8")
     return path
+
+
+def variant_apply_to_kicad_cli_args(variant_name: str | None = None) -> list[str]:
+    """Return ``kicad-cli`` arguments for the requested or active variant."""
+    state = _load_state()
+    selected_name = variant_name.strip() if variant_name else (_active_variant_name(state) or "")
+    if not selected_name:
+        return []
+    _ensure_variant(state, selected_name)
+    return ["--variant", selected_name]
 
 
 def register(mcp: FastMCP) -> None:

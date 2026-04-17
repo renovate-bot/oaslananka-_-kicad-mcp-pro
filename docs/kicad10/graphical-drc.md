@@ -12,4 +12,4 @@ For KiCad 10 graphical DRC editor compatibility, the `drc_rule_*` tools manage t
 
 ## Behavior
 
-Custom rules are written directly into `.kicad_dru`. Enable/disable state is stored in `.kicad-mcp/drc_rules_state.json`, and disabled rules are neutralized with `severity ignore` when needed.
+Custom rules are written directly into `.kicad_dru` through an S-expression-aware parser rather than regex block replacement. Enable/disable state is stored in `.kicad-mcp/drc_rules_state.json`, and disabled rules are neutralized with `severity ignore` when needed.

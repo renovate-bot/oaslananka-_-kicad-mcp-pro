@@ -139,6 +139,11 @@ async def test_signal_integrity_surface(sample_project, mock_board) -> None:
             "copper_oz": 1.0,
         },
     )
+    await call_tool_text(
+        server,
+        "project_set_design_intent",
+        {"critical_frequencies_mhz": [23_420.0]},
+    )
     via_stub = await call_tool_text(
         server,
         "si_check_via_stub",
@@ -161,5 +166,6 @@ async def test_signal_integrity_surface(sample_project, mock_board) -> None:
     assert "100 ohm differential pair starting point" in stackup
     assert "Via stub analysis at 5.000 GHz" in via_stub
     assert "quarter-wave resonance" in via_stub
+    assert "CRITICAL resonance near 23420.0 MHz" in via_stub
     assert "Decoupling placement heuristic" in decoupling
     assert "Nearest decoupler: C1" in decoupling

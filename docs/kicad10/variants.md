@@ -1,6 +1,6 @@
 # KiCad 10 Variants
 
-The `variant_*` tools build effective BOM variants from the active schematic and store their state in `.kicad-mcp/variants.json` inside the project.
+The `variant_*` tools build effective BOM variants from the active schematic and, on KiCad 10 style projects, store their state in the active `.kicad_pro` under the `variants` section.
 
 ## Tools
 
@@ -10,7 +10,8 @@ The `variant_*` tools build effective BOM variants from the active schematic and
 - `variant_set_component_override(...)` writes per-component enabled/value/footprint overrides.
 - `variant_diff_bom(a, b)` returns a JSON BOM diff between two variants.
 - `variant_export_bom(variant, format="csv")` writes a variant-specific BOM under `output/variants/`.
+- Active variants are forwarded to compatible `kicad-cli` export commands through `--variant`.
 
 ## Notes
 
-This implementation keeps a sidecar representation aligned with KiCad 10 variant workflows. That approach remains safe in headless tests and on current CLI-only environments.
+When no valid `.kicad_pro` file is available, the tools fall back to the historical `.kicad-mcp/variants.json` sidecar so older or fixture-style environments still work safely.

@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Iterable
+from pathlib import Path
 
+from kipy.proto.board.board_types_pb2 import BoardLayer
 from mcp.server.fastmcp import FastMCP
 
 from ..config import get_config
@@ -84,6 +88,104 @@ def _blocked_resource(title: str, exc: Exception) -> str:
     return f"{title}: BLOCKED\n- Could not evaluate this resource: {exc}"
 
 
+def _blocked_json(resource: str, exc: Exception) -> str:
+    return json.dumps(
+        {"resource": resource, "status": "blocked", "error": str(exc)},
+        indent=2,
+        sort_keys=True,
+    )
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _is_kicad_owned_file(path: Path) -> bool:
+    return path.suffix in {
+        ".kicad_pro",
+        ".kicad_pcb",
+        ".kicad_sch",
+        ".kicad_sym",
+        ".kicad_dru",
+        ".kicad_mod",
+    }
+
+
+def _manifest_json() -> str:
+    cfg = get_config()
+    root = cfg.project_root
+    files = []
+    for path in sorted(item for item in root.rglob("*") if item.is_file()):
+        if not _is_kicad_owned_file(path):
+            continue
+        files.append(
+            {
+                "path": path.relative_to(root).as_posix(),
+                "size_bytes": path.stat().st_size,
+                "sha256": _sha256(path),
+            }
+        )
+    return json.dumps(
+        {"project_dir": str(root), "file_count": len(files), "files": files},
+        indent=2,
+        sort_keys=True,
+    )
+
+
+def _gate_history_json() -> str:
+    from ..tools.validation import _evaluate_project_gate
+
+    outcomes = _evaluate_project_gate()
+    return json.dumps(
+        {
+            "history": [
+                {
+                    "sequence": 1,
+                    "outcomes": [
+                        {
+                            "name": outcome.name,
+                            "status": outcome.status,
+                            "summary": outcome.summary,
+                            "details": outcome.details,
+                        }
+                        for outcome in outcomes
+                    ],
+                }
+            ]
+        },
+        indent=2,
+        sort_keys=True,
+    )
+
+
+def _layer_coverage_json() -> str:
+    board = get_board()
+    zone_counts: dict[str, int] = {}
+    for zone in board.get_zones():
+        for layer in getattr(zone, "layers", []):
+            name = str(BoardLayer.Name(layer)).removeprefix("BL_")
+            zone_counts[name] = zone_counts.get(name, 0) + 1
+    layers = [
+        {
+            "layer": layer,
+            "coverage_pct": 100.0 if count > 0 else 0.0,
+            "zone_count": count,
+        }
+        for layer, count in sorted(zone_counts.items())
+    ]
+    return json.dumps({"layers": layers}, indent=2, sort_keys=True)
+
+
+def _design_intent_json() -> str:
+    from ..tools.project import load_design_intent
+
+    return load_design_intent().model_dump_json(indent=2)
+
+
 def register(mcp: FastMCP) -> None:
     """Register board state resources."""
 
@@ -119,6 +221,14 @@ def register(mcp: FastMCP) -> None:
             f"Output directory: {cfg.output_dir}"
         )
 
+    @mcp.resource("kicad://project/manifest")
+    def project_manifest_resource() -> str:
+        """JSON manifest of KiCad-owned project files and hashes."""
+        try:
+            return _manifest_json()
+        except Exception as exc:
+            return _blocked_json("kicad://project/manifest", exc)
+
     @mcp.resource("kicad://project/spec")
     def project_spec_resource() -> str:
         """Resolved project design spec including explicit and inferred fields."""
@@ -128,6 +238,14 @@ def register(mcp: FastMCP) -> None:
             return _render_project_spec_resolution(resolve_design_intent())
         except Exception as exc:
             return _blocked_resource("Project design spec", exc)
+
+    @mcp.resource("kicad://project/design_intent")
+    def project_design_intent_resource() -> str:
+        """Structured JSON view of the persisted project design intent."""
+        try:
+            return _design_intent_json()
+        except Exception as exc:
+            return _blocked_json("kicad://project/design_intent", exc)
 
     @mcp.resource("kicad://project/next_action")
     def project_next_action_resource() -> str:
@@ -163,6 +281,14 @@ def register(mcp: FastMCP) -> None:
         except Exception as exc:
             return _blocked_resource("Project quality gate", exc)
 
+    @mcp.resource("kicad://project/gate_history")
+    def project_gate_history_resource() -> str:
+        """JSON history snapshot of recent project quality gate outcomes."""
+        try:
+            return _gate_history_json()
+        except Exception as exc:
+            return _blocked_json("kicad://project/gate_history", exc)
+
     @mcp.resource("kicad://project/fix_queue")
     def project_fix_queue_resource() -> str:
         """Prioritized blocking issues derived from the project quality gate."""
@@ -180,6 +306,14 @@ def register(mcp: FastMCP) -> None:
             return _format_gate(_evaluate_schematic_connectivity_gate())
         except Exception as exc:
             return _blocked_resource("Schematic connectivity quality gate", exc)
+
+    @mcp.resource("kicad://board/layer_coverage")
+    def board_layer_coverage_resource() -> str:
+        """JSON per-layer copper coverage proxy from zone presence."""
+        try:
+            return _layer_coverage_json()
+        except Exception as exc:
+            return _blocked_json("kicad://board/layer_coverage", exc)
 
     @mcp.resource("kicad://gate/{gate_name}")
     def named_gate_resource(gate_name: str) -> str:

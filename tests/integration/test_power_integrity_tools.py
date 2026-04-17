@@ -112,6 +112,17 @@ async def test_power_integrity_surface(sample_project, mock_board) -> None:
         "thermal_calculate_via_count",
         {"power_w": 1.5, "via_diameter_mm": 0.3, "thermal_resistance_target": 5.0},
     )
+    package_vias = await call_tool_text(
+        server,
+        "thermal_calculate_via_count",
+        {
+            "package_power_w": 2.0,
+            "ambient_c": 35.0,
+            "max_junction_c": 95.0,
+            "theta_ja_deg_c_w": 60.0,
+            "via_diameter_mm": 0.3,
+        },
+    )
     thermal = await call_tool_text(
         server,
         "thermal_check_copper_pour",
@@ -128,4 +139,6 @@ async def test_power_integrity_surface(sample_project, mock_board) -> None:
     assert mock_board.refill_zones.called
     assert "Thermal via estimate" in vias
     assert "Required via count" in vias
+    assert "Package theta JA: 60.00 C/W" in package_vias
+    assert "Required via-network resistance" in package_vias
     assert "Thermal copper-pour review for GND" in thermal

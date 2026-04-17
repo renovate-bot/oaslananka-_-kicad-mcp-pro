@@ -38,6 +38,7 @@ PROJECT_SPEC_FILENAME = "project_spec.json"
 LEGACY_DESIGN_INTENT_FILENAME = "design_intent.json"
 DEFAULT_INFERRED_DECOUPLING_DISTANCE_MM = 6.0
 ProjectSpecSource = Literal["project_spec", "legacy_design_intent", "none"]
+_REPORTED_LEGACY_INTENT_PATHS: set[Path] = set()
 
 
 class ScanDirectoryInput(BaseModel):
@@ -69,6 +70,7 @@ class RFKeepoutIntent(BaseModel):
     y_mm: float
     w_mm: float = Field(gt=0.0, le=5000.0)
     h_mm: float = Field(gt=0.0, le=5000.0)
+    frequency_mhz: float | None = Field(default=None, gt=0.0, le=300_000.0)
 
 
 class ProjectDesignIntent(BaseModel):
@@ -90,6 +92,9 @@ class ProjectDesignIntent(BaseModel):
     rf_keepout_regions: list[RFKeepoutIntent] = Field(default_factory=list)
     manufacturer: str = Field(default="")
     manufacturer_tier: str = Field(default="")
+    functional_spacing_mm: float = Field(default=5.0, ge=0.0, le=100.0)
+    thermal_hotspots: list[str] = Field(default_factory=list)
+    critical_frequencies_mhz: list[float] = Field(default_factory=list)
 
     # --- v2 fields (new in 2.1.0) ---
     power_rails: list[PowerRailSpec] = Field(
@@ -284,6 +289,9 @@ def _normalize_design_intent(intent: ProjectDesignIntent) -> ProjectDesignIntent
             "rf_keepout_regions": [region.model_dump() for region in intent.rf_keepout_regions],
             "manufacturer": intent.manufacturer.strip(),
             "manufacturer_tier": intent.manufacturer_tier.strip(),
+            "functional_spacing_mm": intent.functional_spacing_mm,
+            "thermal_hotspots": _normalized_unique(intent.thermal_hotspots),
+            "critical_frequencies_mhz": intent.critical_frequencies_mhz,
             # v2 fields — pass through as-is (already validated by Pydantic)
             "power_rails": [rail.model_dump() for rail in intent.power_rails],
             "interfaces": [iface.model_dump() for iface in intent.interfaces],
@@ -317,6 +325,9 @@ def _load_saved_design_intent() -> tuple[
 
     legacy_path = _legacy_design_intent_path()
     if legacy_path.exists():
+        if legacy_path not in _REPORTED_LEGACY_INTENT_PATHS:
+            _REPORTED_LEGACY_INTENT_PATHS.add(legacy_path)
+            logger.info("legacy_design_intent_loaded", path=str(legacy_path))
         notes.append(
             "Loaded legacy output/design_intent.json. "
             "Run project_set_design_intent() to migrate it into .kicad-mcp/project_spec.json."
@@ -337,13 +348,18 @@ def load_design_intent() -> ProjectDesignIntent:
     return intent
 
 
-def save_design_intent(intent: ProjectDesignIntent) -> Path:
-    """Persist the normalized project design spec inside the project root."""
+def _persist_project_spec(intent: ProjectDesignIntent) -> Path:
+    """Persist the normalized project spec to the canonical project_spec.json path."""
     path = _project_spec_path()
     normalized = _normalize_design_intent(intent)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(normalized.model_dump(), indent=2), encoding="utf-8")
     return path
+
+
+def save_design_intent(intent: ProjectDesignIntent) -> Path:
+    """Persist the normalized project design spec inside the project root."""
+    return _persist_project_spec(intent)
 
 
 def _render_design_intent(intent: ProjectDesignIntent) -> str:
@@ -380,6 +396,19 @@ def _render_design_intent(intent: ProjectDesignIntent) -> str:
         + (
             f"{intent.manufacturer} / {intent.manufacturer_tier}"
             if intent.manufacturer or intent.manufacturer_tier
+            else "(none)"
+        )
+    )
+    lines.append(f"- Functional spacing: {intent.functional_spacing_mm:.2f} mm")
+    lines.append(
+        "- Thermal hotspots: "
+        + (", ".join(intent.thermal_hotspots) if intent.thermal_hotspots else "(none)")
+    )
+    lines.append(
+        "- Critical frequencies: "
+        + (
+            ", ".join(f"{frequency:.2f} MHz" for frequency in intent.critical_frequencies_mhz)
+            if intent.critical_frequencies_mhz
             else "(none)"
         )
     )
@@ -618,6 +647,9 @@ def _merge_design_intent(
             rf_keepout_regions=explicit.rf_keepout_regions or inferred.rf_keepout_regions,
             manufacturer=explicit.manufacturer or inferred.manufacturer,
             manufacturer_tier=explicit.manufacturer_tier or inferred.manufacturer_tier,
+            functional_spacing_mm=explicit.functional_spacing_mm,
+            thermal_hotspots=explicit.thermal_hotspots,
+            critical_frequencies_mhz=explicit.critical_frequencies_mhz,
             # v2 — explicit only (inference does not produce these)
             power_rails=explicit.power_rails,
             interfaces=explicit.interfaces,
@@ -823,6 +855,12 @@ def register(mcp: FastMCP) -> None:
         selected_pcb = Path(pcb_file).expanduser().resolve() if pcb_file else scan.get("pcb")
         selected_sch = Path(sch_file).expanduser().resolve() if sch_file else scan.get("schematic")
         selected_project = scan.get("project")
+        if selected_project is not None and selected_pcb is None and selected_sch is None:
+            return (
+                "E_PROJECT_SCAN_INCOMPLETE: Found a .kicad_pro file but no matching "
+                ".kicad_pcb or .kicad_sch file in the selected directory. "
+                "Add at least one board or schematic file before activating this project."
+            )
         selected_output = (
             Path(output_dir).expanduser().resolve() if output_dir else project_path / "output"
         )
@@ -857,6 +895,9 @@ def register(mcp: FastMCP) -> None:
         rf_keepout_regions: list[dict[str, Any]] | None = None,
         manufacturer: str = "",
         manufacturer_tier: str = "",
+        functional_spacing_mm: float | None = None,
+        thermal_hotspots: list[str] | None = None,
+        critical_frequencies_mhz: list[float] | None = None,
         # v2 parameters
         power_rails: list[dict[str, Any]] | None = None,
         interfaces: list[dict[str, Any]] | None = None,
@@ -901,6 +942,19 @@ def register(mcp: FastMCP) -> None:
             manufacturer=existing.manufacturer if not manufacturer else manufacturer,
             manufacturer_tier=(
                 existing.manufacturer_tier if not manufacturer_tier else manufacturer_tier
+            ),
+            functional_spacing_mm=(
+                existing.functional_spacing_mm
+                if functional_spacing_mm is None
+                else functional_spacing_mm
+            ),
+            thermal_hotspots=(
+                existing.thermal_hotspots if thermal_hotspots is None else thermal_hotspots
+            ),
+            critical_frequencies_mhz=(
+                existing.critical_frequencies_mhz
+                if critical_frequencies_mhz is None
+                else critical_frequencies_mhz
             ),
             # v2 fields
             power_rails=(

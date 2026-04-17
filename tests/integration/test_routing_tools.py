@@ -33,7 +33,7 @@ async def test_route_autoroute_freerouting_smoke_handles_large_dsn(
             ses_path = sample_project / "output" / "routing" / ses_path.name
         ses_path.parent.mkdir(parents=True, exist_ok=True)
         ses_path.write_text("ses", encoding="utf-8")
-        return subprocess.CompletedProcess(cmd, 0, stdout="ok", stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout="pass 4\n100% routed\nok", stderr="")
 
     monkeypatch.setattr("kicad_mcp.utils.freerouting.subprocess.run", fake_run)
 
@@ -55,4 +55,6 @@ async def test_route_autoroute_freerouting_smoke_handles_large_dsn(
 
     assert "FreeRouting completed successfully" in result
     assert (sample_project / "output" / "routing" / "board.ses").exists()
-    assert "Thread count advisory: 8" in result
+    assert "Thread count: 8" in result
+    assert "Routed: 100.00%" in result
+    assert "Pass count: 4" in result

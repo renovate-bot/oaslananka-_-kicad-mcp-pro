@@ -62,4 +62,33 @@ async def test_vcs_checkpoint_diff_and_restore_roundtrip(sample_project: Path) -
     assert "Initial checkpoint" in checkpoints_text
     assert "Checkpoint restored." in restore_text
     assert "backed up" in restore_text
+    assert "Recovery branch: mcp-restore-" in restore_text
     assert restored_schematic == initial_schematic
+
+
+@pytest.mark.anyio
+async def test_vcs_tag_release_requires_clean_gate(sample_project: Path, monkeypatch) -> None:
+    server = build_server("full")
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+    await call_tool_text(server, "vcs_init_git", {"project_dir": str(sample_project)})
+    await call_tool_text(
+        server,
+        "vcs_commit_checkpoint",
+        {"message": "Release candidate", "auto_drc": False},
+    )
+    monkeypatch.setattr(
+        "kicad_mcp.tools.version_control._evaluate_project_gate",
+        lambda: [],
+    )
+    monkeypatch.setattr(
+        "kicad_mcp.tools.version_control._combined_status",
+        lambda _outcomes: "PASS",
+    )
+
+    tag_text = await call_tool_text(
+        server,
+        "vcs_tag_release",
+        {"tag": "v2.4.0-test", "message": "Release candidate"},
+    )
+
+    assert "Release tag created." in tag_text

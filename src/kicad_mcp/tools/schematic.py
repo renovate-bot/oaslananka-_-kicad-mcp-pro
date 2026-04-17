@@ -964,6 +964,86 @@ def _read_sheet_paper(sch_file: Path) -> str:
     return "A4"
 
 
+def _symbol_bbox_bounds(symbol: dict[str, Any]) -> tuple[float, float, float, float]:
+    """Estimate a symbol bounding box and widen it to include routed pin tips."""
+    x = float(symbol.get("x", symbol.get("x_mm", 0.0)) or 0.0)
+    y = float(symbol.get("y", symbol.get("y_mm", 0.0)) or 0.0)
+    x_min = x - _SYMBOL_HALF_W_MM
+    y_min = y - _SYMBOL_HALF_H_MM
+    x_max = x + _SYMBOL_HALF_W_MM
+    y_max = y + _SYMBOL_HALF_H_MM
+
+    lib_id = str(symbol.get("lib_id", "") or "")
+    if not lib_id:
+        return x_min, y_min, x_max, y_max
+
+    try:
+        library, symbol_name = _split_lib_id(lib_id)
+    except ValueError:
+        return x_min, y_min, x_max, y_max
+
+    try:
+        rotation = int(round(float(symbol.get("rotation", 0.0) or 0.0)))
+        unit = int(symbol.get("unit", 1) or 1)
+    except (TypeError, ValueError):
+        return x_min, y_min, x_max, y_max
+
+    pins = get_pin_positions(
+        library=library,
+        symbol_name=symbol_name,
+        sym_x=x,
+        sym_y=y,
+        rotation=rotation,
+        unit=unit,
+    )
+    if not pins:
+        return x_min, y_min, x_max, y_max
+
+    pin_xs = [point[0] for point in pins.values()]
+    pin_ys = [point[1] for point in pins.values()]
+    return (
+        min(x_min, min(pin_xs)),
+        min(y_min, min(pin_ys)),
+        max(x_max, max(pin_xs)),
+        max(y_max, max(pin_ys)),
+    )
+
+
+def _normalize_keepout_region(
+    region: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    x1, y1, x2, y2 = region
+    return min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)
+
+
+def _keepout_occupied_cells(
+    keepout_regions: list[tuple[float, float, float, float]],
+    *,
+    cell_w: float,
+    cell_h: float,
+) -> set[tuple[int, int]]:
+    """Map rectangular keepouts to blocked grid cells for placement search."""
+    blocked: set[tuple[int, int]] = set()
+    for region in keepout_regions:
+        x_min, y_min, x_max, y_max = _normalize_keepout_region(region)
+        start_col = int(
+            math.floor((x_min - _SYMBOL_HALF_W_MM - AUTO_LAYOUT_ORIGIN_X_MM) / cell_w)
+        )
+        end_col = int(
+            math.ceil((x_max + _SYMBOL_HALF_W_MM - AUTO_LAYOUT_ORIGIN_X_MM) / cell_w)
+        )
+        start_row = int(
+            math.floor((y_min - _SYMBOL_HALF_H_MM - AUTO_LAYOUT_ORIGIN_Y_MM) / cell_h)
+        )
+        end_row = int(
+            math.ceil((y_max + _SYMBOL_HALF_H_MM - AUTO_LAYOUT_ORIGIN_Y_MM) / cell_h)
+        )
+        for col in range(start_col, end_col + 1):
+            for row in range(start_row, end_row + 1):
+                blocked.add((col, row))
+    return blocked
+
+
 def _next_free_cell(
     occupied: set[tuple[int, int]],
     cell_w: float = AUTO_LAYOUT_COLUMN_SPACING_MM,
@@ -1018,6 +1098,44 @@ def _point_near_existing(
                 f"Use sch_find_free_placement to get a safe coordinate."
             )
     return None
+
+
+def _normalize_anchor_refs(anchor_ref: str | list[str] | None) -> list[str]:
+    if anchor_ref is None:
+        return []
+    if isinstance(anchor_ref, str):
+        refs = [anchor_ref]
+    else:
+        refs = list(anchor_ref)
+
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for ref in refs:
+        cleaned = ref.strip()
+        if cleaned and cleaned not in seen:
+            normalized.append(cleaned)
+            seen.add(cleaned)
+    return normalized
+
+
+def _functional_zone_origin(
+    category: str,
+    *,
+    max_cols: int,
+    max_rows: int,
+    spacing_mm: float,
+) -> tuple[int, int]:
+    zone_col, zone_row = _FUNCTIONAL_ZONES.get(category, (5, 7))
+    unique_cols = sorted({col for col, _ in _FUNCTIONAL_ZONES.values()})
+    unique_rows = sorted({row for _, row in _FUNCTIONAL_ZONES.values()})
+    extra_cols = max(0, math.ceil(spacing_mm / AUTO_LAYOUT_COLUMN_SPACING_MM) - 1)
+    extra_rows = max(0, math.ceil(spacing_mm / AUTO_LAYOUT_ROW_SPACING_MM) - 1)
+    zone_col += unique_cols.index(zone_col) * extra_cols
+    zone_row += unique_rows.index(zone_row) * extra_rows
+    return (
+        min(zone_col, max(0, max_cols - _ZONE_MAX_COLS)),
+        min(zone_row, max(0, max_rows - 1)),
+    )
 
 
 def _netlist_layout_point(index: int) -> tuple[float, float]:
@@ -3083,6 +3201,36 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @headless_compatible
+    def sch_set_hop_over(enabled: bool = True) -> str:
+        """Toggle KiCad 10 hop-over display in the active project settings."""
+        cfg = get_config()
+        if cfg.project_file is None or not cfg.project_file.exists():
+            raise ValueError(
+                "No project file is configured. Call kicad_set_project() before changing "
+                "schematic display settings."
+            )
+        try:
+            project_payload = json.loads(cfg.project_file.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                f"Project file '{cfg.project_file}' does not contain valid JSON."
+            ) from exc
+        if not isinstance(project_payload, dict):
+            raise ValueError("The active project file must contain a JSON object.")
+
+        schematic_settings = cast(
+            dict[str, object],
+            project_payload.setdefault("schematic", {}),
+        )
+        schematic_settings["hop_over_display"] = bool(enabled)
+        cfg.project_file.write_text(json.dumps(project_payload, indent=2), encoding="utf-8")
+        return (
+            f"Hop-over display set to {'enabled' if enabled else 'disabled'} in "
+            f"{cfg.project_file}."
+        )
+
+    @mcp.tool()
+    @headless_compatible
     def sch_list_swappable_pins(component_ref: str) -> str:
         """List candidate pins and units that can participate in a swap workflow."""
         symbol = _symbol_by_reference(component_ref)
@@ -4154,9 +4302,6 @@ def register(mcp: FastMCP) -> None:
         if not all_syms:
             return "The active schematic contains no symbols."
 
-        hw = _SYMBOL_HALF_W_MM
-        hh = _SYMBOL_HALF_H_MM
-
         lines = [
             f"Schematic bounding boxes ({len(all_syms)} symbols):",
             (
@@ -4165,23 +4310,26 @@ def register(mcp: FastMCP) -> None:
             ),
             "-" * 76,
         ]
+        extents: list[tuple[float, float, float, float]] = []
         for sym in all_syms:
             ref = str(sym.get("reference", "?"))
             val = str(sym.get("value", ""))[:16]
             x = float(sym.get("x", sym.get("x_mm", 0.0)) or 0.0)
             y = float(sym.get("y", sym.get("y_mm", 0.0)) or 0.0)
+            x_min, y_min, x_max, y_max = _symbol_bbox_bounds(sym)
+            extents.append((x_min, y_min, x_max, y_max))
             lines.append(
                 f"{ref:<10} {val:<16} {x:>8.2f} {y:>8.2f} "
-                f"{x - hw:>8.2f} {y - hh:>8.2f} {x + hw:>8.2f} {y + hh:>8.2f}"
+                f"{x_min:>8.2f} {y_min:>8.2f} {x_max:>8.2f} {y_max:>8.2f}"
             )
 
-        if all_syms:
-            all_x = [float(s.get("x", s.get("x_mm", 0.0)) or 0.0) for s in all_syms]
-            all_y = [float(s.get("y", s.get("y_mm", 0.0)) or 0.0) for s in all_syms]
+        if extents:
             lines += [
                 "",
-                f"Sheet occupied region: X=[{min(all_x) - hw:.1f}, {max(all_x) + hw:.1f}] "
-                f"Y=[{min(all_y) - hh:.1f}, {max(all_y) + hh:.1f}] mm",
+                f"Sheet occupied region: X=[{min(item[0] for item in extents):.1f}, "
+                f"{max(item[2] for item in extents):.1f}] "
+                f"Y=[{min(item[1] for item in extents):.1f}, "
+                f"{max(item[3] for item in extents):.1f}] mm",
                 "Tip: use sch_find_free_placement to get safe coordinates for new symbols.",
             ]
 
@@ -4193,6 +4341,7 @@ def register(mcp: FastMCP) -> None:
         count: int = 1,
         cell_width_mm: float = AUTO_LAYOUT_COLUMN_SPACING_MM,
         cell_height_mm: float = AUTO_LAYOUT_ROW_SPACING_MM,
+        keepout_regions: list[tuple[float, float, float, float]] | None = None,
     ) -> str:
         """Find N collision-free placement coordinates for new symbols.
 
@@ -4205,6 +4354,8 @@ def register(mcp: FastMCP) -> None:
             count: Number of free coordinate slots to return (default 1, max 64).
             cell_width_mm: Grid cell width in mm (default 25.4 — one 10-mil grid unit).
             cell_height_mm: Grid cell height in mm (default 17.78).
+            keepout_regions: Optional rectangular keepouts as
+                ``[(x_min, y_min, x_max, y_max), ...]`` in mm.
 
         Returns:
             A list of (x_mm, y_mm) coordinate pairs, one per requested slot.
@@ -4215,6 +4366,15 @@ def register(mcp: FastMCP) -> None:
         all_syms = sch_data["symbols"] + sch_data["power_symbols"]
 
         occupied = _estimate_occupied_cells(all_syms, cell_w=cell_width_mm, cell_h=cell_height_mm)
+        keepouts = keepout_regions or []
+        if keepouts:
+            occupied.update(
+                _keepout_occupied_cells(
+                    keepouts,
+                    cell_w=cell_width_mm,
+                    cell_h=cell_height_mm,
+                )
+            )
 
         coords: list[tuple[float, float]] = []
         for _ in range(count):
@@ -4227,7 +4387,8 @@ def register(mcp: FastMCP) -> None:
 
         lines = [
             f"Free placement coordinates ({count} slot(s) requested, "
-            f"{len(all_syms)} existing symbol(s) avoided):",
+            f"{len(all_syms)} existing symbol(s) avoided, "
+            f"{len(keepouts)} keepout region(s) respected):",
         ]
         for i, (x, y) in enumerate(coords, start=1):
             lines.append(f"  Slot {i}: x_mm={x}, y_mm={y}")
@@ -4376,6 +4537,7 @@ def register(mcp: FastMCP) -> None:
     @headless_compatible
     def sch_auto_place_functional(
         symbol_list: list[str] | None = None,
+        anchor_ref: str | list[str] | None = None,
     ) -> str:
         """Place schematic symbols into semantically meaningful zones on the sheet.
 
@@ -4407,6 +4569,8 @@ def register(mcp: FastMCP) -> None:
         Args:
             symbol_list: Optional list of reference designators to place.  If
                 omitted, all symbols in the schematic are placed.
+            anchor_ref: Optional single reference or list of references to keep
+                fixed while re-placing the remaining symbols around them.
 
         Returns:
             A summary showing how many symbols were placed per functional zone,
@@ -4427,6 +4591,13 @@ def register(mcp: FastMCP) -> None:
         if not requested:
             return "The active schematic contains no symbols to place."
 
+        from .project import load_design_intent
+
+        design_intent = load_design_intent()
+        functional_spacing_mm = design_intent.functional_spacing_mm
+        anchor_refs = _normalize_anchor_refs(anchor_ref)
+        anchor_set = set(anchor_refs)
+
         requested_set = set(requested)
         paper = _read_sheet_paper(sch_file)
         max_cols = _sheet_usable_cols(paper)
@@ -4434,7 +4605,12 @@ def register(mcp: FastMCP) -> None:
         sheet_w, sheet_h = PAPER_SIZES_MM.get(paper, PAPER_SIZES_MM["A4"])
 
         # Fixed obstacles — symbols we are NOT moving
-        fixed_syms = [s for s in all_syms if str(s.get("reference", "")) not in requested_set]
+        fixed_syms = [
+            s
+            for s in all_syms
+            if str(s.get("reference", "")) not in requested_set
+            or str(s.get("reference", "")) in anchor_set
+        ]
         global_occupied = _estimate_occupied_cells(fixed_syms)
 
         # Per-zone occupancy
@@ -4451,12 +4627,30 @@ def register(mcp: FastMCP) -> None:
                 "lib_id": str(s.get("lib_id", "")),
             }
 
+        anchored_preserved = [
+            ref for ref in anchor_refs if ref in requested_set and schematic.components.get(ref)
+        ]
+        for symbol in fixed_syms:
+            reference = str(symbol.get("reference", ""))
+            category = _classify_symbol(
+                ref=reference,
+                value=sym_meta.get(reference, {}).get("value", ""),
+                lib_id=sym_meta.get(reference, {}).get("lib_id", ""),
+            )
+            x = float(symbol.get("x", symbol.get("x_mm", 0.0)) or 0.0)
+            y = float(symbol.get("y", symbol.get("y_mm", 0.0)) or 0.0)
+            col = int(round((x - AUTO_LAYOUT_ORIGIN_X_MM) / AUTO_LAYOUT_COLUMN_SPACING_MM))
+            row = int(round((y - AUTO_LAYOUT_ORIGIN_Y_MM) / AUTO_LAYOUT_ROW_SPACING_MM))
+            zone_occupied.setdefault(category, set()).add((col, row))
+
         placed = 0
         overflow_count = 0
         missing: list[str] = []
         zone_counts: dict[str, int] = {}
 
         for reference in requested:
+            if reference in anchor_set:
+                continue
             component = schematic.components.get(reference)
             if component is None:
                 missing.append(reference)
@@ -4469,11 +4663,12 @@ def register(mcp: FastMCP) -> None:
                 lib_id=meta.get("lib_id", ""),
             )
 
-            zone_col, zone_row = _FUNCTIONAL_ZONES.get(category, (5, 7))
-
-            # Clamp zone origin to sheet bounds
-            zone_col = min(zone_col, max(0, max_cols - _ZONE_MAX_COLS))
-            zone_row = min(zone_row, max(0, max_rows - 1))
+            zone_col, zone_row = _functional_zone_origin(
+                category,
+                max_cols=max_cols,
+                max_rows=max_rows,
+                spacing_mm=functional_spacing_mm,
+            )
 
             # Find next free cell within this zone's sub-grid
             placed_in_zone = zone_occupied[category]
@@ -4522,6 +4717,11 @@ def register(mcp: FastMCP) -> None:
 
         result = _reload_schematic()
         missing_suffix = f" Missing refs: {', '.join(missing)}." if missing else ""
+        anchor_suffix = (
+            f"\nAnchored refs preserved: {', '.join(anchored_preserved)}."
+            if anchored_preserved
+            else ""
+        )
 
         zone_lines = [f"  {cat}: {n}" for cat, n in sorted(zone_counts.items())]
         summary = "\n".join(zone_lines) if zone_lines else "  (none)"
@@ -4539,7 +4739,8 @@ def register(mcp: FastMCP) -> None:
             f"{result}\n"
             f"Functional auto-placement complete on '{paper}' sheet — "
             f"{placed} symbol(s) placed in {len(zone_counts)} zone(s):\n{summary}"
-            f"{missing_suffix}{overflow_note}"
+            f"\nFunctional spacing target: {functional_spacing_mm:.2f} mm."
+            f"{anchor_suffix}{missing_suffix}{overflow_note}"
         )
 
     # -----------------------------------------------------------------------
@@ -4651,6 +4852,15 @@ def register(mcp: FastMCP) -> None:
                     f"- **{sym.get('ref_prefix', '?')}?** "
                     f"{sym.get('value', '?')} — {sym.get('comment', '')}"
                 )
+                left_pins = ", ".join(str(pin) for pin in sym.get("pins_left", []))
+                right_pins = ", ".join(str(pin) for pin in sym.get("pins_right", []))
+                pin_parts: list[str] = []
+                if left_pins:
+                    pin_parts.append(f"left: {left_pins}")
+                if right_pins:
+                    pin_parts.append(f"right: {right_pins}")
+                if pin_parts:
+                    lines.append(f"  Pins: {' | '.join(pin_parts)}")
             lines.append("")
 
         nets = data.get("nets", [])

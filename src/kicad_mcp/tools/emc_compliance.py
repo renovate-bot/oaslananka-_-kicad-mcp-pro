@@ -164,12 +164,24 @@ def _nearest_cap_distance_mm(reference: str) -> float | None:
 def _high_speed_nets() -> list[str]:
     priority = ("USB", "HS", "CLK", "DDR", "PCIE", "ETH", "HDMI")
     names = sorted({name for name in (_track_net_name(track) for track in _board_tracks()) if name})
+    intent_nets = _intent_critical_nets()
+    if intent_nets:
+        return [name for name in intent_nets if name in names] or intent_nets
     selected = [
         name
         for name in names
         if any(token in name.upper() for token in priority)
     ]
     return selected or names
+
+
+def _intent_critical_nets() -> list[str]:
+    try:
+        from .project import load_design_intent
+
+        return load_design_intent().critical_nets
+    except ValueError:
+        return []
 
 
 def _find_diff_pair() -> tuple[str, str] | None:
@@ -215,7 +227,18 @@ def _emc_check_ground_plane_voids_text(max_void_area_mm2: float) -> tuple[str, s
     )
 
 
-def _emc_check_return_path_text(signal_net: str, reference_plane_layer: str) -> tuple[str, str]:
+def _first_ground_reference_layer() -> str:
+    for zone in _gnd_zones():
+        for layer in getattr(zone, "layers", []):
+            layer_name = str(BoardLayer.Name(layer))
+            return layer_name.removeprefix("BL_")
+    return "B_Cu"
+
+
+def _emc_check_single_return_path_text(
+    signal_net: str,
+    reference_plane_layer: str,
+) -> tuple[str, str]:
     tracks = _tracks_for_net(signal_net)
     if not tracks:
         return "FAIL", f"No routed tracks were found for signal net '{signal_net}'."
@@ -232,6 +255,40 @@ def _emc_check_return_path_text(signal_net: str, reference_plane_layer: str) -> 
         "PASS",
         f"Signal net '{signal_net}' is routed on {', '.join(signal_layers)} with a GND "
         f"reference plane on {reference_plane_layer}.",
+    )
+
+
+def _emc_check_return_path_text(
+    signal_net: str,
+    reference_plane_layer: str,
+    search_radius_mm: float = 2.0,
+) -> tuple[str, str]:
+    target_nets = [signal_net] if signal_net else _high_speed_nets()
+    if not target_nets:
+        return "WARN", "No high-speed or design-intent critical nets were available."
+    plane_layer = (
+        _first_ground_reference_layer()
+        if reference_plane_layer == "auto"
+        else reference_plane_layer
+    )
+    failures: list[str] = []
+    details: list[str] = []
+    for net_name in target_nets[: get_config().max_items_per_response]:
+        verdict, detail = _emc_check_single_return_path_text(net_name, plane_layer)
+        details.append(f"{net_name}: {verdict} ({detail})")
+        if verdict != "PASS":
+            failures.append(net_name)
+    if failures:
+        geometry = ", ".join(f"net={name}, radius={search_radius_mm:.2f}mm" for name in failures)
+        return (
+            "WARN",
+            f"Violations: {len(failures)}. Geometry: {geometry}. "
+            + " ".join(details),
+        )
+    return (
+        "PASS",
+        f"All {len(target_nets)} checked net(s) have a GND return on {plane_layer}. "
+        + " ".join(details),
     )
 
 
@@ -383,9 +440,17 @@ def register(mcp: FastMCP) -> None:
         return f"Ground plane void review ({verdict}):\n- {detail}"
 
     @mcp.tool()
-    def emc_check_return_path_continuity(signal_net: str, reference_plane_layer: str) -> str:
-        """Check whether a signal has an obvious nearby GND return plane."""
-        verdict, detail = _emc_check_return_path_text(signal_net, reference_plane_layer)
+    def emc_check_return_path_continuity(
+        signal_net: str = "",
+        reference_plane_layer: str = "auto",
+        search_radius_mm: float = 2.0,
+    ) -> str:
+        """Check EMC return-path continuity for a signal or all critical high-speed nets."""
+        verdict, detail = _emc_check_return_path_text(
+            signal_net,
+            reference_plane_layer,
+            search_radius_mm,
+        )
         return f"Return path continuity ({verdict}):\n- {detail}"
 
     @mcp.tool()

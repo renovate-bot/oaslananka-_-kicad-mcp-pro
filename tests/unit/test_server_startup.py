@@ -36,6 +36,32 @@ def test_print_startup_diagnostics_logs_expected_fields(
     assert str(payload["ipc_status"]).startswith("unavailable")
 
 
+def test_print_startup_diagnostics_warns_when_stdio_uses_auth_token(
+    sample_project: Path,
+    monkeypatch,
+) -> None:
+    _ = sample_project
+    cfg = get_config()
+    cfg.transport = "stdio"
+    cfg.auth_token = "secret-token"  # noqa: S105 - regression fixture
+    warnings: list[str] = []
+
+    monkeypatch.setattr("kicad_mcp.server.find_kicad_version", lambda _cli: "10.0.1")
+    monkeypatch.setattr(
+        "kicad_mcp.server.get_board",
+        lambda: (_ for _ in ()).throw(KiCadConnectionError("IPC not reachable")),
+    )
+    monkeypatch.setattr(
+        "kicad_mcp.server.logger.warning",
+        lambda event, **_kwargs: warnings.append(event),
+    )
+    monkeypatch.setattr("kicad_mcp.server.logger.info", lambda *_args, **_kwargs: None)
+
+    _print_startup_diagnostics(cfg)
+
+    assert warnings == ["stdio_auth_token_ignored"]
+
+
 def test_main_callback_runs_startup_diagnostics_before_server_run(
     sample_project: Path,
     monkeypatch,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -61,3 +62,61 @@ async def test_variant_tools_create_diff_and_export(sample_project) -> None:
     exported = await call_tool_text(server, "variant_export_bom", {"variant": "lite"})
     assert "lite_bom.csv" in exported
 
+    project_payload = json.loads((sample_project / "demo.kicad_pro").read_text(encoding="utf-8"))
+    assert project_payload["variants"]["active_variant"] == "lite"
+    assert "lite" in project_payload["variants"]["variants"]
+    assert not Path(sample_project / ".kicad-mcp" / "variants.json").exists()
+
+
+@pytest.mark.anyio
+async def test_variant_tools_cover_error_paths_and_json_export(sample_project) -> None:
+    _write_variant_schematic(sample_project)
+    server = create_server()
+
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+    await call_tool_text(server, "variant_create", {"name": "lite"})
+
+    with pytest.raises(Exception, match="must not be empty"):
+        await call_tool_text(server, "variant_create", {"name": "   "})
+    with pytest.raises(Exception, match="already exists"):
+        await call_tool_text(server, "variant_create", {"name": "lite"})
+    with pytest.raises(Exception, match="was not found in the active schematic"):
+        await call_tool_text(
+            server,
+            "variant_set_component_override",
+            {"variant": "lite", "reference": "U99", "enabled": False},
+        )
+
+    await call_tool_text(
+        server,
+        "variant_set_component_override",
+        {
+            "variant": "lite",
+            "reference": "R1",
+            "enabled": True,
+            "value": "22k",
+            "footprint": "Resistor_SMD:R_0603",
+        },
+    )
+    diff = json.loads(
+        await call_tool_text(
+            server,
+            "variant_diff_bom",
+            {"variant_a": "default", "variant_b": "lite"},
+        )
+    )
+    exported = await call_tool_text(
+        server,
+        "variant_export_bom",
+        {"variant": "lite", "format": "json"},
+    )
+
+    assert diff["changed"][0]["reference"] == "R1"
+    assert "lite_bom.json" in exported
+    exported_payload = json.loads(
+        (sample_project / "output" / "variants" / "lite_bom.json").read_text(encoding="utf-8")
+    )
+    assert exported_payload[0]["footprint"] == "Resistor_SMD:R_0603"
+
+    with pytest.raises(Exception, match="Only csv and json"):
+        await call_tool_text(server, "variant_export_bom", {"variant": "lite", "format": "xlsx"})

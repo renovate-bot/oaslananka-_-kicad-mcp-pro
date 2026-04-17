@@ -62,6 +62,18 @@ def _current_track_length_mm(net_name: str) -> float:
     return length
 
 
+def _current_track_length_for_pattern_mm(net_pattern: str) -> float:
+    if "*" not in net_pattern:
+        return _current_track_length_mm(net_pattern)
+    regex = re.compile("^" + re.escape(net_pattern).replace(r"\*", ".*") + "$")
+    matching_names = [
+        name
+        for name in _list_board_net_names()
+        if regex.fullmatch(name) is not None
+    ]
+    return sum(_current_track_length_mm(name) for name in matching_names)
+
+
 def _infer_diff_pair_base(net_p: str, net_n: str) -> str | None:
     candidates = [
         (r"(.+)_P$", r"(.+)_N$"),
@@ -463,10 +475,12 @@ def register(mcp: FastMCP) -> None:
         dsn_path: str = "output/routing/board.dsn",
         ses_path: str = "output/routing/board.ses",
         net_classes_to_ignore: list[str] | None = None,
+        exclude_nets: list[str] | None = None,
         max_passes: int = 100,
         thread_count: int = 4,
         use_docker: bool = True,
         freerouting_jar_path: str | None = None,
+        drc_report_path: str = "output/routing/freerouting.drc.json",
         ctx: Context[Any, Any, Any] | None = None,
     ) -> str:
         """Run FreeRouting on a Specctra DSN file and stage the resulting SES session."""
@@ -475,6 +489,7 @@ def register(mcp: FastMCP) -> None:
         pcb_file = _get_pcb_file()
         dsn_target = cfg.resolve_within_project(Path(dsn_path))
         ses_target = cfg.resolve_within_project(Path(ses_path))
+        drc_target = cfg.resolve_within_project(Path(drc_report_path)) if drc_report_path else None
 
         try:
             await _report_progress(ctx, 10, 100, "Exporting DSN for FreeRouting...")
@@ -490,6 +505,8 @@ def register(mcp: FastMCP) -> None:
                 if freerouting_jar_path
                 else None,
                 net_classes_to_ignore=net_classes_to_ignore,
+                exclude_nets=exclude_nets,
+                drc_report_path=drc_target,
             )
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             return f"FreeRouting autoroute failed: {exc}"
@@ -529,15 +546,21 @@ def register(mcp: FastMCP) -> None:
         except (FileNotFoundError, RuntimeError, ValueError) as exc:
             return f"FreeRouting autoroute failed while staging the SES file: {exc}"
 
-        ignore_text = ", ".join(net_classes_to_ignore or []) or "none"
+        ignore_text = ", ".join([*(net_classes_to_ignore or []), *(exclude_nets or [])]) or "none"
         await _report_progress(ctx, 100, 100, "FreeRouting autoroute complete.")
         return (
             "FreeRouting completed successfully.\n"
             f"Mode: {result.mode}\n"
             f"DSN: {_relative_project_path(dsn_file)}\n"
             f"SES: {_relative_project_path(staged)}\n"
+            f"Routed: {result.routed_pct:.2f}% ({result.total_nets} net(s), "
+            f"{len(result.unrouted_nets)} unrouted)\n"
+            f"Pass count: {result.pass_count}\n"
+            f"Wall time: {result.wall_seconds:.3f}s\n"
             f"Ignored net classes: {ignore_text}\n"
-            f"Thread count advisory: {thread_count}"
+            f"Thread count: {thread_count}\n"
+            f"SES path: {_relative_project_path(result.ses_path)}\n"
+            f"stdout tail: {result.stdout_tail or '(empty)'}"
         )
 
     @mcp.tool()
@@ -700,6 +723,8 @@ def register(mcp: FastMCP) -> None:
         profiles_state = _load_state_file(_TUNING_PROFILES_FILENAME, {"profiles": {}})
         profiles = cast(dict[str, dict[str, object]], profiles_state.get("profiles", {}))
         propagation_speed_factor = 0.5
+        profile_impedance_ohm = 50.0
+        effective_er: float | None = None
         if layer:
             matching = next(
                 (
@@ -712,9 +737,47 @@ def register(mcp: FastMCP) -> None:
                 raw_factor = matching.get("propagation_speed_factor", propagation_speed_factor)
                 if isinstance(raw_factor, (int, float)):
                     propagation_speed_factor = float(raw_factor)
+                raw_impedance = matching.get("trace_impedance_ohm", profile_impedance_ohm)
+                if isinstance(raw_impedance, (int, float)):
+                    profile_impedance_ohm = float(raw_impedance)
 
-        target_mm = _delay_to_length_mm(target_delay_ps, propagation_speed_factor)
-        tolerance_mm = _delay_to_length_mm(tolerance_ps, propagation_speed_factor)
+        if layer:
+            try:
+                from ..utils.impedance import (
+                    propagation_delay_ps_per_mm,
+                    solve_width_for_impedance,
+                    trace_impedance,
+                )
+                from .pcb import _current_stackup_specs, _impedance_context_for_layer
+
+                specs = _current_stackup_specs()
+                trace_type, height_mm, er, copper_oz = _impedance_context_for_layer(specs, layer)
+                solved_width_mm = solve_width_for_impedance(
+                    profile_impedance_ohm,
+                    height_mm,
+                    er,
+                    trace_type=trace_type,
+                    copper_oz=copper_oz,
+                )
+                _, effective_er = trace_impedance(
+                    solved_width_mm,
+                    height_mm,
+                    er,
+                    trace_type=trace_type,
+                    copper_oz=copper_oz,
+                )
+                delay_ps_per_mm = propagation_delay_ps_per_mm(effective_er)
+                target_mm = target_delay_ps / delay_ps_per_mm
+                tolerance_mm = tolerance_ps / delay_ps_per_mm
+            except ValueError:
+                target_mm = _delay_to_length_mm(target_delay_ps, propagation_speed_factor)
+                tolerance_mm = _delay_to_length_mm(tolerance_ps, propagation_speed_factor)
+        else:
+            target_mm = _delay_to_length_mm(target_delay_ps, propagation_speed_factor)
+            tolerance_mm = _delay_to_length_mm(tolerance_ps, propagation_speed_factor)
+
+        current_length = _current_track_length_for_pattern_mm(net_or_group)
+        required_extension = target_mm - current_length
         rule_name = f"Time-domain tune {net_or_group}"
         condition = _net_pattern_condition(net_or_group)
         rule_body = "\n".join(
@@ -732,12 +795,22 @@ def register(mcp: FastMCP) -> None:
             path = _write_rule(rule_name, rule_body)
         except (OSError, ValueError) as exc:
             return f"Time-domain tuning rule update failed: {exc}"
-        return (
-            f"Time-domain tuning rule '{rule_name}' written to {path}.\n"
-            f"Target delay: {target_delay_ps:.3f} ps\n"
-            f"Tolerance: {tolerance_ps:.3f} ps\n"
-            f"Fallback target length: {target_mm:.3f} mm"
-        )
+
+        lines = [
+            f"Time-domain tuning rule '{rule_name}' written to {path}.",
+            f"Target delay: {target_delay_ps:.3f} ps",
+            f"Tolerance: {tolerance_ps:.3f} ps",
+            f"Current measured length: {current_length:.3f} mm",
+            f"Computed target length: {target_mm:.3f} mm",
+            f"Required extension: {required_extension:.3f} mm",
+        ]
+        if layer:
+            lines.append(f"Layer: {layer}")
+        if effective_er is not None:
+            lines.append(f"Effective dielectric constant: {effective_er:.4f}")
+        else:
+            lines.append(f"Fallback target length: {target_mm:.3f} mm")
+        return "\n".join(lines)
 
     @mcp.tool()
     @headless_compatible

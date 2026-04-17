@@ -2,20 +2,48 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from . import __version__
+from .config import get_config
 from .tools.router import available_profiles
+
+_SERVER_CARD_LAST_UPDATED = datetime.now(UTC).isoformat()
 
 
 def get_wellknown_metadata() -> dict[str, object]:
     """Return server discovery metadata for ``/.well-known/mcp-server``."""
+    cfg = get_config()
+    protocol_version = "2025-11-25"
+    transport_type = "stdio" if cfg.transport == "stdio" else "streamable-http"
+    endpoint = None
+    if transport_type != "stdio":
+        host = cfg.host if cfg.host not in {"0.0.0.0", "::"} else "127.0.0.1"  # noqa: S104
+        endpoint = f"http://{host}:{cfg.port}{cfg.mount_path}"
     return {
-        "name": "kicad-mcp-pro",
+        "$schema": "https://static.modelcontextprotocol.io/schemas/mcp-server-card/v1.json",
         "version": __version__,
+        "protocolVersion": protocol_version,
+        "serverInfo": {
+            "name": "kicad-mcp-pro",
+            "title": "KiCad MCP Pro",
+            "version": __version__,
+        },
+        "transport": {
+            "type": transport_type,
+            "endpoint": endpoint,
+        },
+        "capabilities": {
+            "tools": True,
+            "resources": True,
+            "prompts": True,
+            "sampling": True,
+        },
+        "categories": ["eda", "pcb", "kicad"],
         "description": "AI-powered PCB and schematic design with KiCad",
-        "capabilities": ["tools", "resources", "prompts"],
         "profiles": available_profiles(),
-        "kicad_version_required": "9.0",
-        "transport": ["stdio", "streamable-http"],
+        "kicad_version_required": "10.x preferred, 9.x best effort",
         "docs": "https://oaslananka.github.io/kicad-mcp-pro",
         "registry": "io.github.oaslananka/kicad-mcp-pro",
+        "last_updated": _SERVER_CARD_LAST_UPDATED,
     }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from types import SimpleNamespace
 
@@ -77,6 +78,38 @@ def _board_text(*footprints: str) -> str:
             "",
         ]
     )
+
+
+@pytest.mark.anyio
+async def test_pcb_auto_place_force_directed_respects_keepouts() -> None:
+    server = build_server("pcb")
+
+    payload = json.loads(
+        await call_tool_text(
+            server,
+            "pcb_auto_place_force_directed",
+            {
+                "component_positions": [
+                    {"ref": "U1", "x": 15.0, "y": 10.0, "w": 4.0, "h": 4.0},
+                ],
+                "nets": [],
+                "board_width_mm": 30.0,
+                "board_height_mm": 20.0,
+                "iterations": 20,
+                "grid_mm": 0.5,
+                "keepout_regions": [[12.0, 8.0, 18.0, 12.0]],
+            },
+        )
+    )
+
+    placement = payload["placements"][0]
+    x_mm = float(placement["x"])
+    y_mm = float(placement["y"])
+
+    assert payload["grid_mm"] == 0.5
+    assert x_mm * 2 == round(x_mm * 2)
+    assert y_mm * 2 == round(y_mm * 2)
+    assert x_mm + 2.0 <= 12.0 or x_mm - 2.0 >= 18.0 or y_mm + 2.0 <= 8.0 or y_mm - 2.0 >= 12.0
 
 
 def _allow_schematic_sync(monkeypatch: pytest.MonkeyPatch) -> None:

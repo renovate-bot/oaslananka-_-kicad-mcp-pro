@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 import pytest
+import yaml
 
 from kicad_mcp.server import build_server
+from kicad_mcp.tools.schematic import parse_schematic_file
 from tests.conftest import call_tool_text
 
 
@@ -1077,6 +1080,243 @@ async def test_schematic_template_surface_includes_benchmark_templates(
     assert "hold_up_ms" in info
     assert "AUD_BZ1" in plan
     assert "lib_bind_part_to_symbol" in plan
+
+
+@pytest.mark.anyio
+async def test_schematic_template_info_lists_declared_pins(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+    templates_dir = Path("src/kicad_mcp/templates/subcircuits")
+
+    for template_path in sorted(templates_dir.glob("*.yaml")):
+        data = yaml.safe_load(template_path.read_text(encoding="utf-8"))
+        info = await call_tool_text(
+            server,
+            "sch_get_template_info",
+            {"template_name": template_path.stem},
+        )
+
+        for symbol in data.get("symbols", []):
+            left_pins = [str(pin) for pin in symbol.get("pins_left", [])]
+            right_pins = [str(pin) for pin in symbol.get("pins_right", [])]
+            if left_pins:
+                assert f"left: {', '.join(left_pins)}" in info
+            if right_pins:
+                assert f"right: {', '.join(right_pins)}" in info
+
+
+@pytest.mark.anyio
+async def test_schematic_bounding_boxes_include_long_pin_positions(
+    sample_project,
+    mock_kicad,
+) -> None:
+    symbols_dir = sample_project.parent / "symbols"
+    (symbols_dir / "LongPins.kicad_sym").write_text(
+        (
+            "(kicad_symbol_lib (version 20250316) (generator pytest)\n"
+            '  (symbol "LongPin"\n'
+            '    (property "Reference" "J" (id 0) (at 0 5.08 0))\n'
+            '    (property "Value" "LongPin" (id 1) (at 0 -5.08 0))\n'
+            '    (pin passive line (at -25.4 0 0) (length 2.54) (name "1") (number "1"))\n'
+            '    (pin passive line (at 25.4 0 180) (length 2.54) (name "2") (number "2"))\n'
+            "  )\n"
+            ")\n"
+        ),
+        encoding="utf-8",
+    )
+
+    server = build_server("schematic")
+    await call_tool_text(
+        server,
+        "sch_add_symbol",
+        {
+            "library": "LongPins",
+            "symbol_name": "LongPin",
+            "x_mm": 50.8,
+            "y_mm": 50.8,
+            "reference": "J1",
+            "value": "LongPin",
+            "footprint": "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical",
+        },
+    )
+
+    boxes = await call_tool_text(server, "sch_get_bounding_boxes", {})
+    assert "J1" in boxes
+    assert "25.40" in boxes
+    assert "76.20" in boxes
+
+
+@pytest.mark.anyio
+async def test_schematic_find_free_placement_respects_keepout_regions(
+    sample_project,
+    mock_kicad,
+) -> None:
+    server = build_server("schematic")
+
+    text = await call_tool_text(
+        server,
+        "sch_find_free_placement",
+        {"keepout_regions": [[45.0, 45.0, 55.0, 55.0]]},
+    )
+
+    assert "1 keepout region(s) respected" in text
+    assert "x_mm=50.8" not in text
+    assert "x_mm=101.6" in text
+
+
+def _symbol_positions(project_dir: Path) -> dict[str, tuple[float, float]]:
+    schematic = parse_schematic_file(project_dir / "demo.kicad_sch")
+    return {
+        str(symbol["reference"]): (
+            float(symbol.get("x", symbol.get("x_mm", 0.0)) or 0.0),
+            float(symbol.get("y", symbol.get("y_mm", 0.0)) or 0.0),
+        )
+        for symbol in schematic["symbols"]
+    }
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    ("anchor_ref", "anchored_refs"),
+    [
+        (None, []),
+        ("U1", ["U1"]),
+        (["U1", "J1"], ["U1", "J1"]),
+    ],
+)
+async def test_schematic_auto_place_functional_honors_anchor_refs(
+    sample_project,
+    mock_kicad,
+    anchor_ref,
+    anchored_refs,
+) -> None:
+    symbols_dir = sample_project.parent / "symbols"
+    (symbols_dir / "STM32.kicad_sym").write_text(
+        (symbols_dir / "Device.kicad_sym").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+
+    server = build_server("full")
+    await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "symbols": [
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 20.0,
+                    "y_mm": 20.0,
+                    "reference": "J1",
+                    "value": "Conn",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+                {
+                    "library": "STM32",
+                    "symbol_name": "R",
+                    "x_mm": 160.0,
+                    "y_mm": 160.0,
+                    "reference": "U1",
+                    "value": "MCU",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 220.0,
+                    "y_mm": 160.0,
+                    "reference": "LED1",
+                    "value": "STATUS",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+            ],
+            "wires": [],
+            "labels": [],
+            "power_symbols": [],
+        },
+    )
+
+    before = _symbol_positions(sample_project)
+    arguments = {} if anchor_ref is None else {"anchor_ref": anchor_ref}
+    result = await call_tool_text(server, "sch_auto_place_functional", arguments)
+    after = _symbol_positions(sample_project)
+
+    for reference in anchored_refs:
+        assert after[reference] == before[reference]
+    if anchored_refs:
+        assert f"Anchored refs preserved: {', '.join(anchored_refs)}." in result
+    else:
+        assert any(after[reference] != before[reference] for reference in ("J1", "U1", "LED1"))
+
+    for reference in {"J1", "U1", "LED1"} - set(anchored_refs):
+        assert after[reference] != before[reference]
+
+
+@pytest.mark.anyio
+async def test_schematic_auto_place_functional_applies_design_intent_spacing(
+    sample_project,
+    mock_kicad,
+) -> None:
+    symbols_dir = sample_project.parent / "symbols"
+    (symbols_dir / "STM32.kicad_sym").write_text(
+        (symbols_dir / "Device.kicad_sym").read_text(encoding="utf-8"),
+        encoding="utf-8",
+    )
+
+    server = build_server("full")
+    await call_tool_text(
+        server,
+        "sch_build_circuit",
+        {
+            "symbols": [
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 10.0,
+                    "y_mm": 10.0,
+                    "reference": "J1",
+                    "value": "Conn",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+                {
+                    "library": "STM32",
+                    "symbol_name": "R",
+                    "x_mm": 12.0,
+                    "y_mm": 12.0,
+                    "reference": "U1",
+                    "value": "MCU",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+                {
+                    "library": "Device",
+                    "symbol_name": "R",
+                    "x_mm": 14.0,
+                    "y_mm": 14.0,
+                    "reference": "LED1",
+                    "value": "STATUS",
+                    "footprint": "Resistor_SMD:R_0805",
+                },
+            ],
+            "wires": [],
+            "labels": [],
+            "power_symbols": [],
+        },
+    )
+    await call_tool_text(
+        server,
+        "project_set_design_intent",
+        {"functional_spacing_mm": 60.0},
+    )
+    await call_tool_text(server, "sch_set_sheet_size", {"paper": "A3"})
+
+    result = await call_tool_text(server, "sch_auto_place_functional", {})
+    positions = _symbol_positions(sample_project)
+
+    assert "Functional spacing target: 60.00 mm." in result
+    assert positions["U1"][0] - positions["J1"][0] >= 100.0
+    assert positions["LED1"][0] > positions["U1"][0]
 
 
 # ── sch_build_circuit ──────────────────────────────────────────────────────────

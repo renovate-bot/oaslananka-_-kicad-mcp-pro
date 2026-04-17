@@ -4,6 +4,7 @@ import pytest
 
 from kicad_mcp.server import build_server, create_server
 from kicad_mcp.tools.router import (
+    EXPERIMENTAL_TOOL_NAMES,
     PROFILE_CATEGORIES,
     TOOL_CATEGORIES,
     available_profiles,
@@ -23,12 +24,16 @@ def test_available_profiles_include_v2_surface() -> None:
         "power",
         "simulation",
         "analysis",
+        "agent_full",
         "pcb",
         "schematic",
     }
 
     assert expected.issubset(set(available_profiles()))
     assert categories_for_profile("analysis") == PROFILE_CATEGORIES["analysis"]
+    assert "simulation" in PROFILE_CATEGORIES["high_speed"]
+    assert "version_control" in PROFILE_CATEGORIES["high_speed"]
+    assert categories_for_profile("agent_full") == PROFILE_CATEGORIES["agent_full"]
     assert categories_for_profile("unknown-profile") == PROFILE_CATEGORIES["full"]
 
 
@@ -88,4 +93,4 @@ async def test_tool_categories_have_no_phantom_or_undeclared_tools() -> None:
     for category in TOOL_CATEGORIES.values():
         declared.update(category["tools"])
 
-    assert declared == registered
+    assert registered == (declared - EXPERIMENTAL_TOOL_NAMES)

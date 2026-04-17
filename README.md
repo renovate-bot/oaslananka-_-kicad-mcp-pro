@@ -14,13 +14,20 @@
 
 Primary CI/CD and release automation runs in Azure DevOps. GitHub Actions in this repository are manual fallback workflows only.
 
+## What's New in 2.4
+
+- KiCad 10 parity improved for variants, graphical DRC, time-domain routing, 3D PDF export, and schematic hop-over control.
+- High-speed review flow now covers time-domain tuning, via-stub resonance warnings, thermal via sizing, and EMC return-path sweeps.
+- MCP surface expanded with new resources, prompt workflows, `agent_full`, HTTP discovery metadata, and opt-in `/metrics`.
+- Azure validation now includes dependency auditing and a Windows validation lane, with `Dockerfile.kicad10` available for CI images.
+
 ## Features
 
 - Project-first workflow with `kicad_set_project()`, recent project discovery, and safe path handling.
 - Project intent helpers with `project_set_design_intent()` and `project_get_design_intent()` for connector, decoupling, power-tree, analog/digital partitioning, sensor clustering, RF, and fab assumptions.
 - KiCad 10.x-first runtime with best-effort 9.x support and cross-platform CLI/library discovery.
 - PCB tools for board inspection, tracks, vias, footprints, text, shapes, outline editing, and zone refill.
-- Schematic tools for symbols, wires, labels, buses, no-connect markers, property updates, annotation, netlist-aware auto-layout, and IPC reload.
+- Schematic tools for symbols, wires, labels, buses, no-connect markers, property updates, annotation, netlist-aware auto-layout, hop-over display control, and IPC reload.
 - Library tools for symbol search, footprint search, datasheet lookup, footprint assignment, and custom symbol generation.
 - Validation tools for DRC, ERC, DFM, courtyard issues, silk overlaps, and schematic-versus-PCB footprint checks.
 - Project quality gates for schematic, schematic connectivity, PCB, placement, PCB transfer, manufacturing, and gated manufacturing handoff via `export_manufacturing_package()`.
@@ -31,7 +38,7 @@ Primary CI/CD and release automation runs in Azure DevOps. GitHub Actions in thi
 - Simulation tools for SPICE operating-point, AC, transient, DC sweep, and loop-stability checks.
 - MCP resources for live board/project state, quality gates, fix queues, connectivity, and placement review.
 - Prompt workflows for first-board, schematic-to-PCB, manufacturing release, design review loops, and critic/fixer iterations.
-- Server profiles (`full`, `minimal`, `schematic_only`, `pcb_only`, `manufacturing`, `high_speed`, `power`, `simulation`, `analysis`) to reduce tool surface for clients. Legacy `pcb` and `schematic` aliases remain available.
+- Server profiles (`full`, `minimal`, `schematic_only`, `pcb_only`, `manufacturing`, `high_speed`, `power`, `simulation`, `analysis`, `agent_full`) to reduce tool surface for clients. Legacy `pcb` and `schematic` aliases remain available.
 
 ## KiCad 10 Feature Matrix
 
@@ -39,7 +46,7 @@ Primary CI/CD and release automation runs in Azure DevOps. GitHub Actions in thi
 |---|---|---|
 | Core PCB + schematic inspection | Yes | Yes |
 | Manufacturing exports | Yes | Yes |
-| Variant sidecar tools (`variant_*`) | Best effort | Yes |
+| Project-backed variant tools (`variant_*`) | Best effort | Yes |
 | Graphical DRC rule editing (`drc_rule_*`) | Best effort | Yes |
 | Time-domain routing helpers (`route_tune_time_domain`) | Fallback-to-length | Yes |
 | 3D PDF export (`pcb_export_3d_pdf`) | No | Yes |
@@ -49,6 +56,7 @@ Primary CI/CD and release automation runs in Azure DevOps. GitHub Actions in thi
 ## Demo
 
 - First-board walkthrough script: [docs/workflows/first-pcb.md](docs/workflows/first-pcb.md)
+- High-speed preflight workflow: [docs/workflows/high-speed-review.md](docs/workflows/high-speed-review.md)
 - KiCad Studio bridge setup: [docs/integration/kicad-studio.md](docs/integration/kicad-studio.md)
 - HTTP deployment notes: [docs/deployment/http-mode.md](docs/deployment/http-mode.md)
 
@@ -228,6 +236,11 @@ HTTP transports are available in [Client Configuration](docs/client-configuratio
 | `KICAD_MCP_HOST`                      | HTTP bind host                               | `127.0.0.1`        |
 | `KICAD_MCP_PORT`                      | HTTP bind port                               | `3334`             |
 | `KICAD_MCP_MOUNT_PATH`                | MCP HTTP mount path                          | `/mcp`             |
+| `KICAD_MCP_CORS_ORIGINS`              | Explicit HTTP/HTTPS origin allowlist         | Empty              |
+| `KICAD_MCP_AUTH_TOKEN`                | Optional bearer token for HTTP bridge        | Unset              |
+| `KICAD_MCP_LEGACY_SSE`                | Re-enable legacy SSE transport               | `false`            |
+| `KICAD_MCP_STATEFUL_HTTP`             | Disable stateless HTTP mode                  | `false`            |
+| `KICAD_MCP_ENABLE_METRICS`            | Reserve `/metrics` support for HTTP mode     | `false`            |
 | `KICAD_MCP_PROFILE`                   | Tool profile                                 | `full`             |
 | `KICAD_MCP_LOG_LEVEL`                 | Log level                                    | `INFO`             |
 | `KICAD_MCP_LOG_FORMAT`                | `console` or `json`                          | `console`          |
@@ -238,8 +251,8 @@ HTTP transports are available in [Client Configuration](docs/client-configuratio
 | `KICAD_MCP_MAX_TEXT_RESPONSE_CHARS`   | Max text payload length                      | `50000`            |
 
 Preferred profile names are `full`, `minimal`, `schematic_only`, `pcb_only`,
-`manufacturing`, `high_speed`, `power`, `simulation`, and `analysis`. Legacy
-aliases `pcb` and `schematic` still work for older clients.
+`manufacturing`, `high_speed`, `power`, `simulation`, `analysis`, and
+`agent_full`. Legacy aliases `pcb` and `schematic` still work for older clients.
 
 ## Tool Reference
 
@@ -534,6 +547,7 @@ return-path, stitching, plane, and decoupling problems before a manual SI/EMI re
 - `vcs_commit_checkpoint`
 - `vcs_list_checkpoints`
 - `vcs_restore_checkpoint`
+- `vcs_tag_release`
 - `vcs_diff_with_checkpoint`
 
 These tools scope Git actions to the active KiCad project directory, add local

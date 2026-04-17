@@ -22,6 +22,18 @@ from .export import _ensure_output_dir, _get_sch_file, _run_cli_variants
 from .metadata import headless_compatible
 
 DIRECTIVE_FILENAME = ".kicad_mcp_spice_directives.cir"
+_ALLOWED_DIRECTIVE_PREFIXES = (
+    ".param",
+    ".include",
+    ".options",
+    ".model",
+    ".ic",
+    ".nodeset",
+    ".ac",
+    ".tran",
+    ".dc",
+    "*",
+)
 
 
 async def _report_progress(
@@ -60,6 +72,18 @@ def _persist_directive(directive: str) -> Path:
         lines = [*existing, directive]
         path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return path
+
+
+def _validate_spice_directive(directive: str) -> str:
+    cleaned = directive.strip()
+    lowered = cleaned.lower()
+    if any(lowered.startswith(prefix) for prefix in _ALLOWED_DIRECTIVE_PREFIXES):
+        return cleaned
+    allowed = ", ".join(_ALLOWED_DIRECTIVE_PREFIXES)
+    raise ValueError(
+        "Unsupported SPICE directive prefix. "
+        f"Expected one of: {allowed}. Received: {cleaned[:80]!r}"
+    )
 
 
 def _export_spice_netlist_file() -> Path:
@@ -252,7 +276,7 @@ def register(mcp: FastMCP) -> None:
     def sim_add_spice_directive(directive: str) -> str:
         """Persist a SPICE directive used by future MCP simulation runs."""
         payload = SpiceDirectiveInput(directive=directive)
-        path = _persist_directive(payload.directive.strip())
+        path = _persist_directive(_validate_spice_directive(payload.directive))
         count = len(_read_directives())
         return f"Stored simulation directive in {path} ({count} total directive(s))."
 

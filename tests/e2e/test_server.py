@@ -21,11 +21,19 @@ async def test_server_registers_tools_resources_and_prompts(sample_project, mock
     assert "kicad://project/quality_gate" in resource_uris
     assert "kicad://project/fix_queue" in resource_uris
     assert "kicad://project/spec" in resource_uris
+    assert "kicad://project/manifest" in resource_uris
+    assert "kicad://project/gate_history" in resource_uris
+    assert "kicad://project/design_intent" in resource_uris
     assert "kicad://project/next_action" in resource_uris
     assert "kicad://schematic/connectivity" in resource_uris
     assert "kicad://board/placement_quality" in resource_uris
+    assert "kicad://board/layer_coverage" in resource_uris
     assert "kicad://gate/{gate_name}" in resource_templates
     assert "first_pcb" in prompt_names
     assert "design_review_loop" in prompt_names
     assert "fix_blocking_issues" in prompt_names
     assert "manufacturing_release_checklist" in prompt_names
+    assert "high_speed_review_loop" in prompt_names
+    assert "new_board_bringup" in prompt_names
+    assert "dfm_polish_loop" in prompt_names
+    assert "regression_sweep" in prompt_names

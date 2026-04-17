@@ -30,8 +30,8 @@ stages:
   - stage: Validate
     displayName: Validate
     jobs:
-      - job: lint_type_test
-        displayName: Ruff, mypy, and pytest
+      - job: ubuntu_validate
+        displayName: Ubuntu · Ruff, mypy, pytest, and audit
         pool:
           vmImage: ubuntu-latest
         steps:
@@ -56,6 +56,50 @@ stages:
               python -m pytest tests/unit/ tests/integration/ tests/e2e/ -q
               --cov=kicad_mcp --cov-report=term-missing --cov-fail-under=70
             displayName: Run pytest
+
+          - script: >
+              uv run --python $(pythonVersion)
+              python -m pip_audit --skip-editable --progress-spinner off
+            displayName: Run pip-audit
+
+          - script: |
+              set -euo pipefail
+              if [ -n "${SAFETY_API_KEY:-}" ]; then
+                uv run --python $(pythonVersion) python -m safety \
+                  --stage cicd \
+                  --key "${SAFETY_API_KEY}" \
+                  scan \
+                  --target .
+              else
+                echo "SAFETY_API_KEY is not set; pip-audit already ran as the enforced SCA gate."
+              fi
+            displayName: Run safety when configured
+            env:
+              SAFETY_API_KEY: $(SAFETY_API_KEY)
+
+      - job: windows_validate
+        displayName: Windows · Ruff, mypy, and unit tests
+        pool:
+          vmImage: windows-latest
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "$(pythonVersion)"
+
+          - script: python -m pip install --upgrade pip uv
+            displayName: Install uv
+
+          - script: uv sync --all-extras --python $(pythonVersion)
+            displayName: Sync dependencies
+
+          - script: uv run --python $(pythonVersion) ruff check src/ tests/
+            displayName: Run ruff
+
+          - script: uv run --python $(pythonVersion) python -m mypy src/kicad_mcp/
+            displayName: Run mypy
+
+          - script: uv run --python $(pythonVersion) python -m pytest tests/unit/ -q
+            displayName: Run unit tests
 
   - stage: Build
     displayName: Build

@@ -15,7 +15,15 @@ from pydantic import BaseModel, Field
 from ..config import get_config
 from ..connection import KiCadConnectionError, get_board
 from ..models.component_contracts import find_component_contract
-from ..utils.sexpr import _extract_block, _sexpr_string
+from ..utils.dru import (
+    SExprNode,
+    delete_rule,
+    dump_dru,
+    find_rule,
+    iter_rule_nodes,
+    parse_dru,
+    upsert_rule,
+)
 from .export import _ensure_output_dir, _get_pcb_file, _get_sch_file, _run_cli_variants
 from .metadata import headless_compatible
 
@@ -52,6 +60,10 @@ class PlacementAnalysis:
     checked_analog_refs: int = 0
     checked_digital_refs: int = 0
     checked_sensor_cluster_refs: int = 0
+    critical_net_proxy_mm: float = 0.0
+    critical_net_proxy_density: float = 0.0
+    checked_thermal_hotspot_refs: int = 0
+    thermal_proximity_sum: float = 0.0
 
 
 class GateOutcomePayload(BaseModel):
@@ -87,6 +99,10 @@ class PlacementGateReportPayload(BaseModel):
     checked_analog_refs: int = 0
     checked_digital_refs: int = 0
     checked_sensor_cluster_refs: int = 0
+    critical_net_proxy_mm: float = 0.0
+    critical_net_proxy_density: float = 0.0
+    checked_thermal_hotspot_refs: int = 0
+    thermal_proximity_sum: float = 0.0
     hard_failures: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
 
@@ -774,6 +790,32 @@ def _group_spread_mm(
     return max_spread, present_refs
 
 
+def _manhattan_mst_length(points: list[tuple[float, float]]) -> float:
+    """Approximate a ratsnest length using Manhattan-distance MST wiring."""
+    if len(points) < 2:
+        return 0.0
+
+    visited = {0}
+    total = 0.0
+    while len(visited) < len(points):
+        best_distance: float | None = None
+        best_index: int | None = None
+        for left_index in visited:
+            left_point = points[left_index]
+            for right_index, right_point in enumerate(points):
+                if right_index in visited:
+                    continue
+                distance = abs(left_point[0] - right_point[0]) + abs(left_point[1] - right_point[1])
+                if best_distance is None or distance < best_distance:
+                    best_distance = distance
+                    best_index = right_index
+        if best_distance is None or best_index is None:
+            break
+        visited.add(best_index)
+        total += best_distance
+    return total
+
+
 def _placement_analysis() -> tuple[PlacementAnalysis | None, GateOutcome | None]:
     from .pcb import (
         _board_frame_mm,
@@ -1057,6 +1099,7 @@ def _placement_analysis() -> tuple[PlacementAnalysis | None, GateOutcome | None]
         ):
             warnings.append("Placement spans most of the board; clustering looks weak.")
 
+    critical_net_proxy_mm = 0.0
     for net_name in intent.critical_nets:
         refs = sorted(
             reference
@@ -1067,6 +1110,14 @@ def _placement_analysis() -> tuple[PlacementAnalysis | None, GateOutcome | None]
         )
         if len(refs) < 2:
             continue
+        points = [
+            (
+                float(cast(float, footprints[reference]["x_mm"])),
+                float(cast(float, footprints[reference]["y_mm"])),
+            )
+            for reference in refs
+        ]
+        critical_net_proxy_mm += _manhattan_mst_length(points)
         max_spread = 0.0
         for index, left_ref in enumerate(refs):
             left_entry = footprints[left_ref]
@@ -1083,6 +1134,41 @@ def _placement_analysis() -> tuple[PlacementAnalysis | None, GateOutcome | None]
             warnings.append(
                 f"Critical net '{net_name}' spans {max_spread:.2f} mm across the board."
             )
+
+    critical_net_proxy_density = round(
+        critical_net_proxy_mm / max(board_area_mm2 / 1000.0, 1.0),
+        2,
+    )
+    if critical_net_proxy_density > 80.0:
+        warnings.append(
+            "Critical nets require a long Manhattan ratsnest relative to board area "
+            f"({critical_net_proxy_density:.2f} mm per 1000 mm^2)."
+        )
+
+    thermal_hotspot_refs = [
+        reference
+        for reference in intent.thermal_hotspots
+        if reference in footprints and _entry_center(footprints[reference]) is not None
+    ]
+    thermal_proximity_sum = 0.0
+    for index, left_ref in enumerate(thermal_hotspot_refs):
+        left_center = _entry_center(footprints[left_ref])
+        if left_center is None:
+            continue
+        for right_ref in thermal_hotspot_refs[index + 1 :]:
+            right_center = _entry_center(footprints[right_ref])
+            if right_center is None:
+                continue
+            distance = max(
+                math.hypot(left_center[0] - right_center[0], left_center[1] - right_center[1]),
+                0.5,
+            )
+            thermal_proximity_sum += 1.0 / distance
+    if thermal_hotspot_refs and thermal_proximity_sum > max(len(thermal_hotspot_refs) - 1, 1) * 0.2:
+        warnings.append(
+            "Thermal hotspots are clustered tightly "
+            f"(proximity sum {thermal_proximity_sum:.3f})."
+        )
 
     hard_failures: list[str] = []
     if missing_position:
@@ -1108,6 +1194,8 @@ def _placement_analysis() -> tuple[PlacementAnalysis | None, GateOutcome | None]
     score -= min(len(sensor_cluster_violations) * 15, 30)
     score -= min(len(analog_digital_violations) * 15, 30)
     score -= min(len(warnings) * 5, 20)
+    score -= min(int(round(thermal_proximity_sum * 10.0)), 10)
+    score -= min(int(critical_net_proxy_density // 20), 10)
 
     return (
         PlacementAnalysis(
@@ -1127,6 +1215,10 @@ def _placement_analysis() -> tuple[PlacementAnalysis | None, GateOutcome | None]
             checked_analog_refs=checked_analog_refs,
             checked_digital_refs=checked_digital_refs,
             checked_sensor_cluster_refs=checked_sensor_cluster_refs,
+            critical_net_proxy_mm=round(critical_net_proxy_mm, 2),
+            critical_net_proxy_density=critical_net_proxy_density,
+            checked_thermal_hotspot_refs=len(thermal_hotspot_refs),
+            thermal_proximity_sum=round(thermal_proximity_sum, 4),
         ),
         None,
     )
@@ -1145,6 +1237,11 @@ def _format_placement_score(analysis: PlacementAnalysis) -> str:
         f"- Analog refs checked: {analysis.checked_analog_refs}",
         f"- Digital refs checked: {analysis.checked_digital_refs}",
         f"- Sensor-cluster refs checked: {analysis.checked_sensor_cluster_refs}",
+        f"- Critical-net Manhattan proxy: {analysis.critical_net_proxy_mm:.2f} mm",
+        "- Critical-net proxy density: "
+        f"{analysis.critical_net_proxy_density:.2f} mm per 1000 mm^2",
+        f"- Thermal hotspot refs checked: {analysis.checked_thermal_hotspot_refs}",
+        f"- Thermal hotspot proximity: {analysis.thermal_proximity_sum:.4f}",
         f"- Hard failures: {len(analysis.hard_failures)}",
         f"- Warnings: {len(analysis.warnings)}",
     ]
@@ -1172,6 +1269,11 @@ def _evaluate_pcb_placement_gate() -> GateOutcome:
         f"Analog refs checked: {analysis.checked_analog_refs}",
         f"Digital refs checked: {analysis.checked_digital_refs}",
         f"Sensor-cluster refs checked: {analysis.checked_sensor_cluster_refs}",
+        f"Critical-net Manhattan proxy: {analysis.critical_net_proxy_mm:.2f} mm",
+        "Critical-net proxy density: "
+        f"{analysis.critical_net_proxy_density:.2f} mm per 1000 mm^2",
+        f"Thermal hotspot refs checked: {analysis.checked_thermal_hotspot_refs}",
+        f"Thermal hotspot proximity: {analysis.thermal_proximity_sum:.4f}",
         f"Placement score: {analysis.score}/100",
     ]
     details.extend(f"FAIL: {item}" for item in analysis.hard_failures[:12])
@@ -1362,22 +1464,6 @@ def render_gate_by_name(
     )
 
 
-def _iter_rule_blocks(content: str) -> list[str]:
-    blocks: list[str] = []
-    cursor = 0
-    while cursor < len(content):
-        match = re.search(r'\(rule\s+"', content[cursor:])
-        if match is None:
-            break
-        start = cursor + match.start()
-        block, length = _extract_block(content, start)
-        if not block:
-            break
-        blocks.append(block)
-        cursor = start + length
-    return blocks
-
-
 def _drc_state_path() -> Path:
     cfg = get_config()
     if cfg.project_dir is None:
@@ -1402,36 +1488,96 @@ def _save_drc_state(payload: dict[str, object]) -> Path:
     return path
 
 
-def _remove_rule_block(content: str, rule_name: str) -> str:
-    search = f'(rule {_sexpr_string(rule_name)}'
-    index = content.find(search)
-    if index < 0:
-        raise ValueError(f"Rule '{rule_name}' was not found.")
-    block, consumed = _extract_block(content, index)
-    if not block or consumed == 0:
-        raise ValueError(f"Rule '{rule_name}' could not be parsed.")
-    return content[:index].rstrip() + "\n" + content[index + consumed :].lstrip()
+def _rule_child_nodes(
+    rule: SExprNode,
+    child_name: str,
+) -> list[SExprNode]:
+    return [
+        child
+        for child in rule[2:]
+        if isinstance(child, list) and child and child[0] == child_name
+    ]
 
 
-def _rule_payload(block: str, state: dict[str, object]) -> dict[str, object]:
-    name_match = re.search(r'\(rule\s+"([^"]+)"', block)
-    condition_match = re.search(r'\(condition\s+"([^"]+)"\)', block)
-    constraint_matches = re.findall(r"\(constraint\s+([a-zA-Z0-9_]+)", block)
-    severity_match = re.search(r"\(severity\s+([a-zA-Z_]+)\)", block)
-    rule_name = name_match.group(1) if name_match else "unknown"
+def _replace_rule_child(
+    rule: SExprNode,
+    child_name: str,
+    replacement: SExprNode,
+) -> SExprNode:
+    updated: SExprNode = []
+    replaced = False
+    for child in rule:
+        if isinstance(child, list) and child and child[0] == child_name and not replaced:
+            updated.append(replacement)
+            replaced = True
+            continue
+        if isinstance(child, list) and child and child[0] == child_name:
+            continue
+        updated.append(child)
+    if not replaced:
+        updated.append(replacement)
+    return updated
+
+
+def _rule_payload(rule: SExprNode, state: dict[str, object]) -> dict[str, object]:
+    rule_name = str(rule[1]) if len(rule) > 1 and not isinstance(rule[1], list) else "unknown"
+    condition_nodes = _rule_child_nodes(rule, "condition")
+    constraint_nodes = _rule_child_nodes(rule, "constraint")
+    severity_nodes = _rule_child_nodes(rule, "severity")
     enabled_state = cast(dict[str, bool], state.get("enabled", {}))
     severity_state = cast(dict[str, str], state.get("severity", {}))
+    parsed_condition = (
+        str(condition_nodes[0][1])
+        if condition_nodes
+        and len(condition_nodes[0]) > 1
+        and not isinstance(condition_nodes[0][1], list)
+        else ""
+    )
+    parsed_severity = (
+        str(severity_nodes[0][1])
+        if severity_nodes
+        and len(severity_nodes[0]) > 1
+        and not isinstance(severity_nodes[0][1], list)
+        else "error"
+    )
+    effective_severity = severity_state.get(rule_name, parsed_severity)
     payload: dict[str, object] = {
         "name": rule_name,
-        "condition": condition_match.group(1) if condition_match else "",
-        "constraints": constraint_matches,
-        "severity": severity_state.get(
-            rule_name,
-            severity_match.group(1) if severity_match else "error",
-        ),
-        "enabled": enabled_state.get(rule_name, True),
+        "condition": parsed_condition,
+        "constraints": [
+            str(child[1])
+            for child in constraint_nodes
+            if len(child) > 1 and not isinstance(child[1], list)
+        ],
+        "severity": effective_severity,
+        "enabled": enabled_state.get(rule_name, parsed_severity != "ignore"),
     }
     return payload
+
+
+def _coerce_constraint_value(value: float | str | None) -> str | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return value.strip()
+    return f"{value}"
+
+
+def _build_constraint_node(
+    constraint_type: str,
+    min_value: float | str | None,
+    max_value: float | str | None,
+) -> SExprNode:
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", constraint_type):
+        raise ValueError("constraint_type must be a simple KiCad rule atom such as clearance.")
+    node: SExprNode = ["constraint", constraint_type]
+    min_atom = _coerce_constraint_value(min_value)
+    max_atom = _coerce_constraint_value(max_value)
+    if min_atom is not None:
+        node.append(["min", min_atom])
+    if max_atom is not None:
+        node.append(["max", max_atom])
+    return node
 
 
 def register(mcp: FastMCP) -> None:
@@ -1453,8 +1599,9 @@ def register(mcp: FastMCP) -> None:
             return json.dumps({"rules": built_in}, indent=2)
 
         content = _load_rules_content(_rules_file_path())
+        root = parse_dru(content)
         state = _load_drc_state()
-        custom = [_rule_payload(block, state) for block in _iter_rule_blocks(content)]
+        custom = [_rule_payload(rule, state) for rule in iter_rule_nodes(root)]
         return json.dumps({"rules": [*built_in, *custom]}, indent=2)
 
     @mcp.tool()
@@ -1468,33 +1615,24 @@ def register(mcp: FastMCP) -> None:
         severity: str = "error",
     ) -> str:
         """Create or update a custom DRC rule in the active ``.kicad_dru`` file."""
-        from .routing import _load_rules_content, _rules_file_path, _upsert_rule
+        from .routing import _load_rules_content, _rules_file_path
 
-        formatted_constraints: list[str] = []
-        if min_value is None and max_value is None:
-            formatted_constraints.append(f"  (constraint {constraint_type})")
-        elif min_value is not None and max_value is not None:
-            formatted_constraints.append(
-                f"  (constraint {constraint_type} (min {min_value}) (max {max_value}))"
-            )
-        elif min_value is not None:
-            formatted_constraints.append(f"  (constraint {constraint_type} (min {min_value}))")
-        else:
-            formatted_constraints.append(f"  (constraint {constraint_type} (max {max_value}))")
+        if not name.strip():
+            raise ValueError("Rule name must not be empty.")
+        if not re.fullmatch(r"[a-z_]+", severity.casefold()):
+            raise ValueError("severity must be a simple KiCad severity atom such as error.")
 
-        rule_body = "\n".join(
-            [
-                f'(rule {_sexpr_string(name)}',
-                f'  (condition "{condition or "A.Type != \'none\'"}")',
-                *formatted_constraints,
-                f"  (severity {severity})",
-                ")",
-            ]
-        )
-
+        rule_node: SExprNode = [
+            "rule",
+            name,
+            ["condition", condition or "A.Type != 'none'"],
+            _build_constraint_node(constraint_type, min_value, max_value),
+            ["severity", severity],
+        ]
         path = _rules_file_path()
-        updated = _upsert_rule(_load_rules_content(path), name, rule_body)
-        path.write_text(updated, encoding="utf-8")
+        root = parse_dru(_load_rules_content(path))
+        upsert_rule(root, rule_node)
+        path.write_text(dump_dru(root), encoding="utf-8")
         state = _load_drc_state()
         cast(dict[str, bool], state.setdefault("enabled", {}))[name] = True
         cast(dict[str, str], state.setdefault("severity", {}))[name] = severity
@@ -1508,8 +1646,10 @@ def register(mcp: FastMCP) -> None:
         from .routing import _load_rules_content, _rules_file_path
 
         path = _rules_file_path()
-        updated = _remove_rule_block(_load_rules_content(path), rule_name)
-        path.write_text(updated, encoding="utf-8")
+        root = parse_dru(_load_rules_content(path))
+        if not delete_rule(root, rule_name):
+            raise ValueError(f"Rule '{rule_name}' was not found.")
+        path.write_text(dump_dru(root), encoding="utf-8")
         state = _load_drc_state()
         cast(dict[str, bool], state.setdefault("enabled", {})).pop(rule_name, None)
         cast(dict[str, str], state.setdefault("severity", {})).pop(rule_name, None)
@@ -1520,38 +1660,36 @@ def register(mcp: FastMCP) -> None:
     @headless_compatible
     def drc_rule_enable(rule_name: str, enabled: bool = True) -> str:
         """Enable or disable a custom DRC rule."""
-        from .routing import _load_rules_content, _rules_file_path, _upsert_rule
+        from .routing import _load_rules_content, _rules_file_path
 
         path = _rules_file_path()
-        content = _load_rules_content(path)
-        block = next(
-            (
-                candidate
-                for candidate in _iter_rule_blocks(content)
-                if f'(rule "{rule_name}"' in candidate
-            ),
-            None,
-        )
-        if block is None:
+        root = parse_dru(_load_rules_content(path))
+        rule = find_rule(root, rule_name)
+        if rule is None:
             return f"Custom DRC rule '{rule_name}' was not found."
 
         state = _load_drc_state()
         severity_map = cast(dict[str, str], state.setdefault("severity", {}))
         enabled_map = cast(dict[str, bool], state.setdefault("enabled", {}))
-        severity_match = re.search(r"\(severity\s+([a-zA-Z_]+)\)", block)
-        existing_severity = severity_map.get(rule_name) or (
-            severity_match.group(1) if severity_match else "error"
+        severity_nodes = _rule_child_nodes(rule, "severity")
+        parsed_severity = (
+            str(severity_nodes[0][1])
+            if severity_nodes
+            and len(severity_nodes[0]) > 1
+            and not isinstance(severity_nodes[0][1], list)
+            else "error"
         )
+        existing_severity = severity_map.get(rule_name) or parsed_severity
         severity_map[rule_name] = existing_severity
         enabled_map[rule_name] = enabled
 
-        normalized_block = re.sub(r"\s*\(severity\s+[a-zA-Z_]+\)", "", block)
-        replacement = (
-            normalized_block[:-1]
-            + f"\n  (severity {'ignore' if not enabled else existing_severity})\n)"
+        replacement = _replace_rule_child(
+            rule,
+            "severity",
+            ["severity", "ignore" if not enabled else existing_severity],
         )
-        updated = _upsert_rule(content, rule_name, replacement)
-        path.write_text(updated, encoding="utf-8")
+        upsert_rule(root, replacement)
+        path.write_text(dump_dru(root), encoding="utf-8")
         _save_drc_state(state)
         state_text = "enabled" if enabled else "disabled"
         return f"Custom DRC rule '{rule_name}' {state_text}."

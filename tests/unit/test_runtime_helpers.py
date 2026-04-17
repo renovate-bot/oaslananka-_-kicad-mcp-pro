@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
@@ -258,6 +259,36 @@ def test_cli_capabilities_are_cached(tmp_path: Path, monkeypatch) -> None:
 
     assert first == second
     assert len(calls) == 5
+
+
+def test_cli_capabilities_cache_refreshes_when_binary_changes(tmp_path: Path, monkeypatch) -> None:
+    cli = tmp_path / "kicad-cli"
+    cli.write_text("", encoding="utf-8")
+    calls: list[list[str]] = []
+
+    def fake_run(
+        cmd: list[str],
+        capture_output: bool,
+        text: bool,
+        timeout: float,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        _ = (capture_output, text, timeout, check)
+        calls.append(cmd)
+        if "--version" in cmd:
+            return subprocess.CompletedProcess(cmd, 0, stdout="KiCad 10.0.1", stderr="")
+        return subprocess.CompletedProcess(cmd, 0, stdout="gerbers positions", stderr="")
+
+    get_cli_capabilities.cache_clear()
+    monkeypatch.setattr("kicad_mcp.discovery.subprocess.run", fake_run)
+
+    _ = get_cli_capabilities(cli)
+    cli.write_text("changed", encoding="utf-8")
+    now_ns = time.time_ns() + 1_000_000_000
+    os.utime(cli, ns=(now_ns, now_ns))
+    _ = get_cli_capabilities(cli)
+
+    assert len(calls) == 10
 
 
 def test_board_transaction_uses_reentrant_lock() -> None:

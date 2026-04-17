@@ -6,6 +6,7 @@ import threading
 import warnings
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import (
@@ -36,9 +37,10 @@ class KiCadMCPConfig(BaseSettings):
         description="Path to the kicad-cli executable.",
     )
     freerouting_jar: Path | None = Field(default=None)
-    freerouting_image: str = Field(default="ghcr.io/freerouting/freerouting:latest")
+    freerouting_image: str = Field(default="ghcr.io/freerouting/freerouting:2.1.0")
     docker_executable: str = Field(default="docker")
     java_executable: str = Field(default="java")
+    freerouting_timeout_sec: float = Field(default=900.0, gt=1.0, le=7200.0)
     ngspice_cli: Path | None = Field(default=None)
     kicad_socket_path: Path | None = Field(default=None)
     kicad_token: str | None = Field(default=None)
@@ -58,6 +60,9 @@ class KiCadMCPConfig(BaseSettings):
     mount_path: str = Field(default="/mcp")
     cors_origins: str = Field(default="")
     auth_token: str | None = Field(default=None)
+    legacy_sse: bool = Field(default=False)
+    stateful_http: bool = Field(default=False)
+    enable_metrics: bool = Field(default=False)
     studio_watch_dir: Path | None = Field(default=None)
     profile: Literal[
         "full",
@@ -74,6 +79,7 @@ class KiCadMCPConfig(BaseSettings):
         "analysis",
         "pcb",
         "schematic",
+        "agent_full",
     ] = Field(default="full")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(default="INFO")
     log_format: Literal["json", "console"] = Field(default="console")
@@ -128,7 +134,30 @@ class KiCadMCPConfig(BaseSettings):
     @field_validator("mount_path")
     @classmethod
     def _normalize_mount_path(cls, value: str) -> str:
-        return value if value.startswith("/") else f"/{value}"
+        normalized = value.strip() or "/"
+        if not normalized.startswith("/"):
+            normalized = f"/{normalized}"
+        if len(normalized) > 1:
+            normalized = normalized.rstrip("/")
+        return normalized
+
+    @field_validator("cors_origins")
+    @classmethod
+    def _validate_cors_origins(cls, value: str) -> str:
+        origins = [item.strip() for item in value.split(",") if item.strip()]
+        for origin in origins:
+            if origin == "*":
+                raise ValueError(
+                    "KICAD_MCP_CORS_ORIGINS cannot contain '*'. "
+                    "Use an explicit HTTP/HTTPS origin allowlist instead."
+                )
+            parsed = urlparse(origin)
+            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+                raise ValueError(
+                    "KICAD_MCP_CORS_ORIGINS entries must be fully qualified "
+                    "http:// or https:// URLs."
+                )
+        return ",".join(origins)
 
     @field_validator("transport", mode="before")
     @classmethod

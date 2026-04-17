@@ -63,8 +63,12 @@ def test_register_resources_exposes_success_paths(monkeypatch, tmp_path: Path) -
         get_vias=lambda: [1, 2, 3],
         get_nets=lambda netclass_filter=None: ["GND", "3V3"],
         get_as_string=lambda: "abcdefghijklmno",
+        get_zones=lambda: [SimpleNamespace(layers=[0])],
     )
+    (tmp_path / "demo.kicad_pro").write_text("{}", encoding="utf-8")
+    (tmp_path / "demo.kicad_pcb").write_text("(kicad_pcb)", encoding="utf-8")
     cfg = SimpleNamespace(
+        project_root=tmp_path,
         project_dir=tmp_path,
         project_file=tmp_path / "demo.kicad_pro",
         pcb_file=tmp_path / "demo.kicad_pcb",
@@ -91,6 +95,10 @@ def test_register_resources_exposes_success_paths(monkeypatch, tmp_path: Path) -
     monkeypatch.setattr(
         "kicad_mcp.tools.project._render_project_spec_resolution",
         lambda resolved: f"spec:{resolved['kind']}",
+    )
+    monkeypatch.setattr(
+        "kicad_mcp.tools.project.load_design_intent",
+        lambda: SimpleNamespace(model_dump_json=lambda indent=2: '{"critical_nets": []}'),
     )
     monkeypatch.setattr(
         "kicad_mcp.tools.project._next_action_payload",
@@ -131,21 +139,26 @@ def test_register_resources_exposes_success_paths(monkeypatch, tmp_path: Path) -
 
     assert "Tracks: 2" in mcp.resources["kicad://board/summary"]()
     assert "Project directory:" in mcp.resources["kicad://project/info"]()
+    assert '"file_count": 2' in mcp.resources["kicad://project/manifest"]()
     assert mcp.resources["kicad://project/spec"]() == "spec:demo"
+    assert '"critical_nets": []' in mcp.resources["kicad://project/design_intent"]()
     assert mcp.resources["kicad://project/next_action"]() == "next-step"
     assert mcp.resources["kicad://board/netlist"]() == "abcdefgh\n... [truncated]"
     assert mcp.resources["kicad://project/quality_gate"]() == "gate-count:1"
+    assert '"history"' in mcp.resources["kicad://project/gate_history"]()
     assert mcp.resources["kicad://project/fix_queue"]() == "queue-body"
     assert (
         mcp.resources["kicad://schematic/connectivity"]()
         == "Schematic connectivity:PASS"
     )
+    assert '"layers"' in mcp.resources["kicad://board/layer_coverage"]()
     assert mcp.resources["kicad://gate/{gate_name}"]("PCB") == "gate:PCB"
     assert mcp.resources["kicad://board/placement_quality"]() == "placement:92"
 
 
 def test_register_resources_exposes_blocked_paths(monkeypatch, tmp_path: Path) -> None:
     cfg = SimpleNamespace(
+        project_root=tmp_path,
         project_dir=tmp_path,
         project_file=tmp_path / "demo.kicad_pro",
         pcb_file=tmp_path / "demo.kicad_pcb",
@@ -191,15 +204,19 @@ def test_register_resources_exposes_blocked_paths(monkeypatch, tmp_path: Path) -
     board_state.register(mcp)
 
     assert "KiCad is not connected" in mcp.resources["kicad://board/summary"]()
+    assert '"file_count": 0' in mcp.resources["kicad://project/manifest"]()
     assert "Project design spec: BLOCKED" in mcp.resources["kicad://project/spec"]()
+    assert '"status": "blocked"' in mcp.resources["kicad://project/design_intent"]()
     assert "Project next action: BLOCKED" in mcp.resources["kicad://project/next_action"]()
     assert "KiCad is not connected" in mcp.resources["kicad://board/netlist"]()
     assert "Project quality gate: BLOCKED" in mcp.resources["kicad://project/quality_gate"]()
+    assert '"status": "blocked"' in mcp.resources["kicad://project/gate_history"]()
     assert "Project fix queue\n- BLOCKED: queue failed" == mcp.resources["kicad://project/fix_queue"]()
     assert (
         "Schematic connectivity quality gate: BLOCKED"
         in mcp.resources["kicad://schematic/connectivity"]()
     )
+    assert '"status": "blocked"' in mcp.resources["kicad://board/layer_coverage"]()
     assert "Gate 'PCB': BLOCKED" in mcp.resources["kicad://gate/{gate_name}"]("PCB")
 
     monkeypatch.setattr(

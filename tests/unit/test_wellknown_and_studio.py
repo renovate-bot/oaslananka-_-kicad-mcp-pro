@@ -3,18 +3,51 @@ from __future__ import annotations
 import json
 
 import pytest
+from starlette.testclient import TestClient
 
 from kicad_mcp.config import get_config
-from kicad_mcp.server import create_server
+from kicad_mcp.server import build_server, create_server
 from kicad_mcp.wellknown import get_wellknown_metadata
 from tests.conftest import call_tool_text
 
 
-def test_wellknown_metadata_contains_http_and_profiles() -> None:
+def test_wellknown_metadata_matches_server_card_shape() -> None:
     metadata = get_wellknown_metadata()
-    assert metadata["name"] == "kicad-mcp-pro"
-    assert "streamable-http" in metadata["transport"]
+    assert metadata["$schema"].endswith("/mcp-server-card/v1.json")
+    assert metadata["serverInfo"]["name"] == "kicad-mcp-pro"
+    assert metadata["capabilities"]["sampling"] is True
     assert "full" in metadata["profiles"]
+
+
+def test_wellknown_routes_return_identical_payload(monkeypatch, sample_project) -> None:
+    _ = sample_project
+    monkeypatch.setenv("KICAD_MCP_TRANSPORT", "http")
+    monkeypatch.setenv("KICAD_MCP_HOST", "127.0.0.1")
+    monkeypatch.setenv("KICAD_MCP_PORT", "3334")
+    server = build_server("full")
+    client = TestClient(server.streamable_http_app())
+
+    dotted = client.get("/.well-known/mcp-server")
+    compat = client.get("/well-known/mcp-server")
+
+    assert dotted.status_code == 200
+    assert compat.status_code == 200
+    assert dotted.json() == compat.json()
+    assert dotted.json()["transport"]["endpoint"] == "http://127.0.0.1:3334/mcp"
+
+
+def test_metrics_route_is_opt_in(monkeypatch, sample_project) -> None:
+    _ = sample_project
+    monkeypatch.setenv("KICAD_MCP_TRANSPORT", "http")
+    monkeypatch.setenv("KICAD_MCP_ENABLE_METRICS", "true")
+    server = build_server("full")
+    client = TestClient(server.streamable_http_app())
+
+    response = client.get("/metrics")
+
+    assert response.status_code == 200
+    assert "kicad_mcp_tool_calls_total" in response.text
+    assert "kicad_mcp_active_sessions" in response.text
 
 
 @pytest.mark.anyio

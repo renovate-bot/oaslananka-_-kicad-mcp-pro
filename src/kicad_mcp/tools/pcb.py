@@ -2399,8 +2399,8 @@ def register(mcp: FastMCP) -> None:
     ) -> str:
         """Add a production barcode marker to the board file."""
         normalized_type = barcode_type.casefold()
-        if normalized_type not in {"qr", "datamatrix"}:
-            return "barcode_type must be either 'qr' or 'datamatrix'."
+        if normalized_type not in {"qr", "datamatrix", "code128"}:
+            return "barcode_type must be one of 'qr', 'datamatrix', or 'code128'."
         board_block = (
             f'(gr_text "{normalized_type.upper()}:{content}" (at {x_mm:.4f} {y_mm:.4f} 0) '
             f'(layer "{layer}") (effects (font (size {size_mm / 4:.4f} {size_mm / 4:.4f}))))'
@@ -2515,6 +2515,21 @@ def register(mcp: FastMCP) -> None:
         canonical_layer = resolve_layer_name(layer)
         if not canonical_layer.startswith("In") or not canonical_layer.endswith("_Cu"):
             return "Inner-layer footprint graphics must target In1_Cu through In30_Cu."
+        try:
+            stackup_specs = _current_stackup_specs()
+        except ValueError as exc:
+            return str(exc)
+        copper_layers = [entry for entry in stackup_specs if _is_copper_stackup_layer(entry)]
+        if len(copper_layers) < 4:
+            return (
+                "Inner-layer footprint graphics require a board stackup with at least "
+                "four copper layers."
+            )
+        if canonical_layer not in {layer.name.replace(".", "_") for layer in copper_layers}:
+            return (
+                f"Layer '{canonical_layer}' is not present in the current stackup. "
+                "Update the board stackup before writing inner-layer graphics."
+            )
 
         board_content = _normalize_board_content(
             _get_pcb_file_for_sync().read_text(encoding="utf-8")
@@ -3592,12 +3607,17 @@ def register(mcp: FastMCP) -> None:
         iterations: int = 300,
         k_spring: float = 0.4,
         k_repel: float = 80.0,
+        seed: int = 42,
+        grid_mm: float = 0.5,
+        max_seconds: float = 10.0,
+        keepout_regions: list[tuple[float, float, float, float]] | None = None,
     ) -> str:
         """Run a force-directed spring-embedder placement algorithm on a set of components.
 
         This tool computes optimised X/Y positions for components based on their net
-        connectivity without requiring KiCad to be open.  Use it to get a placement
-        suggestion, then apply the result with pcb_move_footprint for each component.
+        connectivity without requiring KiCad to be open. Same seed + same inputs
+        yields identical output. Use it to get a placement suggestion, then apply
+        the result with pcb_move_footprint for each component.
 
         Args:
             component_positions: List of component dicts with keys:
@@ -3611,6 +3631,11 @@ def register(mcp: FastMCP) -> None:
             iterations: Number of spring-embedder iterations (default 300).
             k_spring: Spring attraction coefficient (default 0.4).
             k_repel: Coulomb repulsion coefficient (default 80.0).
+            seed: Deterministic tie-break seed used for fallback searches.
+            grid_mm: Final snap-to-grid spacing in mm (default 0.5).
+            max_seconds: Max wall-clock budget before returning best-so-far.
+            keepout_regions: Optional rectangular keepouts as
+                ``[(x_min, y_min, x_max, y_max), ...]`` in mm.
 
         Returns:
             JSON string with optimised positions for each component.
@@ -3640,13 +3665,26 @@ def register(mcp: FastMCP) -> None:
             k_repel=k_repel,
             board_w=board_width_mm,
             board_h=board_height_mm,
+            seed=seed,
+            grid_mm=grid_mm,
+            max_seconds=max_seconds,
+            keepout_regions=list(keepout_regions or []),
         )
         result = force_directed_placement(comps, placement_nets, cfg)
         output = [
             {"ref": c.ref, "x": round(c.x, 4), "y": round(c.y, 4), "fixed": c.fixed}
             for c in result
         ]
-        return json.dumps({"placements": output, "iterations": iterations}, indent=2)
+        return json.dumps(
+            {
+                "placements": output,
+                "iterations": iterations,
+                "seed": seed,
+                "grid_mm": grid_mm,
+                "max_seconds": max_seconds,
+            },
+            indent=2,
+        )
 
     # -----------------------------------------------------------------------
     # BGA fanout helper (v2.1.0)

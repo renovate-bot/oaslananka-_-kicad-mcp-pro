@@ -16,7 +16,14 @@ class ToolCategory(TypedDict):
     tools: list[str]
 
 
-EXPERIMENTAL_TOOL_NAMES: frozenset[str] = frozenset()
+EXPERIMENTAL_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "sch_swap_pins",
+        "sch_swap_gates",
+        "sch_add_jumper",
+        "sch_reload",
+    }
+)
 DEPRECATED_TOOL_NAMES: frozenset[str] = frozenset({"tune_track_length"})
 
 
@@ -170,6 +177,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "sch_list_templates",
             "sch_get_template_info",
             "sch_instantiate_template",
+            "sch_set_hop_over",
             "sch_list_swappable_pins",
             "sch_swap_pins",
             "sch_swap_gates",
@@ -212,9 +220,6 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
     "export": {
         "description": "Produce low-level debug, review, and interchange exports.",
         "tools": [
-            "run_drc",
-            "run_erc",
-            "validate_design",
             "export_gerber",
             "export_drill",
             "export_bom",
@@ -371,6 +376,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "vcs_list_checkpoints",
             "vcs_restore_checkpoint",
             "vcs_diff_with_checkpoint",
+            "vcs_tag_release",
         ],
     },
 }
@@ -421,6 +427,8 @@ PROFILE_CATEGORIES: dict[str, tuple[str, ...]] = {
         "emc",
         "validation",
         "export",
+        "simulation",
+        "version_control",
     ),
     "power": (
         "project",
@@ -433,6 +441,7 @@ PROFILE_CATEGORIES: dict[str, tuple[str, ...]] = {
     ),
     "simulation": ("project", "schematic", "simulation", "export", "library"),
     "analysis": ("project", "pcb_read", "signal_integrity", "power_integrity", "emc", "validation"),
+    "agent_full": tuple(TOOL_CATEGORIES.keys()),
     # Backward-compatible aliases kept for existing clients.
     "pcb": ("project", "pcb_read", "pcb_write", "routing", "export", "validation"),
     "schematic": ("project", "schematic", "library", "export", "validation"),
@@ -459,6 +468,7 @@ def available_profiles() -> tuple[str, ...]:
         "power",
         "simulation",
         "analysis",
+        "agent_full",
         "pcb",
         "schematic",
     ]

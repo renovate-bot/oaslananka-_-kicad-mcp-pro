@@ -385,31 +385,70 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     def thermal_calculate_via_count(
-        power_w: float,
+        power_w: float | None = None,
+        package_power_w: float | None = None,
+        ambient_c: float = 25.0,
+        max_junction_c: float = 125.0,
+        theta_ja_deg_c_w: float = 40.0,
         via_diameter_mm: float = 0.3,
         thermal_resistance_target: float = 5.0,
     ) -> str:
-        """Estimate how many stitched thermal vias are needed for the target resistance."""
+        """Estimate thermal via count from package heat and board thermal resistance."""
         payload = ThermalViaInput(
             power_w=power_w,
+            package_power_w=package_power_w,
+            ambient_c=ambient_c,
+            max_junction_c=max_junction_c,
+            theta_ja_deg_c_w=theta_ja_deg_c_w,
             via_diameter_mm=via_diameter_mm,
             thermal_resistance_target=thermal_resistance_target,
         )
-        plating_thickness_m = 25e-6
-        barrel_length_m = _board_thickness_mm() / 1_000.0
-        via_diameter_m = payload.via_diameter_mm / 1_000.0
-        barrel_area_m2 = math.pi * via_diameter_m * plating_thickness_m
-        single_via_theta = barrel_length_m / (_COPPER_THERMAL_CONDUCTIVITY_W_MK * barrel_area_m2)
-        via_count = max(1, math.ceil(single_via_theta / payload.thermal_resistance_target))
-        delta_temp_c = payload.power_w * payload.thermal_resistance_target
+        effective_power_w = payload.package_power_w or payload.power_w
+        if effective_power_w is None:
+            raise ValueError(
+                "Thermal via power is missing. Provide either 'package_power_w' for the "
+                "package thermal-envelope workflow or legacy 'power_w'."
+            )
+        if payload.max_junction_c <= payload.ambient_c:
+            raise ValueError("max_junction_c must be greater than ambient_c.")
+
+        allowed_total_theta = (payload.max_junction_c - payload.ambient_c) / effective_power_w
+        if payload.package_power_w is not None and payload.theta_ja_deg_c_w > allowed_total_theta:
+            # Parallel thermal paths: 1/R_allowed = 1/R_package + 1/R_vias.
+            required_via_network_theta = 1.0 / (
+                (1.0 / allowed_total_theta) - (1.0 / payload.theta_ja_deg_c_w)
+            )
+        else:
+            required_via_network_theta = min(
+                payload.thermal_resistance_target,
+                allowed_total_theta,
+            )
+
+        # Rule of thumb used by many thermal-via calculators: one 0.3 mm plated via in
+        # 1 oz copper contributes roughly 100 C/W. Scale conservatively by via diameter
+        # and board thickness so larger/shorter barrels lower resistance.
+        single_via_theta = (
+            100.0
+            * (0.3 / payload.via_diameter_mm)
+            * (_board_thickness_mm() / _DEFAULT_BOARD_THICKNESS_MM)
+        )
+        via_count = max(1, math.ceil(single_via_theta / required_via_network_theta))
+        delta_temp_c = effective_power_w * required_via_network_theta
 
         return "\n".join(
             [
                 "Thermal via estimate:",
-                f"- Power to spread: {payload.power_w:.3f} W",
+                f"- Power to spread: {effective_power_w:.3f} W",
+                (
+                    f"- Ambient / max junction: {payload.ambient_c:.1f} C / "
+                    f"{payload.max_junction_c:.1f} C"
+                ),
+                f"- Package theta JA: {payload.theta_ja_deg_c_w:.2f} C/W",
                 f"- Via diameter: {payload.via_diameter_mm:.3f} mm",
                 f"- Board thickness used: {_board_thickness_mm():.3f} mm",
+                "- Single-via rule of thumb: 0.3 mm, 1 oz copper is approximately 100 C/W",
                 f"- Single-via thermal resistance estimate: {single_via_theta:.2f} C/W",
+                f"- Required via-network resistance: {required_via_network_theta:.2f} C/W",
                 f"- Required via count: {via_count}",
                 f"- Target temperature rise at the interface: {delta_temp_c:.2f} C",
             ]
