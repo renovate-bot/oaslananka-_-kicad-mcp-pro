@@ -1,20 +1,31 @@
 name: CI
 
 on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   validate:
-    name: Manual CI Fallback (Python ${{ matrix.python-version }})
+    name: Org CI (Python ${{ matrix.python-version }})
+    if: github.repository_owner == 'oaslananka-lab' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     strategy:
       matrix:
         python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v6
       - name: Explain execution mode
-        run: echo "GitHub Actions is manual-only. Azure DevOps is the primary CI/CD system for this repository."
+        run: |
+          echo "Automatic GitHub CI/CD is owned by oaslananka-lab."
+          echo "Personal GitHub, Azure DevOps, and GitLab are manual fallback surfaces."
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ matrix.python-version }}

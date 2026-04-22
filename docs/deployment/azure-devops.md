@@ -1,10 +1,10 @@
-# Azure DevOps CI/CD
+# Azure DevOps Manual CI/CD
 
-Azure DevOps is the canonical CI/CD and release system for this repository. GitHub remains the source-hosting platform, but GitHub Actions in this repo are intentionally manual-only fallback workflows.
+Azure DevOps is a manual fallback and release-support surface for this repository. Automated GitHub CI/CD is owned by the `oaslananka-lab` organization mirror, while the personal `oaslananka` GitHub repository remains the main source repository.
 
 ## Pipeline Definition
 
-The primary pipeline definition lives in the repository root as `azure-pipelines.yml`.
+The primary Azure pipeline definition lives in the repository root as `azure-pipelines.yml`.
 
 It covers:
 
@@ -23,16 +23,17 @@ You can also store them in a variable group if you want to share them across mul
 
 ## Release Model
 
-- Normal CI should run from Azure DevOps on pushes and pull requests.
-- Package publication should be queued manually from Azure DevOps when you are ready to release.
-- GitHub Actions should only be used as a manual fallback when Azure is temporarily unavailable.
+- Automated GitHub CI/security jobs should run from `https://github.com/oaslananka-lab/kicad-mcp-pro`.
+- Azure DevOps should be queued manually when you need the Azure validation or release-support path.
+- Package publication should always be queued manually when you are ready to release.
+- The personal GitHub repository should not run automatic CI/CD jobs.
 
-## GitHub Fallback Workflows
+## GitHub Workflows
 
-The repository still includes manual-only GitHub workflows:
+The repository includes GitHub workflows that are automatic only in the `oaslananka-lab` organization mirror and manual elsewhere:
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/security.yml`
 - `.github/workflows/publish.yml`
 
-These workflows are intentionally `workflow_dispatch` only and should not be treated as the primary delivery path.
+`ci.yml` and `security.yml` run on `push` and `pull_request` only when `github.repository_owner == 'oaslananka-lab'`. `publish.yml` remains manual because package publication should require a human release decision.

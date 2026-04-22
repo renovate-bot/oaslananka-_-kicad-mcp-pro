@@ -15,6 +15,7 @@ Use the documentation in this folder for installation, client configuration, too
 - [KiCad 10 Graphical DRC](kicad10/graphical-drc.md)
 - [KiCad Studio Integration](integration/kicad-studio.md)
 - [Azure DevOps CI/CD](deployment/azure-devops.md)
+- [Repository and CI/CD Topology](deployment/repository-topology.md)
 - [HTTP Mode](deployment/http-mode.md)
 - [First PCB Workflow](workflows/first-pcb.md)
 - [High-Speed Review Workflow](workflows/high-speed-review.md)

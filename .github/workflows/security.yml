@@ -1,31 +1,47 @@
 name: Security
 
 on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   audit:
+    if: github.repository_owner == 'oaslananka-lab' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
     steps:
       - uses: actions/checkout@v6
       - name: Explain execution mode
-        run: echo "GitHub Actions is manual-only. Azure DevOps is the primary CI/CD system for this repository."
+        run: |
+          echo "Automatic GitHub security CI/CD is owned by oaslananka-lab."
+          echo "Personal GitHub, Azure DevOps, and GitLab are manual fallback surfaces."
       - uses: astral-sh/setup-uv@v4
         with:
           python-version: "3.12"
       - run: uv sync --all-extras --frozen --python 3.12
       - run: uv run --python 3.12 python -m bandit -r src/ -ll
+      - name: Enforced dependency audit
+        run: uv run --python 3.12 python -m pip_audit --skip-editable --progress-spinner off
 
-      - name: Safety Action scan (API key)
+      - name: Optional Safety scan
         if: env.SAFETY_API_KEY != ''
-        uses: pyupio/safety-action@v1
-        with:
-          api-key: ${{ env.SAFETY_API_KEY }}
-
-      - name: Dependency audit fallback (no API key)
-        if: env.SAFETY_API_KEY == ''
-        run: >
-          uv run --python 3.12 python -m pip_audit --skip-editable --progress-spinner off
-          --ignore-vuln CVE-2025-69872
+        run: |
+          set +e
+          uv run --python 3.12 python -m safety \
+            --stage cicd \
+            --key "${SAFETY_API_KEY}" \
+            scan \
+            --target .
+          safety_exit=$?
+          set -e
+          if [ "${safety_exit}" -ne 0 ]; then
+            echo "Safety scan could not complete cleanly (exit ${safety_exit}); pip-audit remains the enforced dependency gate."
+          fi

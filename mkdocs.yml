@@ -51,6 +51,7 @@ nav:
       - Cursor: integration/cursor.md
       - Claude Code: integration/claude-code.md
   - Deployment:
+      - Repository and CI/CD Topology: deployment/repository-topology.md
       - Azure DevOps CI/CD: deployment/azure-devops.md
       - Docker: deployment/docker.md
       - HTTP Mode: deployment/http-mode.md

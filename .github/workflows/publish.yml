@@ -1,8 +1,8 @@
 name: Publish to PyPI
 
-# Manual fallback only.
-# Azure DevOps is the canonical CI/CD and release system for this repository.
-# Use this workflow only if you intentionally want a GitHub-based manual release.
+# Manual release only.
+# The oaslananka-lab mirror is the GitHub CI/CD owner. Personal GitHub,
+# Azure DevOps, and GitLab remain manually triggered fallback surfaces.
 
 on:
   workflow_dispatch:
@@ -29,14 +29,19 @@ jobs:
   # ── Build ───────────────────────────────────────────────────────────────────
   build:
     name: Build package
+    if: github.repository_owner == 'oaslananka-lab' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       artifact-name: ${{ steps.set-artifact.outputs.name }}
     steps:
       - uses: actions/checkout@v6
 
       - name: Explain execution mode
-        run: echo "Primary release flow runs in Azure DevOps. This GitHub workflow is manual fallback only."
+        run: |
+          echo "GitHub package release is manual and should normally be queued from oaslananka-lab."
+          echo "Personal GitHub, Azure DevOps, and GitLab are manual fallback surfaces."
 
       - uses: astral-sh/setup-uv@v4
         with:

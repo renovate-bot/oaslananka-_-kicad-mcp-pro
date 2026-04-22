@@ -1,0 +1,53 @@
+stages:
+  - validate
+  - security
+  - build
+
+workflow:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - when: never
+
+variables:
+  PYTHON_VERSION: "3.12"
+
+validate:
+  stage: validate
+  image: python:3.12-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+  before_script:
+    - python -m pip install --upgrade pip uv
+    - uv sync --all-extras --python "$PYTHON_VERSION"
+  script:
+    - uv run --python "$PYTHON_VERSION" ruff check src/ tests/
+    - uv run --python "$PYTHON_VERSION" python -m mypy src/kicad_mcp/
+    - uv run --python "$PYTHON_VERSION" python -m pytest tests/unit/ -q
+
+security:
+  stage: security
+  image: python:3.12-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+  before_script:
+    - python -m pip install --upgrade pip uv
+    - uv sync --all-extras --python "$PYTHON_VERSION"
+  script:
+    - uv run --python "$PYTHON_VERSION" python -m pip_audit --skip-editable --progress-spinner off
+
+build:
+  stage: build
+  image: python:3.12-slim
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+      when: manual
+  before_script:
+    - python -m pip install --upgrade pip uv
+  script:
+    - uv build
+  artifacts:
+    paths:
+      - dist/
+    expire_in: 3 days

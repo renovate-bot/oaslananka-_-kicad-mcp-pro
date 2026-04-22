@@ -12,7 +12,7 @@
 
 > AI-powered PCB and schematic design with KiCad. Works with Claude, Cursor, VS Code, Claude Code, and any MCP-compatible client.
 
-Primary CI/CD and release automation runs in Azure DevOps. GitHub Actions in this repository are manual fallback workflows only.
+The personal GitHub repository is the main public source. Automated GitHub CI/CD runs from the `oaslananka-lab` organization mirror; Azure DevOps, GitLab, and personal GitHub workflows stay manually triggered.
 
 ## What's New in 2.4
 
@@ -84,15 +84,14 @@ For Studio deployments, `27185` is a good dedicated local bridge port by convent
 
 ## CI/CD
 
-Azure DevOps is the canonical CI/CD system for this repository. The pipeline definition lives in [`azure-pipelines.yml`](azure-pipelines.yml) and covers linting, mypy, pytest, coverage, package builds, and optional manual publishing to TestPyPI or PyPI from Azure-managed secrets.
+Repository ownership is split on purpose:
 
-GitHub Actions stays in the repository only as a manual fallback surface:
+- Main source repository: `https://github.com/oaslananka/kicad-mcp-pro`
+- GitHub CI/CD mirror: `https://github.com/oaslananka-lab/kicad-mcp-pro`
 
-- `.github/workflows/ci.yml`
-- `.github/workflows/security.yml`
-- `.github/workflows/publish.yml`
+The `ci.yml` and `security.yml` GitHub workflows run automatically only when the repository owner is `oaslananka-lab`. On the personal GitHub repository they remain manual fallback workflows. Azure DevOps and GitLab pipelines are manual fallback/release-support surfaces.
 
-None of those workflows are intended to be the primary automated path. If GitHub-hosted automation is unavailable, queue the Azure pipeline instead and keep GitHub releases/workflows manual.
+Package publication to TestPyPI or PyPI remains manual and should be queued only after the version, changelog, and artifacts are ready. See [Repository and CI/CD Topology](docs/deployment/repository-topology.md) for the full policy.
 
 ## Quick Start
 
