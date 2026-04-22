@@ -81,7 +81,7 @@ stages:
               if [ -n "${DOPPLER_TOKEN:-}" ] && [ "${DOPPLER_TOKEN}" != '$(DOPPLER_TOKEN)' ]; then
                 (curl -Ls --tlsv1.2 --proto "=https" --retry 3 https://cli.doppler.com/install.sh || wget -t 3 -qO- https://cli.doppler.com/install.sh) | sudo sh
                 set +e
-                doppler run -- sh -c 'uv run --python $(pythonVersion) python -m safety --stage cicd --key "$SAFETY_API_KEY" scan --target .'
+                doppler run --project "${DOPPLER_PROJECT:-all}" --config "${DOPPLER_CONFIG:-main}" -- sh -c 'uv run --python $(pythonVersion) python -m safety --stage cicd --key "$SAFETY_API_KEY" scan --target .'
                 safety_exit=$?
                 set -e
                 if [ "${safety_exit}" -ne 0 ]; then
@@ -93,6 +93,8 @@ stages:
             displayName: Run safety via Doppler when configured
             env:
               DOPPLER_TOKEN: $(DOPPLER_TOKEN)
+              DOPPLER_PROJECT: $(DOPPLER_PROJECT)
+              DOPPLER_CONFIG: $(DOPPLER_CONFIG)
 
       - job: windows_validate
         displayName: Windows · Ruff, mypy, and unit tests
@@ -168,9 +170,9 @@ stages:
               if [ -n "${DOPPLER_TOKEN:-}" ] && [ "${DOPPLER_TOKEN}" != '$(DOPPLER_TOKEN)' ]; then
                 (curl -Ls --tlsv1.2 --proto "=https" --retry 3 https://cli.doppler.com/install.sh || wget -t 3 -qO- https://cli.doppler.com/install.sh) | sudo sh
                 if [ "${{ parameters.packageIndex }}" = "TestPyPI" ]; then
-                  doppler run -- sh -c 'python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p "$TEST_PYPI_TOKEN" --non-interactive --skip-existing "$(Pipeline.Workspace)/python-dist"/*'
+                  doppler run --project "${DOPPLER_PROJECT:-all}" --config "${DOPPLER_CONFIG:-main}" -- sh -c 'python -m twine upload --repository-url https://test.pypi.org/legacy/ -u __token__ -p "$TEST_PYPI_TOKEN" --non-interactive --skip-existing "$(Pipeline.Workspace)/python-dist"/*'
                 else
-                  doppler run -- sh -c 'python -m twine upload -u __token__ -p "$PYPI_TOKEN" --non-interactive --skip-existing "$(Pipeline.Workspace)/python-dist"/*'
+                  doppler run --project "${DOPPLER_PROJECT:-all}" --config "${DOPPLER_CONFIG:-main}" -- sh -c 'python -m twine upload -u __token__ -p "$PYPI_TOKEN" --non-interactive --skip-existing "$(Pipeline.Workspace)/python-dist"/*'
                 fi
                 exit 0
               fi
@@ -196,3 +198,5 @@ stages:
               PYPI_TOKEN: $(PYPI_TOKEN)
               TEST_PYPI_TOKEN: $(TEST_PYPI_TOKEN)
               DOPPLER_TOKEN: $(DOPPLER_TOKEN)
+              DOPPLER_PROJECT: $(DOPPLER_PROJECT)
+              DOPPLER_CONFIG: $(DOPPLER_CONFIG)

@@ -18,6 +18,8 @@ jobs:
     env:
       SAFETY_API_KEY: ${{ secrets.SAFETY_API_KEY }}
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      DOPPLER_PROJECT: ${{ secrets.DOPPLER_PROJECT }}
+      DOPPLER_CONFIG: ${{ secrets.DOPPLER_CONFIG }}
     steps:
       - uses: actions/checkout@v6
       - name: Explain execution mode
@@ -40,7 +42,7 @@ jobs:
         if: env.DOPPLER_TOKEN != ''
         run: |
           set +e
-          doppler run -- sh -c 'uv run --python 3.12 python -m safety --stage cicd --key "$SAFETY_API_KEY" scan --target .'
+          doppler run --project "${DOPPLER_PROJECT:-all}" --config "${DOPPLER_CONFIG:-main}" -- sh -c 'uv run --python 3.12 python -m safety --stage cicd --key "$SAFETY_API_KEY" scan --target .'
           safety_exit=$?
           set -e
           if [ "${safety_exit}" -ne 0 ]; then

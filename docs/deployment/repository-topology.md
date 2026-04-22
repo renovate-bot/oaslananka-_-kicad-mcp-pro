@@ -54,7 +54,10 @@ GitHub organization workflows, Azure DevOps, and GitLab all use the same pattern
 Minimum setup:
 
 - GitHub org repository secret: `DOPPLER_TOKEN`
+- GitHub org repository secrets: `DOPPLER_PROJECT=all`, `DOPPLER_CONFIG=main`
 - Azure DevOps secret variable or variable group entry: `DOPPLER_TOKEN`
+- Azure DevOps variables: `DOPPLER_PROJECT=all`, `DOPPLER_CONFIG=main`
 - GitLab CI/CD variable: `DOPPLER_TOKEN`
+- GitLab CI/CD variables: `DOPPLER_PROJECT=all`, `DOPPLER_CONFIG=main`
 
 Keep old native secrets such as `PYPI_TOKEN` and `TEST_PYPI_TOKEN` only if you want fallback publishing without Doppler.
