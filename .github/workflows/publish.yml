@@ -43,19 +43,29 @@ jobs:
           echo "GitHub package release is manual and should normally be queued from oaslananka-lab."
           echo "Personal GitHub, Azure DevOps, and GitLab are manual fallback surfaces."
 
-      - uses: astral-sh/setup-uv@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - uses: astral-sh/setup-uv@v8.1.0
         with:
           python-version: '3.12'
 
+      - name: Install Node hook tooling
+        run: |
+          corepack enable
+          corepack npm ci
+
       - name: Install dependencies
-        run: uv sync --all-extras
+        run: uv sync --all-extras --frozen
 
       - name: Run tests (pre-publish gate)
         if: ${{ !inputs.skip_tests }}
-        run: uv run python -m pytest tests/unit/ tests/integration/ -v
+        run: corepack npm run check:ci
 
       - name: Build sdist + wheel
-        run: uv build
+        run: corepack npm run build
 
       - name: Inspect artifacts
         run: |
