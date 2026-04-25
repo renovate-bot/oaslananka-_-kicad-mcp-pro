@@ -73,10 +73,11 @@ def test_built_distributions_include_runtime_entrypoint(tmp_path: Path) -> None:
     install_dir = tmp_path / "install"
     install = subprocess.run(
         [
-            sys.executable,
-            "-m",
+            uv,
             "pip",
             "install",
+            "--python",
+            sys.executable,
             "--no-deps",
             "--target",
             str(install_dir),
