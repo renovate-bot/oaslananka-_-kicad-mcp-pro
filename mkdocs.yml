@@ -51,6 +51,8 @@ nav:
   - Comparison: comparison.md
   - Tools Reference: tools-reference.md
   - API Stability: api-stability.md
+  - Maintenance Policy: maintenance-policy.md
+  - Workflow Security: workflow-security.md
   - Demo Media: demo-media.md
   - KiCad 10:
       - Variants: kicad10/variants.md

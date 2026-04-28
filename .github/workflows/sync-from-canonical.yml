@@ -13,7 +13,7 @@ on:
       - canonical-push
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: sync-from-canonical
@@ -24,9 +24,11 @@ jobs:
     if: github.repository == 'oaslananka/kicad-mcp-pro'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - name: Checkout canonical
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -34,13 +36,16 @@ jobs:
       - name: Push canonical refs to org mirror
         env:
           MIRROR_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_REF: ${{ github.event.ref }}
+          EVENT_REF_TYPE: ${{ github.event.ref_type }}
         run: |
           set -euo pipefail
           git remote add org "https://x-access-token:${MIRROR_TOKEN}@github.com/oaslananka-lab/kicad-mcp-pro.git"
 
-          if [ "${{ github.event_name }}" = "delete" ]; then
-            ref_name="${{ github.event.ref }}"
-            ref_type="${{ github.event.ref_type }}"
+          if [ "${EVENT_NAME}" = "delete" ]; then
+            ref_name="${EVENT_REF}"
+            ref_type="${EVENT_REF_TYPE}"
             if [ "$ref_type" = "branch" ]; then
               case "$ref_name" in
                 gh-pages|release-please--branches--main)
@@ -71,12 +76,15 @@ jobs:
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro' && github.event_name != 'push' && github.event_name != 'delete'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - name: Checkout org mirror
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
           token: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
+          persist-credentials: false
 
       - name: Pull from canonical and replay
         env:
@@ -86,6 +94,7 @@ jobs:
           git config user.name "oaslananka-lab[bot]"
           git config user.email "oaslananka-lab@users.noreply.github.com"
 
+          git remote set-url origin "https://x-access-token:${MIRROR_TOKEN}@github.com/oaslananka-lab/kicad-mcp-pro.git"
           git remote add canonical "https://x-access-token:${MIRROR_TOKEN}@github.com/oaslananka/kicad-mcp-pro.git"
           git fetch canonical --prune --tags
 

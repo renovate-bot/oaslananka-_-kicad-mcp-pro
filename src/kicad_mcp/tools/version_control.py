@@ -271,7 +271,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @headless_compatible
-    def vcs_restore_checkpoint(commit_hash: str) -> str:
+    def vcs_restore_checkpoint(commit_hash: str, confirm: bool = False) -> str:
         """Restore project files and keep a recovery branch for the stashed pre-restore state."""
         if not commit_hash.strip():
             raise ValueError("Commit hash must not be empty.")
@@ -281,6 +281,15 @@ def register(mcp: FastMCP) -> None:
             raise ValueError("No Git repository was found. Run vcs_init_git() first.")
         pathspec = _project_pathspec(repo_root, project_dir)
         _run_git(repo_root, "rev-parse", "--verify", commit_hash)
+        if not confirm:
+            return "\n".join(
+                [
+                    "Dry run: checkpoint restore was not executed.",
+                    f"- Commit: {commit_hash}",
+                    f"- Path scope: {pathspec}",
+                    "Rerun with confirm=true to restore project files.",
+                ]
+            )
         stash_note = _stash_project_state(repo_root, pathspec, commit_hash)
         _run_git(
             repo_root,
@@ -340,7 +349,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @headless_compatible
-    def vcs_tag_release(tag: str, message: str) -> str:
+    def vcs_tag_release(tag: str, message: str, dry_run: bool = True, confirm: bool = False) -> str:
         """Create an annotated release tag after the full project quality gate passes."""
         if not tag.strip():
             raise ValueError("Release tag must not be empty.")
@@ -358,6 +367,17 @@ def register(mcp: FastMCP) -> None:
         existing = _run_git(repo_root, "tag", "--list", tag.strip(), check=False).stdout.strip()
         if existing:
             raise ValueError(f"Git tag '{tag.strip()}' already exists.")
+        if dry_run:
+            return "\n".join(
+                [
+                    "Dry run: release tag was not created.",
+                    f"- Tag: {tag.strip()}",
+                    f"- Message: {message.strip()}",
+                    "Rerun with dry_run=false and confirm=true after local and CI gates pass.",
+                ]
+            )
+        if not confirm:
+            raise ValueError("Release tagging requires dry_run=false and confirm=true.")
         _run_git(repo_root, "tag", "-a", tag.strip(), "-m", message.strip())
         commit_hash = _run_git(repo_root, "rev-parse", "HEAD").stdout.strip()
         return "\n".join(

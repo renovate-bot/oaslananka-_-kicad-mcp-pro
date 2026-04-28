@@ -1,0 +1,38 @@
+# Workflow Security
+
+## Required Posture
+
+- Default workflow permissions are `contents: read`.
+- Jobs that publish, release, mirror, deploy, attest, or mutate issues/labels use
+  job-scoped permissions and explicit repository or environment guards.
+- Normal CI, lint, test, docs, CodeQL, Gitleaks, Trivy, and workflow-security
+  checks run on pull requests and canonical pushes without stale repository
+  guards.
+- Third-party Actions are pinned to full commit SHAs resolved from upstream refs.
+  Do not replace these with fabricated SHAs.
+- Shell steps must pass GitHub expression values through `env:` before using
+  them in scripts.
+
+## Local Checks
+
+```bash
+corepack npm run workflows:lint
+corepack npm run workflows:security
+```
+
+`workflows:lint` parses workflow YAML and runs actionlint. `workflows:security`
+runs zizmor offline at high severity or above. Medium findings such as checkout
+credential persistence are still reviewed, but high findings block the local and
+CI gate.
+
+## Pinning Updates
+
+When updating a pinned Action, resolve the new ref directly from GitHub, for
+example:
+
+```bash
+git ls-remote --tags https://github.com/actions/checkout.git 'refs/tags/v4^{}'
+```
+
+If a tag cannot be resolved, do not guess. Leave the old pin in place or document
+the exact unresolved action and stop the change.

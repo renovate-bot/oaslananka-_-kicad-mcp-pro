@@ -7,6 +7,7 @@ on:
   push:
     branches:
       - main
+  merge_group:
   schedule:
     - cron: "15 7 * * 2"
   workflow_dispatch:
@@ -16,27 +17,32 @@ on:
         required: false
         type: string
 
+permissions:
+  contents: read
+
 jobs:
   scan:
     name: Trivy (base image)
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
       - name: Build image
         run: docker build -f Dockerfile -t kicad-mcp-pro:base .
-      - uses: aquasecurity/trivy-action@v0.36.0
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: kicad-mcp-pro:base
           format: sarif
           output: trivy-base.sarif
           severity: HIGH,CRITICAL
-          exit-code: "0"
+          exit-code: "1"
           version: v0.70.0
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a
         if: always()
         with:
           sarif_file: trivy-base.sarif
@@ -48,26 +54,31 @@ jobs:
       github.event_name == 'workflow_dispatch' &&
       inputs.kicad_appimage_url != ''
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
       - name: Build image
+        env:
+          KICAD_APPIMAGE_URL: ${{ inputs.kicad_appimage_url }}
         run: |
           docker build \
-            --build-arg KICAD_APPIMAGE_URL="${{ inputs.kicad_appimage_url }}" \
+            --build-arg KICAD_APPIMAGE_URL="${KICAD_APPIMAGE_URL}" \
             -f Dockerfile.kicad10 \
             -t kicad-mcp-pro:kicad10 .
-      - uses: aquasecurity/trivy-action@v0.36.0
+      - uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25
         with:
           image-ref: kicad-mcp-pro:kicad10
           format: sarif
           output: trivy-kicad10.sarif
           severity: HIGH,CRITICAL
-          exit-code: "0"
+          exit-code: "1"
           version: v0.70.0
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a
         if: always()
         with:
           sarif_file: trivy-kicad10.sarif

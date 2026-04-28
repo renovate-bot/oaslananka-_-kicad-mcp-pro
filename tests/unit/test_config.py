@@ -43,8 +43,11 @@ def test_cors_origins_require_explicit_http_urls(sample_project: Path) -> None:
     with pytest.raises(ValueError, match="cannot contain '\\*'"):
         KiCadMCPConfig(cors_origins="*")
 
+    vscode_cfg = KiCadMCPConfig(cors_origins="vscode-webview://panel")
+    assert vscode_cfg.cors_origin_list == ["vscode-webview://panel"]
+
     with pytest.raises(ValueError, match="must be fully qualified"):
-        KiCadMCPConfig(cors_origins="vscode-webview://panel")
+        KiCadMCPConfig(cors_origins="file://panel")
 
 
 def test_watch_dir_does_not_override_explicit_project(tmp_path: Path, monkeypatch) -> None:

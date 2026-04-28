@@ -1,13 +1,14 @@
 # Release Process
 
-Releases use Conventional Commits and release-please as the canonical release PR mechanism.
+Releases use Conventional Commits and release-please as the canonical release PR
+and changelog mechanism. Release Drafter is not used.
 
 ## Normal Release
 
 1. Confirm CI, Security, CodeQL, docs, and release checks are green.
 2. Merge the release-please PR.
 3. Confirm the tag and GitHub Release were created.
-4. Run the manual `Release` workflow from the `oaslananka-lab` mirror.
+4. Run the manual `Release` workflow from the protected release repository.
 5. Approve the `release` environment gate.
 6. Confirm PyPI/TestPyPI publish, SBOM, checksums, Sigstore signing artifacts, and GitHub attestations.
 7. Confirm docs deploy to `gh-pages`.
@@ -24,7 +25,13 @@ Inputs:
 - `publish`: set to `true` only for actual registry publication.
 - `approval`: set to `APPROVE_RELEASE` when `publish=true`.
 
-The workflow verifies Doppler secrets, runs tests, builds artifacts, creates SBOM output, attests artifacts, and publishes through `scripts/publish.sh`.
+The workflow verifies Doppler secret names, runs tests and security checks, builds
+artifacts, creates SBOM output, attests artifacts, and publishes through
+`scripts/publish.sh` only when `publish=true` and the protected environment is
+approved.
+
+There is no separate publish workflow. Publishing must not be triggered from
+pull requests, forks, local shells, or agent automation.
 
 ## Hotfix
 

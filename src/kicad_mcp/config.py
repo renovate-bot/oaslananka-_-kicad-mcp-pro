@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import warnings
 from pathlib import Path
@@ -17,6 +18,7 @@ from pydantic_settings import (
 )
 
 from .discovery import discover_kicad_cli, discover_library_paths, scan_project_dir
+from .path_safety import assert_within, normalize_workspace_root, relative_subpath, resolve_under
 
 CONFIG_FILE = Path.home() / ".config" / "kicad-mcp-pro" / "config.toml"
 
@@ -44,6 +46,7 @@ class KiCadMCPConfig(BaseSettings):
     ngspice_cli: Path | None = Field(default=None)
     kicad_socket_path: Path | None = Field(default=None)
     kicad_token: str | None = Field(default=None)
+    workspace_root: Path | None = Field(default=None)
 
     project_dir: Path | None = Field(default=None)
     project_file: Path | None = Field(default=None)
@@ -86,6 +89,8 @@ class KiCadMCPConfig(BaseSettings):
 
     enable_experimental_tools: bool = Field(default=False)
     ipc_connection_timeout: float = Field(default=10.0, gt=0.1, le=120.0)
+    ipc_retries: int = Field(default=2, ge=0, le=10)
+    headless: bool = Field(default=False)
     cli_timeout: float = Field(default=120.0, gt=0.1, le=600.0)
     max_items_per_response: int = Field(default=200, ge=1, le=2000)
     max_text_response_chars: int = Field(default=50000, ge=1000, le=500000)
@@ -108,6 +113,40 @@ class KiCadMCPConfig(BaseSettings):
             file_secret_settings,
         )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _apply_env_aliases(cls, values: object) -> object:
+        """Apply interoperability aliases that do not fit the KICAD_MCP_ prefix."""
+        if not isinstance(values, dict):
+            return values
+
+        aliases = {
+            "kicad_token": ("KICAD_API_TOKEN", "KICAD_MCP_KICAD_TOKEN"),
+            "kicad_cli": ("KICAD_CLI_PATH", "KICAD_MCP_KICAD_CLI"),
+            "workspace_root": ("KICAD_MCP_WORKSPACE_ROOT",),
+            "ipc_retries": ("KICAD_MCP_RETRIES",),
+            "headless": ("KICAD_MCP_HEADLESS",),
+        }
+        updated = dict(values)
+        for field_name, env_names in aliases.items():
+            if field_name in updated and updated[field_name] not in (None, ""):
+                continue
+            for env_name in env_names:
+                raw = os.environ.get(env_name)
+                if raw not in (None, ""):
+                    updated[field_name] = raw
+                    break
+
+        if "ipc_connection_timeout" not in updated or updated["ipc_connection_timeout"] in (
+            None,
+            "",
+        ):
+            timeout_ms = os.environ.get("KICAD_MCP_TIMEOUT_MS")
+            if timeout_ms not in (None, ""):
+                updated["ipc_connection_timeout"] = float(str(timeout_ms)) / 1000.0
+
+        return updated
+
     @field_validator(
         "kicad_cli",
         "freerouting_jar",
@@ -118,6 +157,7 @@ class KiCadMCPConfig(BaseSettings):
         "pcb_file",
         "sch_file",
         "output_dir",
+        "workspace_root",
         "symbol_library_dir",
         "footprint_library_dir",
         mode="before",
@@ -150,21 +190,38 @@ class KiCadMCPConfig(BaseSettings):
             if origin == "*":
                 raise ValueError(
                     "KICAD_MCP_CORS_ORIGINS cannot contain '*'. "
-                    "Use an explicit HTTP/HTTPS origin allowlist instead."
+                    "Use an explicit local origin allowlist instead."
                 )
             parsed = urlparse(origin)
-            if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            if parsed.scheme not in {"http", "https", "vscode-webview"} or not parsed.netloc:
                 raise ValueError(
                     "KICAD_MCP_CORS_ORIGINS entries must be fully qualified "
-                    "http:// or https:// URLs."
+                    "http://, https://, or vscode-webview:// URLs."
                 )
         return ",".join(origins)
 
     @field_validator("transport", mode="before")
     @classmethod
     def _normalize_transport(cls, value: object) -> object:
-        if isinstance(value, str) and value.casefold() == "http":
-            return "streamable-http"
+        if isinstance(value, str):
+            normalized = value.strip().casefold()
+            if normalized == "http":
+                return "streamable-http"
+            return normalized
+        return value
+
+    @field_validator("log_level", mode="before")
+    @classmethod
+    def _normalize_log_level(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().upper()
+        return value
+
+    @field_validator("log_format", "profile", mode="before")
+    @classmethod
+    def _normalize_lowercase_literals(cls, value: object) -> object:
+        if isinstance(value, str):
+            return value.strip().casefold()
         return value
 
     @field_validator("kicad_cli")
@@ -207,6 +264,22 @@ class KiCadMCPConfig(BaseSettings):
         libraries = discover_library_paths(self.kicad_cli)
         self.symbol_library_dir = self.symbol_library_dir or libraries.get("symbols")
         self.footprint_library_dir = self.footprint_library_dir or libraries.get("footprints")
+        self._validate_workspace_membership()
+
+    def _validate_workspace_membership(self) -> None:
+        """Ensure configured project paths stay under an explicit workspace root."""
+        if self.workspace_root is None:
+            return
+        root = self.workspace_root.resolve()
+        for path in (
+            self.project_dir,
+            self.project_file,
+            self.pcb_file,
+            self.sch_file,
+            self.output_dir,
+        ):
+            if path is not None:
+                assert_within(root, path.resolve())
 
     @property
     def project_root(self) -> Path:
@@ -215,34 +288,37 @@ class KiCadMCPConfig(BaseSettings):
             return self.project_dir.resolve()
         return Path.cwd().resolve()
 
+    @property
+    def workspace(self) -> Path:
+        """Return the root directory used for workspace-safe operations."""
+        return normalize_workspace_root(self.workspace_root, fallback=self.project_root)
+
+    @property
+    def timeout_ms(self) -> int:
+        """Return the IPC timeout in milliseconds for diagnostics."""
+        return int(self.ipc_connection_timeout * 1000)
+
     def ensure_output_dir(self, subdir: str | None = None) -> Path:
         """Create and return the output directory."""
         base = (self.output_dir or (self.project_root / "output")).resolve()
+        assert_within(self.workspace, base)
         target = base
         if subdir:
-            candidate = Path(subdir).expanduser()
-            if candidate.is_absolute():
-                raise ValueError("Output subdirectories must be relative to the output directory.")
-            if any(part == ".." for part in candidate.parts):
-                raise ValueError("Output subdirectories cannot contain parent traversal.")
+            candidate = relative_subpath(subdir)
             target = (base / candidate).resolve()
             try:
                 target.relative_to(base)
             except ValueError as exc:
                 raise ValueError("The requested output directory escapes the output root.") from exc
+            assert_within(self.workspace, target)
         target.mkdir(parents=True, exist_ok=True)
         return target
 
     def resolve_within_project(self, raw_path: str | Path, *, allow_absolute: bool = False) -> Path:
         """Resolve a path relative to the project root and prevent traversal."""
-        candidate = Path(raw_path).expanduser()
-        if candidate.is_absolute():
-            resolved = candidate.resolve()
-            if not allow_absolute:
-                self._assert_within_project(resolved)
-            return resolved
-        resolved = (self.project_root / candidate).resolve()
+        resolved = resolve_under(self.project_root, raw_path, allow_absolute=allow_absolute)
         self._assert_within_project(resolved)
+        assert_within(self.workspace, resolved)
         return resolved
 
     def _assert_within_project(self, path: Path) -> None:
@@ -267,6 +343,7 @@ class KiCadMCPConfig(BaseSettings):
         self.pcb_file = pcb_file.resolve() if pcb_file else None
         self.sch_file = sch_file.resolve() if sch_file else None
         self.output_dir = output_dir.resolve() if output_dir else self.project_dir / "output"
+        self._validate_workspace_membership()
         self._project_dir_explicit = explicit
         self._refresh_paths()
 
@@ -279,6 +356,22 @@ class KiCadMCPConfig(BaseSettings):
     def project_dir_is_explicit(self) -> bool:
         """Return True when the active project came from explicit user configuration."""
         return self._project_dir_explicit
+
+    def safe_diagnostics(self) -> dict[str, object]:
+        """Return sanitized config values for health and doctor output."""
+        return {
+            "workspace_root": str(self.workspace) if self.workspace else None,
+            "project_dir": str(self.project_dir) if self.project_dir else None,
+            "output_dir": str(self.output_dir) if self.output_dir else None,
+            "timeout_ms": self.timeout_ms,
+            "retries": self.ipc_retries,
+            "headless": self.headless,
+            "log_level": self.log_level,
+            "log_format": self.log_format,
+            "transport": self.transport,
+            "auth_token": {"configured": self.auth_token is not None},
+            "kicad_token": {"configured": self.kicad_token is not None},
+        }
 
 
 _config_lock = threading.Lock()

@@ -5,7 +5,9 @@
 - Canonical: `oaslananka/kicad-mcp-pro`
 - CI/CD mirror: `oaslananka-lab/kicad-mcp-pro`
 
-The canonical repository is the public source of truth. The lab repository is the automation runner.
+The canonical repository is the public source of truth. The lab repository can
+still run protected release and mirror automation, but normal CI and security
+checks are expected to run on pull requests, pushes, and merge queue events.
 
 ## Synchronization
 
@@ -16,21 +18,15 @@ Direction:
 - Branches and tags: canonical to lab
 - GitHub Releases and release assets: lab to canonical
 
-The canonical repository should not run Actions. All workflow jobs are guarded so they only run when the repository is `oaslananka-lab/kicad-mcp-pro`.
+Normal CI, lint, test, docs, CodeQL, Gitleaks, Trivy, and workflow-security jobs
+must not be skipped by stale repository guards. Release, publish, mirroring,
+deployment, and issue/label mutation jobs remain explicitly guarded.
 
-## Disable Personal Actions
+## Actions Policy
 
-Recommended one-time hardening:
-
-```bash
-gh api -X PUT /repos/oaslananka/kicad-mcp-pro/actions/permissions -f enabled=false
-```
-
-Re-enable only if needed:
-
-```bash
-gh api -X PUT /repos/oaslananka/kicad-mcp-pro/actions/permissions -f enabled=true -f allowed_actions=all
-```
+Keep Actions enabled anywhere branch protection depends on them. Use least
+privilege workflow permissions and protected environments rather than disabling
+normal validation.
 
 ## Manual Sync
 

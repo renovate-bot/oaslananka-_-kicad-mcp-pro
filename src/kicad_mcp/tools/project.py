@@ -26,6 +26,7 @@ from ..models.intent import (
     PowerRailSpec,
     ThermalEnvelope,
 )
+from ..path_safety import assert_within
 from ..prompts.workflows import render_professional_circuit_design_prompt
 from ..utils.cache import clear_ttl_cache, ttl_cache
 from .fixers import fixers_for_gate, sampling_prompt_for_gate
@@ -1550,10 +1551,20 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @headless_compatible
-    def kicad_create_new_project(path: str, name: str) -> str:
+    def kicad_create_new_project(path: str, name: str, confirm_overwrite: bool = False) -> str:
         """Create a new minimal KiCad project structure and activate it."""
         payload = CreateProjectInput(path=path, name=name)
-        project_dir = Path(payload.path).expanduser().resolve() / payload.name
+        cfg = get_config()
+        base_dir = Path(payload.path).expanduser().resolve()
+        if cfg.workspace_root is not None:
+            assert_within(cfg.workspace, base_dir)
+        project_dir = base_dir / payload.name
+        if project_dir.exists() and any(project_dir.iterdir()) and not confirm_overwrite:
+            return (
+                "Refusing to create a project over an existing non-empty directory.\n"
+                f"- Directory: {project_dir}\n"
+                "Choose a new name/path or rerun with confirm_overwrite=true."
+            )
         project_dir.mkdir(parents=True, exist_ok=True)
 
         project_file, pcb_file, sch_file = _new_project_files(project_dir, payload.name)
@@ -1587,7 +1598,6 @@ def register(mcp: FastMCP) -> None:
             encoding="utf-8",
         )
 
-        cfg = get_config()
         cfg.apply_project(
             project_dir,
             project_file=project_file,

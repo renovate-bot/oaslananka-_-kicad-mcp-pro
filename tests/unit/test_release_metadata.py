@@ -31,7 +31,7 @@ def test_release_metadata_is_synchronised() -> None:
     assert mcp_json["version"] == version
     assert "<!-- mcp-name: io.github.oaslananka/kicad-mcp-pro -->" in readme
     assert "development/v2-migration.md" in mkdocs
-    assert "| `2.x`   | Yes" in security
+    assert "| `3.x`   | Yes" in security
     assert "CVE-2025-69872" in security
 
 

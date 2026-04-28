@@ -139,6 +139,8 @@ def register(mcp: FastMCP) -> None:
         spacing_mm: float = 2.0,
         frame_width_mm: float = 5.0,
         output_path: str = "",
+        dry_run: bool = True,
+        confirm: bool = False,
     ) -> str:
         """Panelize the active PCB using KiKit.
 
@@ -154,6 +156,8 @@ def register(mcp: FastMCP) -> None:
             frame_width_mm: Panel frame/rail width in mm.
             output_path: Optional output file path (relative to output_dir).
                 Defaults to ``panel/<boardname>_panel_<rows>x<cols>.kicad_pcb``.
+            dry_run: If True, return the planned command and output path without writing files.
+            confirm: Must be True when ``dry_run`` is False to run KiKit.
 
         Returns:
             Confirmation with the panel file path, or an error message.
@@ -176,8 +180,7 @@ def register(mcp: FastMCP) -> None:
         if rows < 1 or cols < 1:
             return "rows and cols must both be >= 1."
 
-        out_dir = (cfg.output_dir or cfg.project_dir / "output") / "panel"  # type: ignore[operator]
-        out_dir.mkdir(parents=True, exist_ok=True)
+        out_dir = cfg.ensure_output_dir("panel")
 
         board_stem = cfg.pcb_file.stem
         if output_path:
@@ -234,6 +237,27 @@ def register(mcp: FastMCP) -> None:
                 str(panel_file),
             ]
 
+        if dry_run:
+            return (
+                "Dry run: panelization was not executed.\n"
+                f"- Output: {panel_file}\n"
+                f"- Layout: {layout_lower} {rows}x{cols}, spacing={spacing_mm}mm, "
+                f"frame={frame_width_mm}mm\n"
+                f"- Command: {' '.join(cmd)}\n"
+                "Set dry_run=false and confirm=true to create the panel file."
+            )
+        if not confirm:
+            return (
+                "Panelization requires explicit confirmation because it writes a PCB file.\n"
+                f"- Intended output: {panel_file}\n"
+                "Rerun with dry_run=false and confirm=true."
+            )
+        if panel_file.exists():
+            return (
+                "Refusing to overwrite an existing panel file without choosing a new output_path.\n"
+                f"- Existing file: {panel_file}"
+            )
+
         try:
             result = subprocess.run(
                 cmd,
@@ -258,7 +282,7 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     @headless_compatible
-    def mfg_generate_test_plan(output_path: str = "") -> str:
+    def mfg_generate_test_plan(output_path: str = "", confirm_overwrite: bool = False) -> str:
         """Generate a bring-up test plan from the project design intent.
 
         Produces a structured markdown checklist covering:
@@ -270,6 +294,7 @@ def register(mcp: FastMCP) -> None:
         Args:
             output_path: Optional relative path for saving the plan (e.g.
                 ``"test_plan.md"``). If omitted, returns the plan as text only.
+            confirm_overwrite: If True, allow overwriting an existing output file.
 
         Returns:
             Bring-up test plan in markdown format.
@@ -410,6 +435,12 @@ def register(mcp: FastMCP) -> None:
         cfg = get_config()
         if output_path:
             out_file = cfg.resolve_within_project(output_path)
+            if out_file.exists() and not confirm_overwrite:
+                return (
+                    "Refusing to overwrite an existing test plan without confirmation.\n"
+                    f"- Existing file: {out_file}\n"
+                    "Rerun with confirm_overwrite=true or choose a different output_path."
+                )
             out_file.parent.mkdir(parents=True, exist_ok=True)
             out_file.write_text(text, encoding="utf-8")
             return f"Test plan saved to {out_file}\n\n" + text
@@ -507,7 +538,8 @@ def register(mcp: FastMCP) -> None:
     def mfg_correct_cpl_rotations(
         cpl_csv_path: str,
         output_path: str = "",
-        dry_run: bool = False,
+        dry_run: bool = True,
+        confirm: bool = False,
     ) -> str:
         """Apply JLCPCB CPL rotation corrections to a KiCad-exported pick-and-place CSV.
 
@@ -525,6 +557,7 @@ def register(mcp: FastMCP) -> None:
             output_path: Output path for the corrected CSV.  Defaults to
                 ``<stem>_jlcpcb_corrected.csv`` next to the input file.
             dry_run: If True, return a preview table without writing the file.
+            confirm: Must be True when ``dry_run`` is False and a file will be written.
 
         Returns:
             Summary of corrections applied, or a preview table for dry_run.
@@ -585,21 +618,34 @@ def register(mcp: FastMCP) -> None:
                 ref = row.get("Ref", "?")
                 preview_lines.append(f"{ref} | {pkg} | {orig:.2f}° | +{offset}° | {corrected:.2f}°")
 
-        if dry_run:
-            if corrected_count == 0:
-                return "No rotation corrections needed for any component."
-            return (
-                f"Dry run: {corrected_count} component(s) would be corrected.\n\n"
-                + "\n".join(preview_lines[:50])
-                + ("\n…(truncated)" if len(preview_lines) > 50 else "")
-            )
-
-        # Write corrected CSV
         if output_path:
             out_path = cfg.resolve_within_project(output_path)
         else:
             out_path = in_path.parent / f"{in_path.stem}_jlcpcb_corrected.csv"
 
+        if dry_run:
+            if corrected_count == 0:
+                return "No rotation corrections needed for any component."
+            return (
+                f"Dry run: {corrected_count} component(s) would be corrected.\n"
+                f"Output would be: {out_path}\n\n"
+                + "\n".join(preview_lines[:50])
+                + ("\n...(truncated)" if len(preview_lines) > 50 else "")
+            )
+        if not confirm:
+            return (
+                "CPL rotation correction writes a new CSV and requires explicit confirmation.\n"
+                f"- Intended output: {out_path}\n"
+                "Rerun with dry_run=false and confirm=true."
+            )
+        if out_path.exists():
+            return (
+                "Refusing to overwrite an existing corrected CPL CSV.\n"
+                f"- Existing file: {out_path}\n"
+                "Choose a different output_path."
+            )
+
+        # Write corrected CSV
         out_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with out_path.open("w", newline="", encoding="utf-8") as fh:

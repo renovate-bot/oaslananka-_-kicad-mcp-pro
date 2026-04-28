@@ -19,9 +19,20 @@ Do not open public issues for undisclosed security problems.
 
 | Version | Supported |
 | ------- | --------- |
-| `2.x`   | Yes       |
+| `3.x`   | Yes       |
+| `2.x`   | Security fixes only |
 | `1.x`   | No        |
 | `<1.0`  | No        |
+
+## Security Gates
+
+Required local and CI gates include Ruff, mypy strict, pytest with coverage,
+Bandit, the pip-audit backed dependency audit, Gitleaks, actionlint, and zizmor.
+Safety CLI is an optional additional supply-chain scan and does not replace the
+enforced pip-audit gate.
+
+Do not include secret values in issues, logs, examples, or diagnostics. CLI
+diagnostics report whether tokens are configured without printing the values.
 
 ## Accepted Advisories
 

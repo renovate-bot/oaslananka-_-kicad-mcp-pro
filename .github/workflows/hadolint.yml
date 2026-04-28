@@ -7,32 +7,40 @@ on:
   push:
     branches:
       - main
+  merge_group:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   hadolint:
     name: Hadolint
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: hadolint/hadolint-action@v3.3.0
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5
         with:
           dockerfile: Dockerfile
           failure-threshold: error
-      - uses: hadolint/hadolint-action@v3.3.0
+      - uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5
         with:
           dockerfile: Dockerfile.kicad10
           failure-threshold: error
 
   compose:
     name: Compose Validation
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
       - run: docker compose config --quiet

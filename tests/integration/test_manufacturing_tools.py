@@ -46,10 +46,24 @@ async def test_manufacturing_panelize_success_and_process_failures(
         return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr("kicad_mcp.tools.manufacturing.subprocess.run", ok_run)
-    grid = await call_tool_text(server, "mfg_panelize", {"layout": "grid"})
-    mousebites = await call_tool_text(server, "mfg_panelize", {"layout": "mousebites"})
-    vcut = await call_tool_text(server, "mfg_panelize", {"layout": "vcut"})
+    dry_run = await call_tool_text(server, "mfg_panelize", {"layout": "grid"})
+    grid = await call_tool_text(
+        server,
+        "mfg_panelize",
+        {"layout": "grid", "dry_run": False, "confirm": True},
+    )
+    mousebites = await call_tool_text(
+        server,
+        "mfg_panelize",
+        {"layout": "mousebites", "dry_run": False, "confirm": True},
+    )
+    vcut = await call_tool_text(
+        server,
+        "mfg_panelize",
+        {"layout": "vcut", "dry_run": False, "confirm": True},
+    )
 
+    assert "Dry run: panelization was not executed." in dry_run
     assert "Panel created:" in grid
     assert "Layout: grid" in grid
     assert "Layout: mousebites" in mousebites
@@ -61,7 +75,11 @@ async def test_manufacturing_panelize_success_and_process_failures(
         "kicad_mcp.tools.manufacturing.subprocess.run",
         lambda *_args, **_kwargs: SimpleNamespace(returncode=2, stdout="", stderr="bad panel"),
     )
-    failed = await call_tool_text(server, "mfg_panelize", {})
+    failed = await call_tool_text(
+        server,
+        "mfg_panelize",
+        {"dry_run": False, "confirm": True},
+    )
     assert "KiKit panelization failed" in failed
     assert "bad panel" in failed
 
@@ -69,7 +87,11 @@ async def test_manufacturing_panelize_success_and_process_failures(
         raise subprocess.TimeoutExpired(cmd="kikit", timeout=120)
 
     monkeypatch.setattr("kicad_mcp.tools.manufacturing.subprocess.run", timeout_run)
-    timed_out = await call_tool_text(server, "mfg_panelize", {})
+    timed_out = await call_tool_text(
+        server,
+        "mfg_panelize",
+        {"dry_run": False, "confirm": True},
+    )
     assert "timed out" in timed_out
 
 
@@ -122,7 +144,7 @@ async def test_manufacturing_test_plan_manifest_and_cpl_rotation(
     corrected = await call_tool_text(
         server,
         "mfg_correct_cpl_rotations",
-        {"cpl_csv_path": "output/demo_cpl.csv"},
+        {"cpl_csv_path": "output/demo_cpl.csv", "dry_run": False, "confirm": True},
     )
 
     assert "Dry run" in dry_run

@@ -4,48 +4,52 @@ on:
   pull_request:
   push:
     branches: ["**"]
+  merge_group:
 
 permissions:
   contents: read
 
 jobs:
   meta:
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
     timeout-minutes: 3
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
       - name: actionlint
-        uses: raven-actions/actionlint@v2
+        uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8
         with:
           fail-on-error: true
       - name: yamllint
         run: |
           pipx install yamllint || pip install --user yamllint
-          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" .github/ || true
+          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" .github/
 
   python:
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
         with:
           enable-cache: true
       - run: uvx ruff check .
       - run: uvx ruff format --check .
 
   node:
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version-file: .node-version
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
         with:
           enable-cache: true
       - run: corepack enable

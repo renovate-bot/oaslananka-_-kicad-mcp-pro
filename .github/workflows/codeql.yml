@@ -7,25 +7,30 @@ on:
   pull_request:
     branches:
       - main
+  merge_group:
   schedule:
     - cron: "24 4 * * 1"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   analyze:
     name: CodeQL
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a
         with:
           languages: python
           queries: security-extended,security-and-quality
-      - uses: github/codeql-action/analyze@v3
+      - uses: github/codeql-action/analyze@ce64ddcb0d8d890d2df4a9d1c04ff297367dea2a
         with:
           category: /language:python

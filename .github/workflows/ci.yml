@@ -7,12 +7,15 @@ on:
   pull_request:
     branches:
       - main
+  merge_group:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   validate:
     name: Validate (${{ matrix.os }}, Python ${{ matrix.python-version }})
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
     env:
@@ -31,12 +34,14 @@ jobs:
           - "3.13"
           - "3.14"
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version-file: .node-version
           cache: npm
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
@@ -57,7 +62,7 @@ jobs:
           corepack npm run test:unit
       - name: Install Doppler CLI
         if: matrix.os == 'ubuntu-latest'
-        uses: dopplerhq/cli-action@v4
+        uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73
       - name: Load Codecov token from Doppler
         if: matrix.os == 'ubuntu-latest'
         env:
@@ -71,7 +76,7 @@ jobs:
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest'
         continue-on-error: true
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@75cd11691c0faa626561e295848008c8a7dddffe
         with:
           files: coverage.xml
           flags: py${{ matrix.python-version }}
@@ -79,21 +84,22 @@ jobs:
           token: ${{ env.CODECOV_TOKEN }}
       - name: Publish test results
         if: always() && hashFiles('**/junit.xml', '**/test-results.xml') != ''
-        uses: EnricoMi/publish-unit-test-result-action@v2
+        uses: EnricoMi/publish-unit-test-result-action@c950f6fb443cb5af20a377fd0dfaa78838901040
         with:
           files: |
             **/junit.xml
             **/test-results.xml
       - name: Test summary
         if: always() && hashFiles('**/junit.xml') != ''
-        uses: test-summary/action@v2
+        uses: test-summary/action@31493c76ec9e7aa675f1585d3ed6f1da69269a86
         with:
           paths: "**/junit.xml"
 
   ci:
     name: CI
-    if: always() && github.repository == 'oaslananka-lab/kicad-mcp-pro'
+    if: always()
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs:
       - validate
     permissions:

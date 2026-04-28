@@ -2,24 +2,32 @@ name: Commitlint
 
 on:
   pull_request:
+  merge_group:
 
 permissions:
   contents: read
 
 jobs:
   lint:
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: "lts/*"
       - run: npm install --no-save @commitlint/cli @commitlint/config-conventional
-      - run: |
-          npx commitlint --from "${{ github.event.pull_request.base.sha }}" \
-                         --to "${{ github.event.pull_request.head.sha }}" \
+      - env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ -z "${BASE_SHA}" ] || [ -z "${HEAD_SHA}" ]; then
+            echo "Commitlint only runs for pull_request events."
+            exit 0
+          fi
+          npx commitlint --from "${BASE_SHA}" \
+                         --to "${HEAD_SHA}" \
                          --verbose

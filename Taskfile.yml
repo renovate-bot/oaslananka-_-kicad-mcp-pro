@@ -52,17 +52,40 @@ tasks:
     cmds:
       - corepack npm run security
 
+  security:local:
+    desc: Run local workstation security scanners with clear missing-tool failures
+    cmds:
+      - corepack npm run security:local
+
+  workflows:lint:
+    desc: Parse and lint GitHub Actions workflows
+    cmds:
+      - corepack npm run workflows:lint
+
+  workflows:security:
+    desc: Run workflow security checks
+    cmds:
+      - corepack npm run workflows:security
+
   build:
     desc: Build release artifacts
     cmds:
       - corepack npm run build
 
+  package:check:
+    desc: Build and check package artifacts
+    cmds:
+      - corepack npm run package:check
+
   pre-push:
     desc: Run the pre-push parity gate
     cmds:
+      - corepack npm run metadata:check
+      - corepack npm run format:check
+      - task: lint
       - task: typecheck
       - task: test:fast
-      - uv run python -c "import pathlib, yaml; [yaml.safe_load(p.read_text(encoding='utf-8')) for p in pathlib.Path('.github/workflows').glob('*.yml')]"
+      - task: workflows:lint
 
   ci:
     desc: Run the local equivalent of CI
@@ -70,6 +93,10 @@ tasks:
       - task: lint
       - task: typecheck
       - task: test:cov
+      - task: security
+      - task: workflows:lint
+      - task: workflows:security
+      - task: package:check
 
   ci:act:
     desc: Run the GitHub Actions CI workflow locally with act

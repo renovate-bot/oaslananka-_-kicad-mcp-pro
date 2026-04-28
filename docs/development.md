@@ -16,6 +16,9 @@ task format
 task lint
 task typecheck
 task test
+task security
+task workflows:lint
+task workflows:security
 task ci
 ```
 
@@ -32,6 +35,15 @@ For full local parity with CI:
 ```bash
 task ci
 ```
+
+For local workstation security scanners:
+
+```bash
+task security:local
+```
+
+This command requires Gitleaks, actionlint, and zizmor. It reports clear install
+hints when a required scanner is missing.
 
 ## Optional GitHub Actions Local Run
 

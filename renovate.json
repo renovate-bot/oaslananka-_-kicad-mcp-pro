@@ -1,0 +1,47 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:best-practices", ":dependencyDashboard"],
+  "timezone": "Europe/Istanbul",
+  "schedule": ["before 08:00 on monday"],
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 5,
+  "labels": ["dependencies"],
+  "packageRules": [
+    {
+      "description": "Automerge low-risk GitHub Actions patch and minor updates after checks pass.",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "github-actions minor and patch",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Automerge Node development tooling patch and minor updates after checks pass.",
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "dev dependencies minor and patch",
+      "automerge": true,
+      "automergeType": "pr",
+      "platformAutomerge": true
+    },
+    {
+      "description": "Require approval for runtime dependency updates.",
+      "matchDepTypes": ["dependencies"],
+      "dependencyDashboardApproval": true,
+      "labels": ["dependencies", "runtime"]
+    },
+    {
+      "description": "Require approval for breaking changes.",
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true,
+      "labels": ["dependencies", "breaking-change"]
+    },
+    {
+      "description": "Require approval for core KiCad/MCP/Pydantic/Typer ecosystem packages.",
+      "matchPackageNames": ["kicad-python", "kicad-sch-api", "mcp", "pydantic", "typer"],
+      "dependencyDashboardApproval": true,
+      "labels": ["dependencies", "core-runtime"]
+    }
+  ]
+}

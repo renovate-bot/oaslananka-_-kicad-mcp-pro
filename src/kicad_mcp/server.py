@@ -4,9 +4,13 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import inspect
+import io
+import json
 import os
 import secrets
+import sys
 import threading
 import time
 from collections import deque
@@ -14,6 +18,7 @@ from collections.abc import Callable, Iterable
 from typing import Any, Protocol, cast
 
 import anyio
+import click
 import structlog
 import typer
 from mcp import types as mcp_types
@@ -34,6 +39,7 @@ from typer.models import OptionInfo
 from . import __version__
 from .config import KiCadMCPConfig, get_config, reset_config
 from .connection import KiCadConnectionError, get_board
+from .diagnostics import DiagnosticReport, build_doctor_report, build_health_report
 from .discovery import ensure_studio_project_watcher, find_kicad_version
 from .tools import router
 from .tools.fixers import validate_callable_imports
@@ -830,20 +836,16 @@ def _print_startup_diagnostics(cfg: KiCadMCPConfig, *, probe_runtime: bool = Tru
     )
 
 
-@app.callback(invoke_without_command=True)
-def main_callback(
-    transport: str | None = typer.Option(None, help="Transport: stdio, http, sse, streamable-http"),
-    host: str | None = typer.Option(None, help="HTTP bind host"),
-    port: int | None = typer.Option(None, help="HTTP bind port"),
-    project_dir: str | None = typer.Option(None, help="Active KiCad project directory"),
-    log_level: str | None = typer.Option(None, help="Log level"),
-    log_format: str | None = typer.Option(None, help="Log format: console or json"),
-    profile: str | None = typer.Option(
-        None, help=f"Server profile: {', '.join(available_profiles())}"
-    ),
-    experimental: bool | None = typer.Option(None, help="Enable experimental tools"),
+def _apply_cli_env(
+    transport: str | None = None,
+    host: str | None = None,
+    port: int | None = None,
+    project_dir: str | None = None,
+    log_level: str | None = None,
+    log_format: str | None = None,
+    profile: str | None = None,
+    experimental: bool | None = None,
 ) -> None:
-    """Start the KiCad MCP Pro server."""
     cli_env = {
         "KICAD_MCP_TRANSPORT": transport,
         "KICAD_MCP_HOST": host,
@@ -861,6 +863,29 @@ def main_callback(
     if experimental is not None and not isinstance(experimental, OptionInfo):
         os.environ["KICAD_MCP_ENABLE_EXPERIMENTAL_TOOLS"] = "true" if experimental else "false"
 
+
+def _run_server_from_options(
+    *,
+    transport: str | None = None,
+    host: str | None = None,
+    port: int | None = None,
+    project_dir: str | None = None,
+    log_level: str | None = None,
+    log_format: str | None = None,
+    profile: str | None = None,
+    experimental: bool | None = None,
+) -> None:
+    """Apply CLI overrides and start the MCP server."""
+    _apply_cli_env(
+        transport=transport,
+        host=host,
+        port=port,
+        project_dir=project_dir,
+        log_level=log_level,
+        log_format=log_format,
+        profile=profile,
+        experimental=experimental,
+    )
     reset_config()
     cfg = get_config()
     setup_logging(cfg.log_level, cfg.log_format)
@@ -899,6 +924,132 @@ def main_callback(
         return
 
     server.run(transport="streamable-http", mount_path=cfg.mount_path)
+
+
+@app.callback(invoke_without_command=True)
+def main_callback(
+    transport: str | None = typer.Option(None, help="Transport: stdio, http, sse, streamable-http"),
+    host: str | None = typer.Option(None, help="HTTP bind host"),
+    port: int | None = typer.Option(None, help="HTTP bind port"),
+    project_dir: str | None = typer.Option(None, help="Active KiCad project directory"),
+    log_level: str | None = typer.Option(None, help="Log level"),
+    log_format: str | None = typer.Option(None, help="Log format: console or json"),
+    profile: str | None = typer.Option(
+        None, help=f"Server profile: {', '.join(available_profiles())}"
+    ),
+    experimental: bool | None = typer.Option(None, help="Enable experimental tools"),
+) -> None:
+    """Start the KiCad MCP Pro server when no subcommand is supplied."""
+    _apply_cli_env(
+        transport=transport,
+        host=host,
+        port=port,
+        project_dir=project_dir,
+        log_level=log_level,
+        log_format=log_format,
+        profile=profile,
+        experimental=experimental,
+    )
+    current_context = click.get_current_context(silent=True)
+    if current_context is not None and current_context.invoked_subcommand is not None:
+        return
+    _run_server_from_options()
+
+
+@app.command()
+def serve(
+    transport: str | None = typer.Option(None, help="Transport: stdio, http, sse, streamable-http"),
+    host: str | None = typer.Option(None, help="HTTP bind host"),
+    port: int | None = typer.Option(None, help="HTTP bind port"),
+    project_dir: str | None = typer.Option(None, help="Active KiCad project directory"),
+    log_level: str | None = typer.Option(None, help="Log level"),
+    log_format: str | None = typer.Option(None, help="Log format: console or json"),
+    profile: str | None = typer.Option(
+        None, help=f"Server profile: {', '.join(available_profiles())}"
+    ),
+    experimental: bool | None = typer.Option(None, help="Enable experimental tools"),
+) -> None:
+    """Start the MCP server explicitly."""
+    _run_server_from_options(
+        transport=transport,
+        host=host,
+        port=port,
+        project_dir=project_dir,
+        log_level=log_level,
+        log_format=log_format,
+        profile=profile,
+        experimental=experimental,
+    )
+
+
+def _echo_report(report: DiagnosticReport, *, as_json: bool) -> None:
+    if as_json:
+        typer.echo(report.model_dump_json(indent=2))
+        return
+    typer.echo(f"Status: {report.status}")
+    for check in report.checks:
+        suffix = f" Hint: {check.hint}" if check.hint else ""
+        typer.echo(f"- {check.name}: {check.status} - {check.message}{suffix}")
+
+
+def _diagnostic_command(builder: Callable[[], DiagnosticReport], *, as_json: bool) -> None:
+    try:
+        if as_json:
+            with contextlib.redirect_stdout(io.StringIO()):
+                report = builder()
+        else:
+            report = builder()
+    except Exception as exc:
+        payload = {
+            "ok": False,
+            "status": "error",
+            "error": {
+                "code": "CONFIGURATION_ERROR",
+                "message": str(exc),
+                "hint": "Fix malformed KiCad MCP configuration and retry.",
+                "retryable": False,
+            },
+        }
+        error = cast(dict[str, object], payload["error"])
+        typer.echo(json.dumps(payload, indent=2) if as_json else str(error["message"]))
+        raise typer.Exit(2) from exc
+    _echo_report(report, as_json=as_json)
+    if not report.ok:
+        raise typer.Exit(1)
+
+
+@app.command()
+def health(
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Report fast package and configuration health without requiring KiCad IPC."""
+    _diagnostic_command(build_health_report, as_json=json_output)
+
+
+@app.command()
+def doctor(
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Run deeper diagnostics without treating unavailable KiCad as fatal."""
+    _diagnostic_command(build_doctor_report, as_json=json_output)
+
+
+@app.command("version")
+def version_command(
+    json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
+) -> None:
+    """Print package version information."""
+    if json_output:
+        with contextlib.redirect_stdout(io.StringIO()):
+            cfg = get_config()
+    else:
+        cfg = get_config()
+    payload = {
+        "package": {"name": "kicad-mcp-pro", "version": __version__},
+        "mcp": {"transport_default": cfg.transport, "profile": cfg.profile},
+        "python": {"version": sys.version.split()[0]},
+    }
+    typer.echo(json.dumps(payload, indent=2) if json_output else __version__)
 
 
 def main() -> None:

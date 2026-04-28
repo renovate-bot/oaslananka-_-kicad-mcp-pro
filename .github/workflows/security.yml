@@ -7,28 +7,30 @@ on:
   pull_request:
     branches:
       - main
+  merge_group:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   audit:
     name: Security
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     permissions:
       contents: read
     env:
       DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
-      - name: Explain execution mode
-        run: |
-          echo "Automatic GitHub security CI/CD is owned by oaslananka-lab."
-          echo "Personal GitHub, Azure DevOps, and GitLab are manual fallback surfaces."
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version-file: .node-version
           cache: npm
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
         with:
           python-version: "3.12"
       - run: corepack enable
@@ -38,10 +40,15 @@ jobs:
       - name: Enforced dependency audit
         run: corepack npm run security:audit
 
+      - name: Workflow security
+        run: corepack npm run workflows:security
+
       - name: Install Doppler CLI
-        uses: dopplerhq/cli-action@v4
+        if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
+        uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73
 
       - name: Optional Safety scan via Doppler
+        if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
         run: |
           set +e
           # shellcheck disable=SC2016

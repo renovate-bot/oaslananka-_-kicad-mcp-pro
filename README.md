@@ -18,15 +18,25 @@ Use it with Claude Desktop, Claude Code, Cursor, VS Code, Codex, or any MCP-comp
 Install and run with `uvx`:
 
 ```bash
-uvx kicad-mcp-pro
+uvx kicad-mcp-pro --help
+uvx kicad-mcp-pro health --json
+uvx kicad-mcp-pro doctor --json
+uvx kicad-mcp-pro serve
 ```
 
 Or install with `pip`:
 
 ```bash
 pip install kicad-mcp-pro
-kicad-mcp-pro
+kicad-mcp-pro --help
+kicad-mcp-pro health --json
+kicad-mcp-pro serve
 ```
+
+The default no-subcommand invocation still starts the stdio MCP server for
+backward compatibility. `health --json` is safe to run when KiCad is not
+running; it reports KiCad IPC as deferred instead of crashing. `doctor --json`
+adds deeper CLI and IPC diagnostics for launchers such as `kicad-studio`.
 
 ## Minimal MCP Config
 
@@ -41,6 +51,7 @@ Use an absolute KiCad project path:
       "args": ["kicad-mcp-pro"],
       "env": {
         "KICAD_MCP_PROJECT_DIR": "/absolute/path/to/your/kicad-project",
+        "KICAD_MCP_WORKSPACE_ROOT": "/absolute/path/to/your/workspace",
         "KICAD_MCP_PROFILE": "pcb_only"
       }
     }
@@ -66,6 +77,7 @@ More client examples:
 - Export tools for Gerber, drill, BOM, PDF, netlist, STEP, render, pick-and-place, IPC-2581, SVG, and DXF.
 - SI, PI, EMC, routing, simulation, library, and version-control helper surfaces.
 - Server profiles such as `minimal`, `pcb_only`, `schematic_only`, `manufacturing`, `analysis`, and `agent_full`.
+- Machine-readable CLI diagnostics for editors and MCP clients.
 
 ## Common Workflow
 
@@ -89,14 +101,20 @@ Demo media guidance lives in [docs/demo-media.md](docs/demo-media.md).
 - [FAQ](docs/faq.md)
 - [API stability](docs/api-stability.md)
 - [Release process](docs/release-process.md)
+- [Maintenance policy](docs/maintenance-policy.md)
+- [Workflow security](docs/workflow-security.md)
 - [Security threat model](docs/security/threat-model.md)
 - [Comparison](docs/comparison.md)
 
 ## Repository Operations
 
-Automated GitHub CI/CD runs from the `oaslananka-lab` organization mirror. Personal GitHub, Azure DevOps, and GitLab remain manual fallback surfaces.
+Normal CI and security workflows run on pull requests, pushes, and merge queue
+events. Release, publish, mirroring, deployment, and token-backed jobs remain
+guarded behind explicit repository checks and protected environments.
 
-The project uses Dependabot, CodeQL, Gitleaks, OpenSSF Scorecard, Codecov, release-please, SBOM generation, Sigstore signing, and GitHub artifact attestations for release hardening.
+The project uses Dependabot, Renovate, CodeQL, Gitleaks, Trivy, OpenSSF
+Scorecard, Codecov, release-please, SBOM generation, Sigstore signing, and
+GitHub artifact attestations for release hardening.
 
 Operational references:
 

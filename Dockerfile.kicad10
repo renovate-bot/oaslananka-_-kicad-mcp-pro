@@ -24,15 +24,18 @@ FROM python:3.12-slim AS runtime
 WORKDIR /app
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libgl1 libglib2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /app/.venv .venv
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system kicadmcp \
+    && useradd --system --gid kicadmcp --home-dir /app --shell /usr/sbin/nologin kicadmcp
+COPY --from=builder --chown=kicadmcp:kicadmcp /app/.venv .venv
 COPY --from=kicad /opt/kicad-appimage /opt/kicad-appimage
-COPY src/ src/
-COPY README.md LICENSE ./
+COPY --chown=kicadmcp:kicadmcp src/ src/
+COPY --chown=kicadmcp:kicadmcp README.md LICENSE ./
 ENV PATH="/app/.venv/bin:/opt/kicad-appimage/usr/bin:$PATH"
 ENV KICAD_MCP_TRANSPORT=streamable-http
 ENV KICAD_MCP_HOST=0.0.0.0
 ENV KICAD_MCP_KICAD_CLI=/opt/kicad-appimage/usr/bin/kicad-cli
 LABEL org.opencontainers.image.description="KiCad MCP Pro with KiCad 10 kicad-cli extracted from an official AppImage. Intended for CI, not shared hosting."
 EXPOSE 3334
+USER kicadmcp
 CMD ["kicad-mcp-pro", "--transport", "http"]

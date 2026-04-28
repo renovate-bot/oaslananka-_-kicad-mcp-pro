@@ -280,12 +280,14 @@ def test_register_version_control_tools(monkeypatch, tmp_path: Path) -> None:
             ["git"], 0, stdout="", stderr=""
         ),
     )
-    restored = vcs_restore_checkpoint("deadbeef")
+    restore_preview = vcs_restore_checkpoint("deadbeef")
+    restored = vcs_restore_checkpoint("deadbeef", confirm=True)
+    assert "Dry run: checkpoint restore was not executed." in restore_preview
     assert "Previous uncommitted state was backed up: stash@{0}" in restored
     assert "Recovery branch: mcp-restore-deadbee" in restored
 
     monkeypatch.setattr(version_control, "_stash_project_state", lambda *_args: None)
-    assert "already clean" in vcs_restore_checkpoint("deadbeef")
+    assert "already clean" in vcs_restore_checkpoint("deadbeef", confirm=True)
 
     with pytest.raises(ValueError, match="must not be empty"):
         vcs_diff_with_checkpoint(" ")
@@ -356,6 +358,8 @@ def test_register_version_control_tools(monkeypatch, tmp_path: Path) -> None:
         return subprocess.CompletedProcess(["git"], 0, stdout="", stderr="")
 
     monkeypatch.setattr(version_control, "_run_git", create_tag)
-    tag_text = vcs_tag_release("v2.4.0", "release")
+    tag_preview = vcs_tag_release("v2.4.0", "release")
+    tag_text = vcs_tag_release("v2.4.0", "release", dry_run=False, confirm=True)
+    assert "Dry run: release tag was not created." in tag_preview
     assert "Release tag created." in tag_text
     assert "deadbeef" in tag_text

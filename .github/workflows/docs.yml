@@ -7,23 +7,29 @@ on:
   pull_request:
     branches:
       - main
+  merge_group:
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     name: Docs
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
         with:
           python-version: "3.12"
       - run: uv sync --extra dev --frozen
       - run: uv run mkdocs build --strict
-      - uses: lycheeverse/lychee-action@v2
+      - uses: lycheeverse/lychee-action@8646ba30535128ac92d33dfc9133794bfdd9b411
         with:
           args: --verbose --no-progress README.md docs/**/*.md
         env:
@@ -33,18 +39,21 @@ jobs:
     name: Deploy Docs
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro' && github.event_name == 'push'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs:
       - build
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@d4b2f3b6ecc6e67c4457f6d3e41ec42d3d0fcb86
         with:
           python-version: "3.12"
       - run: uv sync --extra dev --frozen
       - run: uv run mkdocs build --strict
-      - uses: peaceiris/actions-gh-pages@v4
+      - uses: peaceiris/actions-gh-pages@4f9cc6602d3f66b9c108549d475ec49e8ef4d45e
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_dir: ./site
