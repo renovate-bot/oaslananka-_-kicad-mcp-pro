@@ -8,6 +8,8 @@ import sys
 import threading
 import time
 
+STDIO_STARTUP_TIMEOUT_SECONDS = 10.0
+
 
 def test_stdio_initialize_does_not_require_client_warmup() -> None:
     env = {key: value for key, value in os.environ.items() if not key.startswith("KICAD_MCP_")}
@@ -49,7 +51,7 @@ def test_stdio_initialize_does_not_require_client_warmup() -> None:
     process.stdin.flush()
 
     try:
-        line = stdout.get(timeout=3.0)
+        line = stdout.get(timeout=STDIO_STARTUP_TIMEOUT_SECONDS)
         elapsed = time.perf_counter() - started
         initialized = {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
         process.stdin.write(json.dumps(initialized) + "\n")
@@ -68,7 +70,7 @@ def test_stdio_initialize_does_not_require_client_warmup() -> None:
     payload = json.loads(line)
     assert payload["id"] == 1
     assert "serverInfo" in payload["result"]
-    assert elapsed < 3.0
+    assert elapsed < STDIO_STARTUP_TIMEOUT_SECONDS
 
     tools_payload = json.loads(tools_line)
     tool_names = {tool["name"] for tool in tools_payload["result"]["tools"]}

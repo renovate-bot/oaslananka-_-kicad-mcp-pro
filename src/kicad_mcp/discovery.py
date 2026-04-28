@@ -19,10 +19,17 @@ from typing import Any, cast
 import structlog
 
 logger = structlog.get_logger(__name__)
+
+
+@dataclass
+class _StudioWatcherState:
+    thread: threading.Thread | None = None
+    root: Path | None = None
+
+
 _WATCHER_LOCK = threading.Lock()
-_WATCHER_THREAD: threading.Thread | None = None
+_WATCHER_STATE = _StudioWatcherState()
 _WATCHER_STOP = threading.Event()
-_WATCHER_ROOT: Path | None = None
 _CLI_CAPABILITIES_CACHE: dict[tuple[Path, int | None], CliCapabilities] = {}
 
 
@@ -393,25 +400,23 @@ def poll_studio_watch_dir(
 
 def ensure_studio_project_watcher(watch_dir: Path, poll_interval_seconds: float = 2.0) -> None:
     """Start a lightweight polling watcher for KiCad Studio bridge workflows."""
-    global _WATCHER_THREAD, _WATCHER_ROOT
-
     resolved_root = watch_dir.expanduser().resolve()
     with _WATCHER_LOCK:
         if (
-            _WATCHER_THREAD is not None
-            and _WATCHER_THREAD.is_alive()
-            and _WATCHER_ROOT == resolved_root
+            _WATCHER_STATE.thread is not None
+            and _WATCHER_STATE.thread.is_alive()
+            and _WATCHER_STATE.root == resolved_root
         ):
             return
 
         _WATCHER_STOP.set()
-        if _WATCHER_THREAD is not None and _WATCHER_THREAD.is_alive():
-            _WATCHER_THREAD.join(timeout=0.5)
-        _WATCHER_THREAD = None
-        _WATCHER_ROOT = None
+        if _WATCHER_STATE.thread is not None and _WATCHER_STATE.thread.is_alive():
+            _WATCHER_STATE.thread.join(timeout=0.5)
+        _WATCHER_STATE.thread = None
+        _WATCHER_STATE.root = None
 
         _WATCHER_STOP.clear()
-        _WATCHER_ROOT = resolved_root
+        _WATCHER_STATE.root = resolved_root
 
         def _worker() -> None:
             previous: dict[Path, float] = {}
@@ -434,25 +439,23 @@ def ensure_studio_project_watcher(watch_dir: Path, poll_interval_seconds: float 
                 )
                 _WATCHER_STOP.wait(sleep_for)
 
-        _WATCHER_THREAD = threading.Thread(
+        _WATCHER_STATE.thread = threading.Thread(
             target=_worker,
             name="kicad-mcp-studio-watch",
             daemon=True,
         )
-        _WATCHER_THREAD.start()
+        _WATCHER_STATE.thread.start()
         logger.info("studio_watch_started", watch_dir=str(resolved_root))
 
 
 def stop_studio_project_watcher() -> None:
     """Stop the background studio watch thread if it is running."""
-    global _WATCHER_THREAD, _WATCHER_ROOT
-
     with _WATCHER_LOCK:
         _WATCHER_STOP.set()
-        if _WATCHER_THREAD is not None and _WATCHER_THREAD.is_alive():
-            _WATCHER_THREAD.join(timeout=0.5)
-        _WATCHER_THREAD = None
-        _WATCHER_ROOT = None
+        if _WATCHER_STATE.thread is not None and _WATCHER_STATE.thread.is_alive():
+            _WATCHER_STATE.thread.join(timeout=0.5)
+        _WATCHER_STATE.thread = None
+        _WATCHER_STATE.root = None
 
 
 atexit.register(stop_studio_project_watcher)
