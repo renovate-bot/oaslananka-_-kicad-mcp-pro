@@ -352,13 +352,17 @@ class _SchematicBackendAdapter(Protocol):
     name: str
     capability_matrix: dict[str, SchematicCapabilityEntry]
 
-    def parse_schematic_file(self, sch_file: Path) -> dict[str, Any]: ...
+    def parse_schematic_file(self, sch_file: Path) -> dict[str, Any]:
+        raise NotImplementedError
 
-    def transactional_write(self, mutator: Callable[[str], str]) -> str: ...
+    def transactional_write(self, mutator: Callable[[str], str]) -> str:
+        raise NotImplementedError
 
-    def update_symbol_property(self, reference: str, field: str, value: str) -> str: ...
+    def update_symbol_property(self, reference: str, field: str, value: str) -> str:
+        raise NotImplementedError
 
-    def reload_schematic(self) -> str: ...
+    def reload_schematic(self) -> str:
+        raise NotImplementedError
 
 
 class _PointLike(Protocol):
@@ -375,15 +379,19 @@ class _PlacedComponentLike(Protocol):
     rotation: float
     _data: object
 
-    def set_property(self, name: str, value: str) -> object: ...
+    def set_property(self, name: str, value: str) -> object:
+        raise NotImplementedError
 
-    def move(self, x: float, y: float) -> object: ...
+    def move(self, x: float, y: float) -> object:
+        raise NotImplementedError
 
 
 class _ComponentCollectionLike(Protocol):
-    def all(self) -> Iterable[_PlacedComponentLike]: ...
+    def all(self) -> Iterable[_PlacedComponentLike]:
+        raise NotImplementedError
 
-    def get(self, reference: str) -> _PlacedComponentLike | None: ...
+    def get(self, reference: str) -> _PlacedComponentLike | None:
+        raise NotImplementedError
 
 
 class _LabelLike(Protocol):
@@ -393,7 +401,8 @@ class _LabelLike(Protocol):
 
 
 class _LabelCollectionLike(Protocol):
-    def all(self) -> Iterable[_LabelLike]: ...
+    def all(self) -> Iterable[_LabelLike]:
+        raise NotImplementedError
 
 
 class _WireLike(Protocol):
@@ -402,13 +411,16 @@ class _WireLike(Protocol):
 
 
 class _WireCollectionLike(Protocol):
-    def all(self) -> Iterable[_WireLike]: ...
+    def all(self) -> Iterable[_WireLike]:
+        raise NotImplementedError
 
 
 class _SheetManagerLike(Protocol):
-    def get_sheet_hierarchy(self) -> dict[str, Any]: ...
+    def get_sheet_hierarchy(self) -> dict[str, Any]:
+        raise NotImplementedError
 
-    def get_sheet_by_name(self, name: str) -> dict[str, Any] | None: ...
+    def get_sheet_by_name(self, name: str) -> dict[str, Any] | None:
+        raise NotImplementedError
 
 
 class _LoadedSchematicLike(Protocol):
@@ -428,9 +440,11 @@ class _LoadedSchematicLike(Protocol):
         project_name: str | None = None,
         page_number: str | None = None,
         uuid: str | None = None,
-    ) -> str: ...
+    ) -> str:
+        raise NotImplementedError
 
-    def save(self, file_path: Path | str | None = None, preserve_format: bool = True) -> object: ...
+    def save(self, file_path: Path | str | None = None, preserve_format: bool = True) -> object:
+        raise NotImplementedError
 
 
 def _load_kicad_schematic(sch_file: Path) -> _LoadedSchematicLike:
@@ -3528,7 +3542,7 @@ def register(mcp: FastMCP) -> None:
                 )
                 if alias and alias.isdigit()
             },
-            key=lambda item: int(item),
+            key=int,
         )
 
         units = []

@@ -3090,11 +3090,9 @@ def register(mcp: FastMCP) -> None:
             board_file.read_text(encoding="utf-8", errors="ignore")
         )
         existing = _parse_board_footprint_blocks(board_content)
-        occupied = _collect_occupied_boxes(existing)
         refs_in_groups = {
             reference for group_refs in payload.groups.values() for reference in group_refs
         }
-        occupied = [box for box in occupied if True]
         replacements: dict[str, str] = {}
         missing_refs: list[str] = []
         moved = 0

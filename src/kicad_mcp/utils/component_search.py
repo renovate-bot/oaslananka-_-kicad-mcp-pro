@@ -39,9 +39,11 @@ class ComponentSearchClient(Protocol):
         package: str | None = None,
         only_basic: bool = True,
         limit: int = 20,
-    ) -> list[ComponentRecord]: ...
+    ) -> list[ComponentRecord]:
+        raise NotImplementedError
 
-    def get_part(self, lcsc_code_or_mpn: str) -> ComponentRecord | None: ...
+    def get_part(self, lcsc_code_or_mpn: str) -> ComponentRecord | None:
+        raise NotImplementedError
 
 
 class RateLimiter:

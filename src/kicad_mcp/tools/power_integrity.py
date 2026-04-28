@@ -29,7 +29,6 @@ from ..utils.units import _coord_nm, mm_to_mil, mm_to_nm, nm_to_mm
 
 _COPPER_RESISTIVITY_OHM_M = 1.724e-8
 _TEMPERATURE_COEFFICIENT = 0.0039
-_COPPER_THERMAL_CONDUCTIVITY_W_MK = 385.0
 _DEFAULT_BOARD_THICKNESS_MM = 1.6
 
 

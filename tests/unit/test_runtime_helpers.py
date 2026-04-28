@@ -7,7 +7,9 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
-from kicad_mcp.connection import KiCadConnectionError, board_transaction, reset_connection
+import pytest
+
+import kicad_mcp.connection as connection
 from kicad_mcp.discovery import (
     CliCapabilities,
     discover_library_paths,
@@ -304,8 +306,6 @@ def test_cli_capabilities_cache_refreshes_when_binary_changes(tmp_path: Path, mo
 
 
 def test_board_transaction_uses_reentrant_lock() -> None:
-    import kicad_mcp.connection as connection
-
     assert connection._lock.acquire(timeout=0.1)
     try:
         assert connection._lock.acquire(blocking=False)
@@ -320,14 +320,10 @@ def test_board_transaction_resets_connection_on_ipc_failure(monkeypatch) -> None
     monkeypatch.setattr("kicad_mcp.connection.get_board", lambda: sentinel)
     monkeypatch.setattr("kicad_mcp.connection.reset_connection", reset)
 
-    try:
-        with board_transaction() as board:
+    with pytest.raises(connection.KiCadConnectionError):
+        with connection.board_transaction() as board:
             assert board is sentinel
-            raise KiCadConnectionError("boom")
-    except KiCadConnectionError:
-        pass
-    else:
-        raise AssertionError("board_transaction() should re-raise KiCadConnectionError")
+            raise connection.KiCadConnectionError("boom")
 
     reset.assert_called_once()
 
@@ -336,6 +332,6 @@ def test_reset_connection_closes_cached_instance(monkeypatch) -> None:
     closable = SimpleNamespace(close=MagicMock(side_effect=RuntimeError("close failed")))
     monkeypatch.setattr("kicad_mcp.connection._kicad", closable)
 
-    reset_connection()
+    connection.reset_connection()
 
     closable.close.assert_called_once()

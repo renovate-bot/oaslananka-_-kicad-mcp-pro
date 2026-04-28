@@ -291,7 +291,7 @@ async def test_scenario_4_rf_keepout_and_simulation_workflow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mock_board.get_enabled_layers.return_value = [BoardLayer.BL_F_Cu, BoardLayer.BL_B_Cu]
-    monkeypatch.setattr("kicad_mcp.tools.simulation._runner", lambda: _WorkflowSimulationRunner())
+    monkeypatch.setattr("kicad_mcp.tools.simulation._runner", _WorkflowSimulationRunner)
 
     netlist = sample_project / "rf_frontend.cir"
     netlist.write_text("* rf\n.end\n", encoding="utf-8")

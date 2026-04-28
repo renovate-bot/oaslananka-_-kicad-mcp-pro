@@ -27,11 +27,14 @@ FLOAT_PATTERN = r"-?\d+(?:\.\d+)?"
 class _BoardMetricsLike(Protocol):
     """Subset of board access used by the DFM profile helpers."""
 
-    def get_enabled_layers(self) -> list[int]: ...
+    def get_enabled_layers(self) -> list[int]:
+        raise NotImplementedError
 
-    def get_tracks(self) -> list[Track]: ...
+    def get_tracks(self) -> list[Track]:
+        raise NotImplementedError
 
-    def get_vias(self) -> list[Via]: ...
+    def get_vias(self) -> list[Via]:
+        raise NotImplementedError
 
 
 def _profile_resource_name(manufacturer: str, tier: str) -> str:
@@ -336,8 +339,6 @@ def _cost_lines(
     via_count = int(metrics["via_count"] or 0)
     if area_cm2 is None:
         area_cm2 = 25.0
-        width_mm = None
-        height_mm = None
 
     layer_multiplier = 1.0 + (max(copper_layers - 2, 0) * float(pricing["extra_layer_multiplier"]))
     setup_cost = float(pricing["setup_usd"])

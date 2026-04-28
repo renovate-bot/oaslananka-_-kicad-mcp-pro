@@ -56,7 +56,7 @@ AnyFunction = Callable[..., object]
 class _LazyRegistrationServer(Protocol):
     def start_lazy_registration_background(self) -> None:
         """Start deferred MCP surface registration."""
-        ...
+        raise NotImplementedError
 
 
 HEAVY_TOOL_NAMES: frozenset[str] = frozenset(
@@ -318,7 +318,7 @@ class _SyncServerHandle:
             nonlocal result, error
             try:
                 result = list(asyncio.run(self._server.list_tools()))
-            except BaseException as exc:  # pragma: no cover - defensive bridge
+            except Exception as exc:  # pragma: no cover - defensive bridge
                 error = exc
 
         thread = threading.Thread(target=_runner, name="kicad-mcp-list-tools", daemon=True)
@@ -400,7 +400,7 @@ class KiCadFastMCP(FastMCP):
                 raise self._lazy_registration_error
             try:
                 register()
-            except BaseException as exc:
+            except Exception as exc:
                 self._lazy_registration_error = exc
                 raise
             self._lazy_registration_complete = True
@@ -1039,10 +1039,7 @@ def version_command(
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
     """Print package version information."""
-    if json_output:
-        with contextlib.redirect_stdout(io.StringIO()):
-            cfg = get_config()
-    else:
+    with contextlib.redirect_stdout(io.StringIO()):
         cfg = get_config()
     payload = {
         "package": {"name": "kicad-mcp-pro", "version": __version__},

@@ -1111,8 +1111,6 @@ def _placement_analysis() -> tuple[PlacementAnalysis | None, GateOutcome | None]
     elif density_pct < 5.0 and len(footprints) >= 6:
         warnings.append(f"Footprint density is sparse ({density_pct:.2f}%).")
 
-    footprint_span_x = 0.0
-    footprint_span_y = 0.0
     placed_x = [float(entry["x_mm"]) for entry in footprints.values() if entry["x_mm"] is not None]
     placed_y = [float(entry["y_mm"]) for entry in footprints.values() if entry["y_mm"] is not None]
     if len(placed_x) >= 2 and len(placed_y) >= 2:

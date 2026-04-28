@@ -17,10 +17,27 @@ from pydantic_settings import (
     TomlConfigSettingsSource,
 )
 
-from .discovery import discover_kicad_cli, discover_library_paths, scan_project_dir
 from .path_safety import assert_within, normalize_workspace_root, relative_subpath, resolve_under
 
 CONFIG_FILE = Path.home() / ".config" / "kicad-mcp-pro" / "config.toml"
+
+
+def _discover_kicad_cli() -> Path:
+    from .discovery import discover_kicad_cli
+
+    return discover_kicad_cli()
+
+
+def _discover_library_paths(cli_path: Path) -> dict[str, Path | None]:
+    from .discovery import discover_library_paths
+
+    return discover_library_paths(cli_path)
+
+
+def _scan_project_dir(project_dir: Path) -> dict[str, Path | None]:
+    from .discovery import scan_project_dir
+
+    return scan_project_dir(project_dir)
 
 
 class KiCadMCPConfig(BaseSettings):
@@ -35,7 +52,7 @@ class KiCadMCPConfig(BaseSettings):
     )
 
     kicad_cli: Path = Field(
-        default_factory=discover_kicad_cli,
+        default_factory=_discover_kicad_cli,
         description="Path to the kicad-cli executable.",
     )
     freerouting_jar: Path | None = Field(default=None)
@@ -255,13 +272,13 @@ class KiCadMCPConfig(BaseSettings):
                     break
 
         if self.project_dir is not None:
-            scan = scan_project_dir(self.project_dir)
+            scan = _scan_project_dir(self.project_dir)
             self.project_file = self.project_file or scan["project"]
             self.pcb_file = self.pcb_file or scan["pcb"]
             self.sch_file = self.sch_file or scan["schematic"]
             self.output_dir = self.output_dir or self.project_dir / "output"
 
-        libraries = discover_library_paths(self.kicad_cli)
+        libraries = _discover_library_paths(self.kicad_cli)
         self.symbol_library_dir = self.symbol_library_dir or libraries.get("symbols")
         self.footprint_library_dir = self.footprint_library_dir or libraries.get("footprints")
         self._validate_workspace_membership()
