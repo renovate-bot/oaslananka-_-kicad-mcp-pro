@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import inspect
 import threading
 from collections.abc import Generator
 from contextlib import contextmanager
-from typing import TypedDict, cast
+from typing import cast
 
 import structlog
 from kipy.board import Board
@@ -25,39 +24,6 @@ logger = structlog.get_logger(__name__)
 _lock = threading.RLock()
 _session: KiCadSession | None = None
 _kicad: object | None = None
-
-
-class _KiCadKwargs(TypedDict, total=False):
-    socket_path: str
-    kicad_token: str
-    client_name: str
-    timeout_ms: int
-
-
-def _build_kicad_kwargs() -> _KiCadKwargs:
-    """Build only the kwargs that kipy.KiCad.__init__ actually accepts.
-
-    kipy's constructor signature varies by version. We inspect it at runtime
-    so we never pass unknown keyword arguments that would raise TypeError.
-    Supported params (kipy 0.5.x): socket_path, client_name, kicad_token, timeout_ms
-    """
-    cfg = get_config()
-    available = set(inspect.signature(KiCad.__init__).parameters.keys()) - {"self"}
-    kwargs: _KiCadKwargs = {}
-
-    if "socket_path" in available and cfg.kicad_socket_path is not None:
-        kwargs["socket_path"] = str(cfg.kicad_socket_path)
-
-    if "kicad_token" in available and cfg.kicad_token is not None:
-        kwargs["kicad_token"] = cfg.kicad_token
-
-    if "client_name" in available:
-        kwargs["client_name"] = "kicad-mcp"
-
-    if "timeout_ms" in available:
-        kwargs["timeout_ms"] = int(cfg.ipc_connection_timeout * 1000)
-
-    return kwargs
 
 
 def _get_session() -> KiCadSession:

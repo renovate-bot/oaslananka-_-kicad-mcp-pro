@@ -6,9 +6,9 @@ import inspect
 import threading
 import time
 from collections.abc import Callable
+from pathlib import Path
 from typing import Protocol, TypedDict
 
-from ..config import KiCadMCPConfig, get_config
 from ..errors import KiCadBoardNotOpenError, KiCadConnectionTimeoutError, KiCadNotRunningError
 
 
@@ -32,7 +32,24 @@ class KiCadKwargs(TypedDict, total=False):
 
 
 KiCadClientFactory = Callable[..., object]
-ConfigFactory = Callable[[], KiCadMCPConfig]
+
+
+class SessionConfig(Protocol):
+    """Configuration fields used by the session adapter."""
+
+    kicad_socket_path: Path | None
+    kicad_token: str | None
+    ipc_connection_timeout: float
+    ipc_retries: int
+
+
+ConfigFactory = Callable[[], SessionConfig]
+
+
+def _default_config() -> SessionConfig:
+    from ..config import get_config
+
+    return get_config()
 
 
 class KiCadSession:
@@ -42,7 +59,7 @@ class KiCadSession:
         self,
         *,
         client_factory: KiCadClientFactory,
-        config_factory: ConfigFactory = get_config,
+        config_factory: ConfigFactory = _default_config,
         logger: LoggerLike | None = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
