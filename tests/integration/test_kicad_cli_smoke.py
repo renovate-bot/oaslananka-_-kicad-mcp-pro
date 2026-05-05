@@ -1,39 +1,68 @@
 """Real KiCad CLI smoke tests.
 
-These tests intentionally skip unless KICAD_MCP_KICAD_CLI points to a real
-kicad-cli executable. They are not subprocess mocks; CI should run them only in
-a KiCad 10-capable environment.
+These tests intentionally skip unless a real ``kicad-cli`` executable is
+discoverable from ``KICAD_MCP_KICAD_CLI``, ``KICAD_CLI_PATH``, ``PATH``, or the
+project's existing discovery/configuration layer. They are not subprocess mocks;
+CI should run them only in a KiCad 10-capable environment.
 """
 
 from __future__ import annotations
 
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
+from kicad_mcp.config import get_config, reset_config
+
 KICAD_MAJOR_VERSION = 10
+
+
+def _candidate_cli_paths() -> list[Path]:
+    """Return ordered KiCad CLI candidates from env, PATH, then project discovery."""
+    candidates: list[Path] = []
+    for env_name in ("KICAD_MCP_KICAD_CLI", "KICAD_CLI_PATH"):
+        raw_path = os.environ.get(env_name, "").strip()
+        if raw_path:
+            candidates.append(Path(raw_path).expanduser())
+
+    discovered = shutil.which("kicad-cli")
+    if discovered:
+        candidates.append(Path(discovered))
+
+    try:
+        reset_config()
+        candidates.append(get_config().kicad_cli)
+    except Exception:
+        pass
+
+    deduplicated: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = str(candidate)
+        if key not in seen:
+            deduplicated.append(candidate)
+            seen.add(key)
+    return deduplicated
 
 
 @pytest.fixture(scope="session")
 def kicad_cli_path() -> Path:
-    """Return the configured KiCad CLI path or skip when unavailable."""
-    raw_path = os.environ.get("KICAD_MCP_KICAD_CLI", "").strip()
-    if not raw_path:
-        pytest.skip("KICAD_MCP_KICAD_CLI is not set; skipping real KiCad CLI smoke tests.")
-
-    cli_path = Path(raw_path).expanduser()
-    if not cli_path.exists():
-        pytest.skip(f"KICAD_MCP_KICAD_CLI does not exist: {cli_path}")
-    if not cli_path.is_file():
-        pytest.skip(f"KICAD_MCP_KICAD_CLI is not a file: {cli_path}")
-    return cli_path
+    """Return the configured/discovered KiCad CLI path or skip when unavailable."""
+    for cli_path in _candidate_cli_paths():
+        if cli_path.exists() and cli_path.is_file():
+            return cli_path
+    searched = ", ".join(str(path) for path in _candidate_cli_paths()) or "<none>"
+    pytest.skip(f"kicad-cli not found via env, PATH, or discovery. Candidates: {searched}")
 
 
 def _run_kicad_cli(
-    cli_path: Path, *args: str, cwd: Path | None = None
+    cli_path: Path,
+    *args: str,
+    cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run kicad-cli and return a completed process with captured text output."""
     return subprocess.run(
@@ -116,7 +145,7 @@ def _write_minimal_project(project_dir: Path) -> Path:
 
 
 def test_kicad_cli_version_is_discoverable(kicad_cli_path: Path) -> None:
-    """Verify that the configured binary is a KiCad 10 CLI."""
+    """Verify that the discovered binary is a KiCad 10 CLI."""
     result = _run_kicad_cli(kicad_cli_path, "version")
     output = _combined_output(result)
 
