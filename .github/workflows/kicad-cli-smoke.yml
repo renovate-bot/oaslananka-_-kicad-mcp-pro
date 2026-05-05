@@ -16,6 +16,7 @@ jobs:
   smoke-test:
     name: KiCad 10 CLI Smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4.2.2
@@ -27,12 +28,10 @@ jobs:
 
       - name: Download and Extract KiCad 10 AppImage
         env:
-          # Use input if provided (manual dispatch), otherwise fallback to env/secret or a default nightly for validation
-          # The objective requested documentation of where to get this URL.
-          DEFAULT_URL: 'https://downloads.kicad.org/kicad/linux/nightly/KiCad-nightly-x86_64.AppImage'
           KICAD_APPIMAGE_URL: ${{ github.event.inputs.kicad_appimage_url || vars.KICAD_APPIMAGE_URL }}
         run: |
-          URL="${KICAD_APPIMAGE_URL:-$DEFAULT_URL}"
+          # Fallback to a known nightly if no URL is provided via vars or input
+          URL="${KICAD_APPIMAGE_URL:-https://downloads.kicad.org/kicad/linux/nightly/KiCad-nightly-x86_64.AppImage}"
           echo "Downloading KiCad AppImage from $URL"
           curl -fL "$URL" -o kicad.AppImage
           chmod +x kicad.AppImage
@@ -40,21 +39,24 @@ jobs:
           sudo mv squashfs-root /opt/kicad-appimage
           echo "/opt/kicad-appimage/usr/bin" >> $GITHUB_PATH
 
-      - name: Install uv
-        run: pip install --user uv
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v5.3.0
+        with:
+          python-version: "3.12"
 
-      - name: Set up Python
-        run: uv python install 3.12
+      - name: Install project dependencies
+        run: |
+          corepack enable
+          corepack npm ci
+          uv sync --all-extras --frozen
 
-      - name: Install dependencies
-        run: uv sync --all-extras --frozen
-
-      - name: Run KiCad CLI Smoke Tests
+      - name: Run real KiCad CLI smoke tests
         env:
           KICAD_MCP_KICAD_CLI: /opt/kicad-appimage/usr/bin/kicad-cli
         run: |
           mkdir -p artifacts/kicad-cli-smoke
-          uv run python -m pytest tests/integration/test_kicad_cli_smoke.py --junitxml=artifacts/kicad-cli-smoke/pytest-report.xml
+          uv run python -m pytest tests/integration/test_kicad_cli_smoke.py \
+            -q \
+            --junitxml=artifacts/kicad-cli-smoke/pytest-report.xml
 
       - name: Upload artifacts on failure
         if: failure()

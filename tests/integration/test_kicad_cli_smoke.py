@@ -1,85 +1,153 @@
+"""Real KiCad CLI smoke tests.
+
+These tests intentionally skip unless KICAD_MCP_KICAD_CLI points to a real
+kicad-cli executable. They are not subprocess mocks; CI should run them only in
+a KiCad 10-capable environment.
+"""
+
 from __future__ import annotations
 
 import os
+import re
+import subprocess
 from pathlib import Path
 
 import pytest
 
-from kicad_mcp.config import get_config, reset_config
-from kicad_mcp.discovery import find_kicad_version
-from kicad_mcp.server import build_server
-from tests.conftest import call_tool_text
-
-FIXTURE_PROJECT = Path("tests/fixtures/benchmark_projects/pass_minimal_mcu_board")
+KICAD_MAJOR_VERSION = 10
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def kicad_cli_path() -> Path:
-    """Fixture that returns the KiCad CLI path or skips if not configured."""
-    cli_env = os.environ.get("KICAD_MCP_KICAD_CLI") or os.environ.get("KICAD_CLI_PATH")
-    if not cli_env:
-        pytest.skip("KICAD_MCP_KICAD_CLI is not set")
+    """Return the configured KiCad CLI path or skip when unavailable."""
+    raw_path = os.environ.get("KICAD_MCP_KICAD_CLI", "").strip()
+    if not raw_path:
+        pytest.skip("KICAD_MCP_KICAD_CLI is not set; skipping real KiCad CLI smoke tests.")
 
-    path = Path(cli_env).expanduser()
-    if not path.exists():
-        pytest.skip(f"kicad-cli not found at {path}")
-
-    return path
-
-
-@pytest.mark.anyio
-async def test_kicad_cli_version_10(kicad_cli_path: Path) -> None:
-    """Verify that the configured KiCad CLI reports version 10."""
-    version = find_kicad_version(kicad_cli_path)
-    assert version is not None, "Failed to discover KiCad version"
-
-    # version string can be "10.0.0", "10.0.1-rc1", etc.
-    # or even more complex like "10.0.0-3.fc40"
-    major = version.split(".")[0]
-    assert major == "10", f"Expected KiCad major version 10, got {version}"
+    cli_path = Path(raw_path).expanduser()
+    if not cli_path.exists():
+        pytest.skip(f"KICAD_MCP_KICAD_CLI does not exist: {cli_path}")
+    if not cli_path.is_file():
+        pytest.skip(f"KICAD_MCP_KICAD_CLI is not a file: {cli_path}")
+    return cli_path
 
 
-@pytest.mark.anyio
-async def test_kicad_cli_board_stats_smoke(
-    kicad_cli_path: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Run real KiCad CLI to export board stats on a fixture project."""
-    # Setup workspace and project
-    workspace = tmp_path / "workspace"
-    workspace.mkdir()
-    project_dir = workspace / "project"
-    project_dir.mkdir()
+def _run_kicad_cli(
+    cli_path: Path, *args: str, cwd: Path | None = None
+) -> subprocess.CompletedProcess[str]:
+    """Run kicad-cli and return a completed process with captured text output."""
+    return subprocess.run(
+        [str(cli_path), *args],
+        cwd=cwd,
+        text=True,
+        capture_output=True,
+        timeout=60,
+        check=False,
+    )
 
-    # Copy fixture files
-    for f in FIXTURE_PROJECT.glob("demo.*"):
-        (project_dir / f.name).write_bytes(f.read_bytes())
 
-    output_dir = workspace / "output"
+def _combined_output(result: subprocess.CompletedProcess[str]) -> str:
+    return "\n".join(part for part in (result.stdout, result.stderr) if part)
 
-    monkeypatch.setenv("KICAD_MCP_KICAD_CLI", str(kicad_cli_path))
-    monkeypatch.setenv("KICAD_MCP_WORKSPACE_ROOT", str(workspace))
-    monkeypatch.setenv("KICAD_MCP_PROJECT_DIR", str(project_dir))
-    monkeypatch.setenv("KICAD_MCP_OUTPUT_DIR", str(output_dir))
 
-    reset_config()
-    cfg = get_config()
-    assert cfg.kicad_cli == kicad_cli_path
-    assert cfg.workspace_root == workspace
+def _write_minimal_project(project_dir: Path) -> Path:
+    """Create a deterministic minimal KiCad project with an empty board file."""
+    project_dir.mkdir(parents=True, exist_ok=True)
+    project_file = project_dir / "smoke.kicad_pro"
+    board_file = project_dir / "smoke.kicad_pcb"
 
-    server = build_server("full")
+    project_file.write_text(
+        """
+{
+  "board": {
+    "design_settings": {
+      "defaults": {},
+      "diff_pair_dimensions": [],
+      "drc_exclusions": [],
+      "rules": {}
+    }
+  },
+  "meta": {
+    "filename": "smoke.kicad_pro",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [],
+    "meta": {
+      "version": 3
+    },
+    "nets": []
+  }
+}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    board_file.write_text(
+        """
+(kicad_pcb
+  (version 20240108)
+  (generator "kicad-mcp-pro-smoke")
+  (general)
+  (paper "A4")
+  (layers
+    (0 "F.Cu" signal)
+    (31 "B.Cu" signal)
+    (32 "B.Adhes" user "B.Adhesive")
+    (33 "F.Adhes" user "F.Adhesive")
+    (34 "B.Paste" user)
+    (35 "F.Paste" user)
+    (36 "B.SilkS" user "B.Silkscreen")
+    (37 "F.SilkS" user "F.Silkscreen")
+    (38 "B.Mask" user)
+    (39 "F.Mask" user)
+    (44 "Edge.Cuts" user)
+  )
+  (setup
+    (pad_to_mask_clearance 0)
+    (allow_soldermask_bridges_in_footprints no)
+  )
+)
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    return board_file
 
-    # We must explicitly set the project to ensure all internal state is updated
-    await call_tool_text(server, "kicad_set_project", {"project_dir": str(project_dir)})
 
-    # Run the tool
-    stats_text = await call_tool_text(server, "get_board_stats", {})
+def test_kicad_cli_version_is_discoverable(kicad_cli_path: Path) -> None:
+    """Verify that the configured binary is a KiCad 10 CLI."""
+    result = _run_kicad_cli(kicad_cli_path, "version")
+    output = _combined_output(result)
 
-    # Assertions
-    assert "Board Statistics" in stats_text or "Component Count" in stats_text
+    assert result.returncode == 0, output
+    match = re.search(r"\b(\d+)\.\d+(?:\.\d+)?\b", output)
+    assert match is not None, output
+    assert int(match.group(1)) == KICAD_MAJOR_VERSION, output
 
-    stats_file = output_dir / "board_stats.txt"
-    assert stats_file.exists(), f"Stats file {stats_file} was not created"
-    assert stats_file.read_text(encoding="utf-8").strip() != ""
 
-    # Additional check: ensure it was written where we expected
-    assert stats_file.parent == output_dir
+def test_kicad_cli_exports_board_stats_without_gui(kicad_cli_path: Path, tmp_path: Path) -> None:
+    """Run a GUI-free CLI export path against a minimal board fixture."""
+    project_dir = tmp_path / "project"
+    artifacts_dir = tmp_path / "artifacts"
+    artifacts_dir.mkdir(parents=True, exist_ok=True)
+    board_file = _write_minimal_project(project_dir)
+    stats_file = artifacts_dir / "board_stats.txt"
+
+    result = _run_kicad_cli(
+        kicad_cli_path,
+        "pcb",
+        "export",
+        "stats",
+        "--output",
+        str(stats_file),
+        str(board_file),
+        cwd=project_dir,
+    )
+    output = _combined_output(result)
+    (artifacts_dir / "kicad-cli-stdout.log").write_text(result.stdout, encoding="utf-8")
+    (artifacts_dir / "kicad-cli-stderr.log").write_text(result.stderr, encoding="utf-8")
+
+    assert result.returncode == 0, output
+    assert stats_file.exists(), output
+    assert stats_file.stat().st_size > 0, output

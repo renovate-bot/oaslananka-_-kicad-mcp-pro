@@ -156,7 +156,7 @@ def test_token_rotation_requires_current_bearer_and_updates_verifier(sample_proj
     _ = sample_project
     cfg = get_config()
     cfg.transport = "streamable-http"
-    cfg.auth_token = "old-token"  # noqa: S105
+    cfg.auth_token = "old-token"  # noqa: S105 - test fixture
     server = build_server("minimal")
     client = TestClient(server.streamable_http_app())
 
@@ -173,7 +173,7 @@ def test_token_rotation_requires_current_bearer_and_updates_verifier(sample_proj
     )
 
     assert rotated.status_code == 200
-    assert cfg.auth_token == "new-token"  # noqa: S105
+    assert cfg.auth_token == "new-token"  # noqa: S105 - test fixture
     assert asyncio.run(server._token_verifier.verify_token("old-token")) is None
     assert asyncio.run(server._token_verifier.verify_token("new-token")) is not None
 
@@ -182,7 +182,7 @@ def test_http_mcp_endpoint_requires_bearer_token(sample_project: Path) -> None:
     _ = sample_project
     cfg = get_config()
     cfg.transport = "streamable-http"
-    cfg.auth_token = "required-token"  # noqa: S105
+    cfg.auth_token = "required-token"  # noqa: S105 - test fixture
     server = build_server("minimal")
     client = TestClient(server.streamable_http_app())
 
@@ -199,7 +199,7 @@ def test_token_rotation_rejects_non_string_token(sample_project: Path) -> None:
     _ = sample_project
     cfg = get_config()
     cfg.transport = "streamable-http"
-    cfg.auth_token = "old-token"  # noqa: S105
+    cfg.auth_token = "old-token"  # noqa: S105 - test fixture
     server = build_server("minimal")
     client = TestClient(server.streamable_http_app())
 
@@ -210,7 +210,7 @@ def test_token_rotation_rejects_non_string_token(sample_project: Path) -> None:
     )
 
     assert response.status_code == 400
-    assert cfg.auth_token == "old-token"  # noqa: S105
+    assert cfg.auth_token == "old-token"  # noqa: S105 - test fixture
 
 
 @pytest.mark.anyio
