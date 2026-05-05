@@ -2,7 +2,7 @@
 <!-- mcp-name: io.github.oaslananka/kicad-mcp-pro -->
 
 [![PyPI](https://img.shields.io/pypi/v/kicad-mcp-pro.svg)](https://pypi.org/project/kicad-mcp-pro/)
-[![CI](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/ci.yml)
+[![CI](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/ci.yml)
 [![Codecov](https://codecov.io/gh/oaslananka/kicad-mcp-pro/branch/main/graph/badge.svg)](https://codecov.io/gh/oaslananka/kicad-mcp-pro)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/oaslananka/kicad-mcp-pro/badge)](https://scorecard.dev/viewer/?uri=github.com/oaslananka/kicad-mcp-pro)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
