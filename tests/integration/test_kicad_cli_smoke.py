@@ -36,7 +36,7 @@ def _candidate_cli_paths() -> list[Path]:
     try:
         reset_config()
         candidates.append(get_config().kicad_cli)
-    except Exception:
+    except Exception:  # noqa: S110
         pass
 
     deduplicated: list[Path] = []
