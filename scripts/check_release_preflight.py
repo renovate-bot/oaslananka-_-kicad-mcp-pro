@@ -12,6 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 INIT_VERSION_RE = re.compile(r'^__version__\s*=\s*"([^"]+)"', re.MULTILINE)
+CHANGELOG_VERSION_RE = re.compile(r"^## \[(?P<version>[^\]]+)\]", re.MULTILINE)
 
 
 def _read_json(path: str) -> dict[str, object]:
@@ -67,19 +68,35 @@ def _check_versions() -> list[str]:
     return errors
 
 
+def _changelog_section(changelog: str, version: str) -> str:
+    matches = list(CHANGELOG_VERSION_RE.finditer(changelog))
+    for index, match in enumerate(matches):
+        if match.group("version") != version:
+            continue
+        section_start = match.start()
+        section_end = matches[index + 1].start() if index + 1 < len(matches) else len(changelog)
+        return changelog[section_start:section_end]
+    return ""
+
+
 def _check_changelog(version: str) -> list[str]:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     errors: list[str] = []
     if "## [Unreleased]" not in changelog:
         errors.append("CHANGELOG.md must retain an Unreleased section")
+
+    current_section = _changelog_section(changelog, version)
+    if not current_section:
+        return errors
+
     noise_re = re.compile(
         rf"\bBump version to (?!{re.escape(version)}\b)\d+\.\d+\.\d+",
         re.IGNORECASE,
     )
-    match = noise_re.search(changelog)
+    match = noise_re.search(current_section)
     if match is not None:
         errors.append(
-            "CHANGELOG.md contains stale release-please noise outside the current release: "
+            "CHANGELOG.md current release section contains stale release-please noise: "
             f"{match.group(0)!r}"
         )
     return errors
