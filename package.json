@@ -8,6 +8,7 @@
     "version:bump": "uv run python scripts/bump_version.py",
     "metadata:sync": "uv run python scripts/sync_mcp_metadata.py --write",
     "metadata:check": "uv run python scripts/sync_mcp_metadata.py --check",
+    "release:check": "uv run python scripts/check_release_preflight.py",
     "lint": "uv run ruff check src/ tests/",
     "format": "uv run ruff format src/ tests/",
     "format:check": "uv run ruff format --check src/ tests/",
@@ -22,7 +23,7 @@
     "security:audit": "uv run python scripts/audit_dependencies.py",
     "security": "npm run security:bandit && npm run security:audit",
     "security:local": "uv run python scripts/security_local.py",
-    "check": "npm run metadata:check && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run security && npm run workflows:lint && npm run workflows:security && npm run build",
+    "check": "npm run metadata:check && npm run release:check && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run security && npm run workflows:lint && npm run workflows:security && npm run build",
     "check:format": "npm run format:check",
     "check:lint": "npm run lint",
     "check:type": "npm run typecheck",
@@ -30,9 +31,9 @@
     "check:bandit": "npm run security:bandit",
     "check:audit": "npm run security:audit",
     "check:metadata": "npm run metadata:check",
-    "check:ci": "npm run metadata:check && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run security && npm run workflows:lint && npm run workflows:security && npm run build",
+    "check:ci": "npm run metadata:check && npm run release:check && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run security && npm run workflows:lint && npm run workflows:security && npm run build",
     "hooks:pre-commit": "uv run python scripts/hook_pre_commit.py && npm run metadata:check",
-    "hooks:pre-push": "npm run metadata:check && npm run format:check && npm run lint && npm run typecheck && npm run test:unit && npm run workflows:lint",
+    "hooks:pre-push": "npm run metadata:check && npm run release:check && npm run format:check && npm run lint && npm run typecheck && npm run test:unit && npm run workflows:lint",
     "hooks:security": "npm run security"
   },
   "devDependencies": {
