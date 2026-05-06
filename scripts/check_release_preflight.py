@@ -12,7 +12,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 INIT_VERSION_RE = re.compile(r'^__version__\s*=\s*"([^"]+)"', re.MULTILINE)
-BUMP_NOISE_RE = re.compile(r"\bBump version to (?!3\.2\.0\b)\d+\.\d+\.\d+", re.IGNORECASE)
 
 
 def _read_json(path: str) -> dict[str, object]:
@@ -68,12 +67,16 @@ def _check_versions() -> list[str]:
     return errors
 
 
-def _check_changelog() -> list[str]:
+def _check_changelog(version: str) -> list[str]:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     errors: list[str] = []
     if "## [Unreleased]" not in changelog:
         errors.append("CHANGELOG.md must retain an Unreleased section")
-    match = BUMP_NOISE_RE.search(changelog)
+    noise_re = re.compile(
+        rf"\bBump version to (?!{re.escape(version)}\b)\d+\.\d+\.\d+",
+        re.IGNORECASE,
+    )
+    match = noise_re.search(changelog)
     if match is not None:
         errors.append(
             "CHANGELOG.md contains stale release-please noise outside the current release: "
@@ -83,7 +86,8 @@ def _check_changelog() -> list[str]:
 
 
 def main() -> int:
-    errors = [*_check_versions(), *_check_changelog()]
+    version = _project_version()
+    errors = [*_check_versions(), *_check_changelog(version)]
     if errors:
         print("Release preflight failed:", file=sys.stderr)
         for error in errors:
