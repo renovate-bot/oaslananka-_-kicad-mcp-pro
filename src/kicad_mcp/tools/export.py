@@ -84,7 +84,7 @@ def _read_preview(path: Path) -> str:
     cfg = get_config()
     content = path.read_text(encoding="utf-8", errors="ignore")
     if len(content) > cfg.max_text_response_chars:
-        return f"{content[: cfg.max_text_response_chars}\n... [truncated]"
+        return f"{content[: cfg.max_text_response_chars]}\n... [truncated]"
     return content
 
 
