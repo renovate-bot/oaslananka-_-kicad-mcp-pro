@@ -1,4 +1,10 @@
-"""Real KiCad CLI smoke tests."""
+"""Real KiCad CLI smoke tests.
+
+These tests intentionally skip unless a real ``kicad-cli`` executable is
+discoverable from ``KICAD_MCP_KICAD_CLI``, ``KICAD_CLI_PATH``, ``PATH``, or the
+project's existing discovery/configuration layer. They are not subprocess mocks;
+CI should run them only in a KiCad 10-capable environment.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +22,7 @@ KICAD_MAJOR_VERSION = 10
 
 
 def _candidate_cli_paths() -> list[Path]:
+    """Return ordered KiCad CLI candidates from env, PATH, then project discovery."""
     candidates: list[Path] = []
     for env_name in ("KICAD_MCP_KICAD_CLI", "KICAD_CLI_PATH"):
         raw_path = os.environ.get(env_name, "").strip()
@@ -44,6 +51,7 @@ def _candidate_cli_paths() -> list[Path]:
 
 @pytest.fixture(scope="session")
 def kicad_cli_path() -> Path:
+    """Return the configured/discovered KiCad CLI path or skip when unavailable."""
     for cli_path in _candidate_cli_paths():
         if cli_path.exists() and cli_path.is_file():
             return cli_path
@@ -57,6 +65,7 @@ def _run_kicad_cli(
     *args: str,
     cwd: Path | None = None,
 ) -> subprocess.CompletedProcess[str]:
+    """Run kicad-cli and return a completed process with captured text output."""
     return subprocess.run(
         [str(cli_path), *args],
         cwd=cwd,
@@ -72,39 +81,60 @@ def _combined_output(result: subprocess.CompletedProcess[str]) -> str:
 
 
 def _write_minimal_project(project_dir: Path) -> Path:
+    """Create a deterministic minimal KiCad project with an empty board file."""
     project_dir.mkdir(parents=True, exist_ok=True)
     project_file = project_dir / "smoke.kicad_pro"
     board_file = project_dir / "smoke.kicad_pcb"
     project_file.write_text(
-        '{"board":{"design_settings":{"defaults":{},"diff_pair_dimensions":[],"drc_exclusions":[],"rules":{}}},'
-        '"meta":{"filename":"smoke.kicad_pro","version":1},'
-        '"net_settings":{"classes":[],"meta":{"version":3},"nets":[]}}\n',
+        """
+{
+  "board": {
+    "design_settings": {
+      "defaults": {},
+      "diff_pair_dimensions": [],
+      "drc_exclusions": [],
+      "rules": {}
+    }
+  },
+  "meta": {
+    "filename": "smoke.kicad_pro",
+    "version": 1
+  },
+  "net_settings": {
+    "classes": [],
+    "meta": {
+      "version": 3
+    },
+    "nets": []
+  }
+}
+""".strip()
+        + "\n",
         encoding="utf-8",
     )
     board_file.write_text(
-        "\n".join(
-            [
-                "(kicad_pcb",
-                "  (version 20240108)",
-                "  (generator \"kicad-mcp-pro-smoke\")",
-                "  (general)",
-                "  (paper \"A4\")",
-                "  (layers",
-                "    (0 \"F.Cu\" signal)",
-                "    (31 \"B.Cu\" signal)",
-                "    (44 \"Edge.Cuts\" user)",
-                "  )",
-                "  (setup (pad_to_mask_clearance 0))",
-                ")",
-                "",
-            ]
-        ),
+        """
+(kicad_pcb
+  (version 20240108)
+  (generator "kicad-mcp-pro-smoke")
+  (general)
+  (paper "A4")
+  (layers
+    (0 "F.Cu" signal)
+    (31 "B.Cu" signal)
+    (44 "Edge.Cuts" user)
+  )
+  (setup (pad_to_mask_clearance 0))
+)
+""".strip()
+        + "\n",
         encoding="utf-8",
     )
     return board_file
 
 
 def test_kicad_cli_version_is_discoverable(kicad_cli_path: Path) -> None:
+    """Verify that the discovered binary is a KiCad 10 CLI."""
     result = _run_kicad_cli(kicad_cli_path, "version")
     output = _combined_output(result)
 
@@ -115,6 +145,7 @@ def test_kicad_cli_version_is_discoverable(kicad_cli_path: Path) -> None:
 
 
 def test_kicad_cli_exports_board_stats_without_gui(kicad_cli_path: Path, tmp_path: Path) -> None:
+    """Run a GUI-free CLI export path against a minimal board fixture."""
     project_dir = tmp_path / "project"
     artifacts_dir = tmp_path / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
