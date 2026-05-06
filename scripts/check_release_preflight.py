@@ -1,0 +1,97 @@
+#!/usr/bin/env python3
+"""Validate release metadata consistency before release PRs are merged."""
+
+from __future__ import annotations
+
+import json
+import re
+import sys
+import tomllib
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
+INIT_VERSION_RE = re.compile(r'^__version__\s*=\s*"([^"]+)"', re.MULTILINE)
+BUMP_NOISE_RE = re.compile(r"\bBump version to (?!3\.2\.0\b)\d+\.\d+\.\d+", re.IGNORECASE)
+
+
+def _read_json(path: str) -> dict[str, object]:
+    return json.loads((ROOT / path).read_text(encoding="utf-8"))
+
+
+def _project_version() -> str:
+    data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    version = data["project"]["version"]
+    if not isinstance(version, str):
+        raise TypeError("pyproject.toml project.version must be a string")
+    return version
+
+
+def _init_version() -> str:
+    content = (ROOT / "src" / "kicad_mcp" / "__init__.py").read_text(encoding="utf-8")
+    match = INIT_VERSION_RE.search(content)
+    if match is None:
+        raise ValueError("src/kicad_mcp/__init__.py does not expose __version__")
+    return match.group(1)
+
+
+def _collect_versions() -> dict[str, str]:
+    mcp = _read_json("mcp.json")
+    server = _read_json("server.json")
+    manifest = _read_json(".release-please-manifest.json")
+    packages = server.get("packages")
+    if not isinstance(packages, list) or not packages:
+        raise ValueError("server.json packages must be a non-empty list")
+    package0 = packages[0]
+    if not isinstance(package0, dict):
+        raise TypeError("server.json packages[0] must be an object")
+    return {
+        "pyproject.toml": _project_version(),
+        "src/kicad_mcp/__init__.py": _init_version(),
+        "mcp.json": str(mcp.get("version", "")),
+        "server.json": str(server.get("version", "")),
+        "server.json packages[0]": str(package0.get("version", "")),
+        ".release-please-manifest.json": str(manifest.get(".", "")),
+    }
+
+
+def _check_versions() -> list[str]:
+    versions = _collect_versions()
+    errors: list[str] = []
+    for source, version in versions.items():
+        if not VERSION_RE.match(version):
+            errors.append(f"{source} has invalid semantic version: {version!r}")
+    unique_versions = set(versions.values())
+    if len(unique_versions) != 1:
+        rendered = ", ".join(f"{source}={version}" for source, version in versions.items())
+        errors.append(f"release metadata version drift detected: {rendered}")
+    return errors
+
+
+def _check_changelog() -> list[str]:
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    errors: list[str] = []
+    if "## [Unreleased]" not in changelog:
+        errors.append("CHANGELOG.md must retain an Unreleased section")
+    match = BUMP_NOISE_RE.search(changelog)
+    if match is not None:
+        errors.append(
+            "CHANGELOG.md contains stale release-please noise outside the current release: "
+            f"{match.group(0)!r}"
+        )
+    return errors
+
+
+def main() -> int:
+    errors = [*_check_versions(), *_check_changelog()]
+    if errors:
+        print("Release preflight failed:", file=sys.stderr)
+        for error in errors:
+            print(f"- {error}", file=sys.stderr)
+        return 1
+    print("Release preflight passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
