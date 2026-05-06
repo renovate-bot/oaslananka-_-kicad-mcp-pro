@@ -69,6 +69,7 @@ nav:
       - Repository Operations: repository-operations.md
       - Doppler Setup: doppler-setup.md
       - Branch Protection: branch-protection.md
+      - Jules CI Bridge: deployment/jules-ci-bridge.md
       - Azure DevOps CI/CD: deployment/azure-devops.md
       - Docker: deployment/docker.md
       - HTTP Mode: deployment/http-mode.md
@@ -86,5 +87,7 @@ nav:
       - Contributing: development/contributing.md
       - Regression Fixtures: development/contributing-fixtures.md
       - Architecture: development/architecture.md
+      - Production Principles: development/principles.md
+      - 2026 Roadmap: development/roadmap-2026.md
       - RFCs: rfcs/README.md
       - v2 Migration: development/v2-migration.md
