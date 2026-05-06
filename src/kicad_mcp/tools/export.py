@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import re
 import subprocess as _subprocess
 import time as _time
 from pathlib import Path
@@ -37,6 +38,7 @@ subprocess = _subprocess
 time = _time
 
 DEFAULT_PCB_PDF_LAYERS = ["F.Cu", "Edge.Cuts"]
+_WINDOWS_ANCHORED_PATH = re.compile(r"^(?:[a-zA-Z]:|//|\\\\)")
 __all__ = [
     "_ensure_output_dir",
     "_get_pcb_file",
@@ -49,9 +51,13 @@ __all__ = [
 
 
 def _safe_output_filename(raw_name: str, *, default_name: str) -> str:
-    name = raw_name or default_name
+    name = raw_name.strip() if raw_name else default_name
+    if not name:
+        raise ValueError("Output file names cannot be empty or whitespace only.")
     if "/" in name or "\\" in name:
         raise ValueError("Output file names cannot contain directory separators or traversal.")
+    if _WINDOWS_ANCHORED_PATH.match(name):
+        raise ValueError("Output file names must be relative to the export output directory.")
     candidate = Path(name).expanduser()
     if candidate.is_absolute() or candidate.anchor:
         raise ValueError("Output file names must be relative to the export output directory.")
@@ -78,7 +84,7 @@ def _read_preview(path: Path) -> str:
     cfg = get_config()
     content = path.read_text(encoding="utf-8", errors="ignore")
     if len(content) > cfg.max_text_response_chars:
-        return f"{content[: cfg.max_text_response_chars]}\n... [truncated]"
+        return f"{content[: cfg.max_text_response_chars}\n... [truncated]"
     return content
 
 
