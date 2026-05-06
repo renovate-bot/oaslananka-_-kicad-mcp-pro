@@ -1,11 +1,6 @@
 name: Publish org CI status to personal repo
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    types:
-      - completed
   workflow_dispatch:
     inputs:
       sha:
@@ -31,7 +26,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: publish-ci-status-to-personal-${{ github.event.workflow_run.head_sha || github.event.inputs.sha }}
+  group: publish-ci-status-to-personal-${{ github.event.inputs.sha }}
   cancel-in-progress: false
 
 jobs:
@@ -43,9 +38,6 @@ jobs:
     env:
       PERSONAL_REPO: oaslananka/kicad-mcp-pro
       STATUS_TOKEN: ${{ secrets.PERSONAL_REPO_STATUS_TOKEN }}
-      WORKFLOW_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
-      WORKFLOW_SHA: ${{ github.event.workflow_run.head_sha }}
-      WORKFLOW_URL: ${{ github.event.workflow_run.html_url }}
       INPUT_SHA: ${{ github.event.inputs.sha }}
       INPUT_STATE: ${{ github.event.inputs.state }}
       INPUT_TARGET_URL: ${{ github.event.inputs.target_url }}
@@ -59,20 +51,17 @@ jobs:
             exit 1
           fi
 
-          sha="${WORKFLOW_SHA:-${INPUT_SHA:-}}"
+          sha="${INPUT_SHA:-}"
           state="${INPUT_STATE:-}"
-          target_url="${INPUT_TARGET_URL:-${WORKFLOW_URL:-}}"
-
-          if [ -z "$state" ]; then
-            case "${WORKFLOW_CONCLUSION:-}" in
-              success) state="success" ;;
-              failure|timed_out|cancelled) state="failure" ;;
-              *) state="error" ;;
-            esac
-          fi
+          target_url="${INPUT_TARGET_URL:-}"
 
           if [ -z "$sha" ]; then
-            echo "::error::No commit SHA was available from workflow_run or workflow_dispatch input."
+            echo "::error::sha input is required."
+            exit 1
+          fi
+
+          if [ -z "$state" ]; then
+            echo "::error::state input is required."
             exit 1
           fi
 
