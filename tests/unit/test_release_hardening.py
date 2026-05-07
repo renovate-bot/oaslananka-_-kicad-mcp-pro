@@ -421,6 +421,23 @@ def test_release_workflow_uses_trusted_publishing() -> None:
     assert "|| true" not in workflow
 
 
+def test_release_workflow_stages_only_python_distributions_for_publish() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
+    ).read_text(encoding="utf-8")
+
+    staging_start = workflow.index("Stage Python distributions for package index")
+    staging_end = workflow.index("Generate CycloneDX SBOM")
+    staging_block = workflow[staging_start:staging_end]
+
+    assert 'source.glob("*.whl")' in staging_block
+    assert 'source.glob("*.tar.gz")' in staging_block
+    assert "dist-pypi" in staging_block
+    assert "packages-dir: dist-pypi/" in workflow
+    assert "bom.json" not in staging_block
+    assert "SHA256SUMS.txt" not in staging_block
+
+
 def test_release_workflow_supports_safe_tag_trigger_defaults() -> None:
     workflow = (
         Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
