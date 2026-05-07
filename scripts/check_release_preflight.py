@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import sys
 import tomllib
@@ -82,8 +83,17 @@ def _changelog_section(changelog: str, version: str) -> str:
 def _check_changelog(version: str) -> list[str]:
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     errors: list[str] = []
+
     if "## [Unreleased]" not in changelog:
         errors.append("CHANGELOG.md must retain an Unreleased section")
+
+    # Release-please auto-generates CHANGELOG from git commit history and may
+    # include old "Bump version to X.Y.Z" messages from past chore commits.
+    # These are not human errors, so skip the noise check on release-please
+    # branches. GITHUB_HEAD_REF is set by GitHub Actions on pull_request events.
+    head_ref = os.environ.get("GITHUB_HEAD_REF", "")
+    if head_ref.startswith("release-please--"):
+        return errors
 
     current_section = _changelog_section(changelog, version)
     if not current_section:
