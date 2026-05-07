@@ -40,20 +40,23 @@ def _collect_versions() -> dict[str, str]:
     mcp = _read_json("mcp.json")
     server = _read_json("server.json")
     manifest = _read_json(".release-please-manifest.json")
-    packages = server.get("packages")
-    if not isinstance(packages, list) or not packages:
-        raise ValueError("server.json packages must be a non-empty list")
-    package0 = packages[0]
-    if not isinstance(package0, dict):
-        raise TypeError("server.json packages[0] must be an object")
-    return {
+    versions = {
         "pyproject.toml": _project_version(),
         "src/kicad_mcp/__init__.py": _init_version(),
         "mcp.json": str(mcp.get("version", "")),
         "server.json": str(server.get("version", "")),
-        "server.json packages[0]": str(package0.get("version", "")),
         ".release-please-manifest.json": str(manifest.get(".", "")),
     }
+    for source, data in (("mcp.json", mcp), ("server.json", server)):
+        packages = data.get("packages")
+        if not isinstance(packages, list) or not packages:
+            raise ValueError(f"{source} packages must be a non-empty list")
+        for index, package in enumerate(packages):
+            if not isinstance(package, dict):
+                raise TypeError(f"{source} packages[{index}] must be an object")
+            if "version" in package:
+                versions[f"{source} packages[{index}]"] = str(package.get("version", ""))
+    return versions
 
 
 def _check_versions() -> list[str]:

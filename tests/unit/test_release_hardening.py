@@ -459,17 +459,15 @@ def test_release_please_uses_service_token_for_release_prs() -> None:
     assert "DOPPLER_GITHUB_SERVICE_TOKEN || github.token" not in workflow
 
 
-def test_docs_workflow_mirrors_canonical_pages_site() -> None:
+def test_docs_workflow_deploys_only_from_org_repo() -> None:
     workflow = (
         Path(__file__).resolve().parents[2] / ".github" / "workflows" / "docs.yml"
     ).read_text(encoding="utf-8")
 
-    assert "Mirror canonical GitHub Pages" in workflow
-    assert "CANONICAL_PAGES_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}" in workflow
-    assert (
-        "https://x-access-token:${CANONICAL_PAGES_TOKEN}@github.com/oaslananka/kicad-mcp-pro.git"
-        in workflow
-    )
+    assert "github.repository == 'oaslananka-lab/kicad-mcp-pro'" in workflow
+    assert "Mirror canonical GitHub Pages" not in workflow
+    assert "CANONICAL_PAGES_TOKEN" not in workflow
+    assert "github.com/oaslananka/kicad-mcp-pro.git" not in workflow
     assert "base64" not in workflow
     assert "|| true" not in workflow
 

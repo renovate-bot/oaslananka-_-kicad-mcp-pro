@@ -69,19 +69,6 @@ jobs:
           corepack npm run format:check
           corepack npm run typecheck
           corepack npm run test:unit
-      - name: Install Doppler CLI
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73
-      - name: Load Codecov token from Doppler
-        if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
-        env:
-          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-        run: |
-          token="$(doppler secrets get CODECOV_TOKEN --plain --project all --config main || true)"
-          if [ -n "$token" ]; then
-            echo "::add-mask::$token"
-            echo "CODECOV_TOKEN=$token" >> "$GITHUB_ENV"
-          fi
       - name: Upload coverage to Codecov
         if: matrix.os == 'ubuntu-latest' && matrix.python-version == '3.12'
         continue-on-error: true
@@ -90,7 +77,7 @@ jobs:
           files: coverage.xml
           flags: py${{ matrix.python-version }}
           fail_ci_if_error: false
-          token: ${{ env.CODECOV_TOKEN }}
+          token: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '' || secrets.CODECOV_TOKEN }}
       - name: Publish test results
         if: always() && hashFiles('**/junit.xml', '**/test-results.xml') != ''
         uses: EnricoMi/publish-unit-test-result-action@c950f6fb443cb5af20a377fd0dfaa78838901040

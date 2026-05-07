@@ -194,6 +194,7 @@ jobs:
               ;;
           esac
           pip install --index-url "${index_url}" \
+            --extra-index-url "https://pypi.org/simple/" \
             "kicad-mcp-pro==${version}" \
             --dry-run
           echo "Smoke check passed: kicad-mcp-pro ${version} is available on ${RELEASE_INDEX}."

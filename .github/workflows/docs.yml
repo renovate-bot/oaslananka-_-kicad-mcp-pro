@@ -67,15 +67,3 @@ jobs:
           git -C site branch -M gh-pages
           git -C site remote add origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
           git -C site push --force origin gh-pages
-      - name: Mirror canonical GitHub Pages
-        env:
-          CANONICAL_PAGES_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
-        run: |
-          set -euo pipefail
-          if [ -z "${CANONICAL_PAGES_TOKEN}" ]; then
-            echo "::error::DOPPLER_GITHUB_SERVICE_TOKEN is required."
-            exit 1
-          fi
-          git -C site remote add canonical \
-            "https://x-access-token:${CANONICAL_PAGES_TOKEN}@github.com/oaslananka/kicad-mcp-pro.git"
-          git -C site push --force canonical gh-pages
