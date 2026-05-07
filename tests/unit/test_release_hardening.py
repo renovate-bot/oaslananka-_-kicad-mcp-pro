@@ -553,6 +553,7 @@ async def test_export_manufacturing_package_accepts_explicit_variant(
             drill_command="drill",
             position_command="pos",
             supports_ipc2581=True,
+            supports_cli_variant=True,
         ),
     )
 
