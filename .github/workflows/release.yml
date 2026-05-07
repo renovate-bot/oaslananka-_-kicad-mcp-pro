@@ -151,6 +151,7 @@ jobs:
           # The project setup-uv step exports Python 3.12 settings for package
           # checks. The pinned Sigstore action bootstraps its own Python 3.14
           # environment, so isolate uv to keep the action self-contained.
+          UV_NO_CONFIG: "1"
           UV_CACHE_DIR: ${{ runner.temp }}/sigstore-uv-cache
           UV_PYTHON: "3.14"
           UV_PYTHON_INSTALL_DIR: ${{ runner.temp }}/sigstore-uv-python-dir
