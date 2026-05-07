@@ -168,7 +168,7 @@ jobs:
         if: env.EFFECTIVE_PUBLISH == 'true' && env.EFFECTIVE_INDEX == 'PyPI'
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         with:
-          packages-dir: dist/
+          packages-dir: dist-pypi/
           skip-existing: true
 
       - name: Publish to TestPyPI
@@ -176,7 +176,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         with:
           repository-url: https://test.pypi.org/legacy/
-          packages-dir: dist/
+          packages-dir: dist-pypi/
           skip-existing: true
 
       - name: Post-publish smoke check
@@ -244,3 +244,4 @@ jobs:
           else
             gh release create "${RELEASE_VERSION}" "${create_args[@]}" "${assets[@]}"
           fi
+
