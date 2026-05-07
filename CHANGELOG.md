@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.1](https://github.com/oaslananka-lab/kicad-mcp-pro/compare/v3.2.0...v3.2.1) (2026-05-07)
+
+
+### Bug Fixes
+
+* isolate sigstore release signing from repo uv config ([#13](https://github.com/oaslananka-lab/kicad-mcp-pro/issues/13)) ([de46d4e](https://github.com/oaslananka-lab/kicad-mcp-pro/commit/de46d4e1637a137c9074c9ce74814501bfd9d8ed))
+
 ## [3.2.0](https://github.com/oaslananka-lab/kicad-mcp-pro/compare/v3.1.8...v3.2.0) (2026-05-07)
 
 
