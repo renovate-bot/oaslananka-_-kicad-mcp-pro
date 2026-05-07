@@ -438,6 +438,23 @@ def test_release_workflow_stages_only_python_distributions_for_publish() -> None
     assert "SHA256SUMS.txt" not in staging_block
 
 
+def test_release_workflow_retries_post_publish_smoke_check() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
+    ).read_text(encoding="utf-8")
+
+    smoke_start = workflow.index("Post-publish smoke check")
+    smoke_end = workflow.index("actions/upload-artifact@", smoke_start)
+    smoke_block = workflow[smoke_start:smoke_end]
+
+    assert "for attempt in {1..10}; do" in smoke_block
+    assert "retrying in 30 s" in smoke_block
+    assert "python -m pip install" in smoke_block
+    assert '--extra-index-url "https://pypi.org/simple/"' in smoke_block
+    assert "Smoke check failed:" in smoke_block
+    assert "|| true" not in smoke_block
+
+
 def test_release_workflow_supports_safe_tag_trigger_defaults() -> None:
     workflow = (
         Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"

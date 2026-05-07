@@ -205,8 +205,6 @@ jobs:
         run: |
           set -euo pipefail
           version="$(grep '^version' pyproject.toml | head -1 | sed 's/.*"\(.*\)".*/\1/')"
-          echo "Waiting 45 s for index propagation..."
-          sleep 45
           case "${RELEASE_INDEX}" in
             PyPI)
               index_url="https://pypi.org/simple/"
@@ -214,12 +212,30 @@ jobs:
             TestPyPI)
               index_url="https://test.pypi.org/simple/"
               ;;
+            *)
+              echo "::error::Unsupported release index: ${RELEASE_INDEX}"
+              exit 1
+              ;;
           esac
-          pip install --index-url "${index_url}" \
-            --extra-index-url "https://pypi.org/simple/" \
-            "kicad-mcp-pro==${version}" \
-            --dry-run
-          echo "Smoke check passed: kicad-mcp-pro ${version} is available on ${RELEASE_INDEX}."
+          pip_args=(--index-url "${index_url}")
+          if [ "${RELEASE_INDEX}" = "TestPyPI" ]; then
+            pip_args+=(--extra-index-url "https://pypi.org/simple/")
+          fi
+          echo "Waiting for ${RELEASE_INDEX} simple index propagation..."
+          for attempt in {1..10}; do
+            if python -m pip install "${pip_args[@]}" \
+              "kicad-mcp-pro==${version}" \
+              --dry-run; then
+              echo "Smoke check passed: kicad-mcp-pro ${version} is available on ${RELEASE_INDEX}."
+              exit 0
+            fi
+            if [ "${attempt}" -lt 10 ]; then
+              echo "Smoke check attempt ${attempt}/10 failed; retrying in 30 s..."
+              sleep 30
+            fi
+          done
+          echo "::error::Smoke check failed: kicad-mcp-pro ${version} was not available on ${RELEASE_INDEX} after 10 attempts."
+          exit 1
         env:
           RELEASE_INDEX: ${{ env.EFFECTIVE_INDEX }}
 
