@@ -1,4 +1,5 @@
 # KiCad MCP Pro Server
+
 <!-- mcp-name: io.github.oaslananka/kicad-mcp-pro -->
 
 [![PyPI](https://img.shields.io/pypi/v/kicad-mcp-pro.svg)](https://pypi.org/project/kicad-mcp-pro/)
@@ -9,6 +10,7 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
 [![KiCad 10](https://img.shields.io/badge/KiCad-10-success.svg)](https://www.kicad.org)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-oaslananka-yellow?logo=buy-me-a-coffee)](https://buymeacoffee.com/oaslananka)
+
 KiCad MCP Pro is a Model Context Protocol server for KiCad PCB and schematic workflows. It gives agents project setup, schematic editing, PCB inspection and edits, validation gates, DFM checks, SI/PI helpers, simulation helpers, and release-gated manufacturing export.
 
 Use it with Claude Desktop, Claude Code, Cursor, VS Code, Codex, or any MCP-compatible client.
