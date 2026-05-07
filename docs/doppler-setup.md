@@ -17,7 +17,11 @@ Set it in:
 
 The organization repository may inherit the secret from the organization if that is easier to maintain.
 
-Other secret names, including `DOPPLER_GITHUB_SERVICE_TOKEN`, `CODECOV_TOKEN`, `PYPI_TOKEN`, `TEST_PYPI_TOKEN`, and `SAFETY_API_KEY`, may be present as GitHub Actions secrets at runtime. Prefer projecting them into GitHub by Doppler GitHub Sync. If Doppler is temporarily incomplete, release publishing may use the GitHub repository secrets directly without printing or reading secret values.
+Other secret names, including `DOPPLER_GITHUB_SERVICE_TOKEN`, `CODECOV_TOKEN`,
+and `SAFETY_API_KEY`, may be present as GitHub Actions secrets at runtime.
+Prefer projecting them into GitHub by Doppler GitHub Sync. Release publishing
+uses PyPI Trusted Publishing and does not require long-lived PyPI tokens in
+GitHub Actions.
 
 ## Doppler GitHub Sync
 
@@ -29,24 +33,33 @@ In the Doppler dashboard:
 4. Create a sync to `oaslananka-lab/kicad-mcp-pro` repository secrets.
 5. Use replace mode so GitHub remains a projection of Doppler, not a second source of truth.
 
-## Expected Secrets
+## Required Secrets
 
-The authoritative list for this repo is `.doppler/secrets.txt`.
+The authoritative secret-name list lives in this document rather than a dotfile
+so scanner exclusions do not need to hide a `.doppler/` directory.
 
-Current expected names:
+Current expected Doppler-backed names:
 
 - `CODECOV_TOKEN`
 - `DOPPLER_GITHUB_SERVICE_TOKEN`
-- `PYPI_TOKEN`
 - `SAFETY_API_KEY`
-- `TEST_PYPI_TOKEN`
 
 Usage:
 
 - `CODECOV_TOKEN`: optional coverage upload token.
 - `DOPPLER_GITHUB_SERVICE_TOKEN`: least-privilege GitHub service token for mirror synchronization and release-please PR creation when organization policy blocks `GITHUB_TOKEN` from opening pull requests.
-- `PYPI_TOKEN` and `TEST_PYPI_TOKEN`: release workflow token source when Trusted Publishing is not configured. They may be synced from Doppler or configured as GitHub repository secrets.
 - `SAFETY_API_KEY`: optional authenticated Safety scan. It is not required for local default gates.
+
+Legacy local-only fallback names, not required by GitHub Actions after Trusted
+Publishing migration:
+
+- `PYPI_TOKEN`
+- `TEST_PYPI_TOKEN`
+
+The personal repository dispatcher also requires `ORG_SYNC_TOKEN` if immediate
+`repository_dispatch` wakeups are enabled. That token only needs permission to
+create `repository_dispatch` events on `oaslananka-lab/kicad-mcp-pro`; the org
+repository's `DOPPLER_GITHUB_SERVICE_TOKEN` performs the actual mirror push.
 
 No workflow or diagnostic output should print secret values.
 

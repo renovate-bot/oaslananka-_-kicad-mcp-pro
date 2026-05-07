@@ -403,16 +403,30 @@ def test_pdn_mesh_reports_ac_impedance_violations() -> None:
     assert result.impedance_violations
 
 
-def test_release_workflow_uses_scoped_github_publish_secrets() -> None:
+def test_release_workflow_uses_trusted_publishing() -> None:
     workflow = (
         Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
     ).read_text(encoding="utf-8")
 
-    assert "Verify required release secrets" in workflow
-    assert "PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}" in workflow
-    assert "TEST_PYPI_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}" in workflow
-    assert "bash scripts/publish.sh" in workflow
-    assert "doppler run --project all --config main -- bash scripts/publish.sh" not in workflow
+    assert "id-token: write" in workflow
+    assert "pypa/gh-action-pypi-publish@" in workflow
+    assert "repository-url: https://test.pypi.org/legacy/" in workflow
+    assert "Verify required release secrets" not in workflow
+    assert "PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}" not in workflow
+    assert "TEST_PYPI_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}" not in workflow
+    assert "bash scripts/publish.sh" not in workflow
+    assert "|| true" not in workflow
+
+
+def test_release_workflow_supports_safe_tag_trigger_defaults() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
+    ).read_text(encoding="utf-8")
+
+    assert 'tags:\n      - "v*.*.*"' in workflow
+    assert "AUTO_RELEASE_PUBLISH || 'false'" in workflow
+    assert "github.event_name == 'workflow_dispatch'" in workflow
+    assert "EFFECTIVE_VERSION: ${{ inputs.version || github.ref_name }}" in workflow
 
 
 def test_release_workflow_installs_actionlint_before_ci_check() -> None:
@@ -437,7 +451,9 @@ def test_release_please_uses_service_token_for_release_prs() -> None:
     assert "permissions:\n  contents: read" in workflow
     assert "contents: write" in workflow
     assert "pull-requests: write" in workflow
-    assert "token: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN || github.token }}" in workflow
+    assert "DOPPLER_GITHUB_SERVICE_TOKEN is required." in workflow
+    assert "token: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}" in workflow
+    assert "DOPPLER_GITHUB_SERVICE_TOKEN || github.token" not in workflow
 
 
 def test_docs_workflow_mirrors_canonical_pages_site() -> None:
@@ -447,8 +463,11 @@ def test_docs_workflow_mirrors_canonical_pages_site() -> None:
 
     assert "Mirror canonical GitHub Pages" in workflow
     assert "CANONICAL_PAGES_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}" in workflow
-    assert "https://oaslananka.github.io/kicad-mcp-pro" in workflow
-    assert "https://github.com/oaslananka/kicad-mcp-pro.git" in workflow
+    assert (
+        "https://x-access-token:${CANONICAL_PAGES_TOKEN}@github.com/oaslananka/kicad-mcp-pro.git"
+        in workflow
+    )
+    assert "base64" not in workflow
     assert "|| true" not in workflow
 
 

@@ -18,6 +18,7 @@ permissions:
 jobs:
   analysis:
     name: Scorecard
+    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

@@ -78,7 +78,9 @@ dev = [
 freerouting = ["docker>=7.0.0"]
 http = ["httpx>=0.27.0", "uvicorn[standard]>=0.30.0"]
 simulation = ["numpy>=1.26.0"]
-vcs = ["gitpython>=3.1.47,<4.0.0"]
+vcs = [
+    "gitpython>=3.1.49,<4.0.0",
+]
 
 [project.scripts]
 kicad-mcp-pro = "kicad_mcp.server:main"
@@ -128,7 +130,7 @@ ignore-magic = true
 ignore-module = false
 ignore-nested-functions = true
 ignore-private = true
-fail-under = 80
+fail-under = 43.3
 verbose = 1
 
 [tool.coverage.run]

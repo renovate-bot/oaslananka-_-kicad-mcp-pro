@@ -42,8 +42,8 @@ Package publishing to PyPI or TestPyPI must remain a deliberate manual action. Q
 
 The recommended secret model is to store only `DOPPLER_TOKEN` in CI/CD systems and keep the actual release secrets in Doppler:
 
-- `PYPI_TOKEN`
-- `TEST_PYPI_TOKEN`
+- PyPI Trusted Publishing configuration for workflow `release.yml` and
+  environment `release`
 - `SAFETY_API_KEY`
 - `NPM_TOKEN`
 - `OVSX_PAT`
@@ -60,4 +60,6 @@ Minimum setup:
 - GitLab CI/CD variable: `DOPPLER_TOKEN`
 - GitLab CI/CD variables: `DOPPLER_PROJECT=all`, `DOPPLER_CONFIG=main`
 
-Keep old native secrets such as `PYPI_TOKEN` and `TEST_PYPI_TOKEN` only if you want fallback publishing without Doppler.
+Keep old native secrets such as `PYPI_TOKEN` and `TEST_PYPI_TOKEN` only for
+local fallback publishing outside GitHub Actions. The canonical release workflow
+uses OIDC Trusted Publishing.

@@ -19,5 +19,7 @@ ENV KICAD_MCP_TRANSPORT=streamable-http
 ENV KICAD_MCP_HOST=0.0.0.0
 ENV KICAD_MCP_KICAD_CLI=/usr/bin/kicad-cli
 EXPOSE 3334
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import http.client, sys; c = http.client.HTTPConnection('localhost', 3334, timeout=4); c.request('GET', '/health'); r = c.getresponse(); sys.exit(0 if r.status < 500 else 1)"
 USER kicadmcp
 CMD ["kicad-mcp-pro", "--transport", "http"]
