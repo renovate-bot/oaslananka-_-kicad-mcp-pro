@@ -101,11 +101,14 @@ def test_cli_failure_tools_are_structured_error_candidates() -> None:
         "export_gerber",
         "get_board_stats",
         "pcb_export_3d_pdf",
-        "route_autoroute_freerouting",
-        "route_import_ses",
     }
 
     assert expected.issubset(CLI_FAILURE_TOOL_NAMES)
+    # route_* tools return ToolResult directly; failures are encoded in ok=False,
+    # not intercepted by the string-match layer.
+    assert "route_export_dsn" not in CLI_FAILURE_TOOL_NAMES
+    assert "route_autoroute_freerouting" not in CLI_FAILURE_TOOL_NAMES
+    assert "route_import_ses" not in CLI_FAILURE_TOOL_NAMES
 
 
 def test_audit_log_records_keys_without_sensitive_values(monkeypatch) -> None:

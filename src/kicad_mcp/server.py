@@ -118,9 +118,6 @@ CLI_FAILURE_TOOL_NAMES: frozenset[str] = frozenset(
         "export_svg",
         "export_dxf",
         "get_board_stats",
-        "route_export_dsn",
-        "route_autoroute_freerouting",
-        "route_import_ses",
     }
 )
 _TOOL_LIMITERS: dict[str, anyio.CapacityLimiter] = {}
@@ -269,9 +266,16 @@ def _tool_failure_message(tool_name: str, result: object) -> str | None:
 
 
 def _status_from_result(result: object) -> tuple[str, str | None]:
-    if isinstance(result, mcp_types.CallToolResult) and result.isError:
+    if isinstance(result, mcp_types.CallToolResult):
+        if result.isError:
+            structured = result.structuredContent or {}
+            return "error", str(structured.get("error_code", "TOOL_ERROR"))
+        # ToolResult-returning tools embed ok=False inside structuredContent.result
+        # rather than setting isError; surface those as errors for metrics/audit.
         structured = result.structuredContent or {}
-        return "error", str(structured.get("error_code", "TOOL_ERROR"))
+        inner = structured.get("result")
+        if isinstance(inner, dict) and not inner.get("ok", True):
+            return "error", "TOOL_RESULT_FAILURE"
     return "ok", None
 
 
