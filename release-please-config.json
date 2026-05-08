@@ -5,6 +5,7 @@
       "release-type": "python",
       "package-name": "kicad-mcp-pro",
       "changelog-path": "CHANGELOG.md",
+      "draft": true,
       "extra-files": [
         {
           "type": "generic",
