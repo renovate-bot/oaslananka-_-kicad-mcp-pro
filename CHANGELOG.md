@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.2](https://github.com/oaslananka-lab/kicad-mcp-pro/compare/v3.2.1...v3.2.2) (2026-05-08)
+
+
+### Bug Fixes
+
+* **ci:** preserve uv dev dependencies in local scripts ([5de6eec](https://github.com/oaslananka-lab/kicad-mcp-pro/commit/5de6eec87d779160b1a0f5d6fa9987463c04f791))
+
 ## [3.2.1](https://github.com/oaslananka-lab/kicad-mcp-pro/compare/v3.2.0...v3.2.1) (2026-05-07)
 
 
