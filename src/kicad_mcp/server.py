@@ -14,9 +14,9 @@ import sys
 import threading
 import time
 from collections import deque
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import asdict
-from typing import Any, Protocol, cast
+from typing import Any, TextIO, cast
 
 import anyio
 import click
@@ -59,10 +59,72 @@ app.add_typer(mcp_config_app, name="mcp-config")
 AnyFunction = Callable[..., object]
 
 
-class _LazyRegistrationServer(Protocol):
-    def start_lazy_registration_background(self) -> None:
-        """Start deferred MCP surface registration."""
-        raise NotImplementedError
+class _ThreadAwareStdout:
+    """Route stdout writes by thread while preserving protocol stdout for stdio."""
+
+    def __init__(self, default: TextIO) -> None:
+        """Store the default stream used by threads without an override."""
+        self._default = default
+        self._targets: dict[int, TextIO] = {}
+        self._lock = threading.Lock()
+
+    @contextlib.contextmanager
+    def redirected_current_thread(self, target: TextIO) -> Iterator[None]:
+        """Temporarily route only the current thread to a different stream."""
+        thread_id = threading.get_ident()
+        with self._lock:
+            self._targets[thread_id] = target
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._targets.pop(thread_id, None)
+
+    def _target(self) -> TextIO:
+        """Return the active stream for the calling thread."""
+        with self._lock:
+            return self._targets.get(threading.get_ident(), self._default)
+
+    def write(self, text: str) -> int:
+        """Write text to the calling thread's active stream."""
+        return self._target().write(text)
+
+    def flush(self) -> None:
+        """Flush the calling thread's active stream."""
+        self._target().flush()
+
+    def isatty(self) -> bool:
+        """Return whether the calling thread's active stream is a TTY."""
+        return self._target().isatty()
+
+    def fileno(self) -> int:
+        """Return the file descriptor for the calling thread's active stream."""
+        return self._target().fileno()
+
+    def __getattr__(self, name: str) -> object:
+        """Delegate stream attributes such as encoding to the default stream."""
+        return getattr(self._default, name)
+
+
+def _ensure_thread_aware_stdout() -> _ThreadAwareStdout:
+    """Install a thread-aware stdout proxy if one is not already active."""
+    if isinstance(sys.stdout, _ThreadAwareStdout):
+        return sys.stdout
+    proxy = _ThreadAwareStdout(sys.stdout)
+    sys.stdout = cast(TextIO, proxy)
+    return proxy
+
+
+@contextlib.contextmanager
+def _redirect_current_thread_stdout_to_stderr() -> Iterator[None]:
+    """Route stdout writes from the current thread to stderr."""
+    stdout = sys.stdout
+    if isinstance(stdout, _ThreadAwareStdout):
+        with stdout.redirected_current_thread(sys.stderr):
+            yield
+        return
+    with contextlib.redirect_stdout(sys.stderr):
+        yield
 
 
 HEAVY_TOOL_NAMES: frozenset[str] = frozenset(
@@ -409,7 +471,8 @@ class KiCadFastMCP(FastMCP):
             if self._lazy_registration_error is not None:
                 raise self._lazy_registration_error
             try:
-                register()
+                with _redirect_current_thread_stdout_to_stderr():
+                    register()
             except Exception as exc:
                 self._lazy_registration_error = exc
                 raise
@@ -904,36 +967,38 @@ def _run_server_from_options(
         profile=profile,
         experimental=experimental,
     )
-    reset_config()
-    cfg = get_config()
-    setup_logging(cfg.log_level, cfg.log_format)
+    with contextlib.redirect_stdout(sys.stderr):
+        reset_config()
+        cfg = get_config()
+        setup_logging(cfg.log_level, cfg.log_format)
 
-    selected_transport = "stdio" if cfg.transport == "stdio" else "streamable-http"
-    if cfg.transport == "sse":
-        if cfg.legacy_sse:
-            selected_transport = "sse"
-            logger.warning(
-                "legacy_sse_enabled",
-                message="Legacy SSE transport is enabled for backward compatibility.",
-            )
-        else:
-            logger.warning(
-                "legacy_sse_disabled",
-                message="Ignoring KICAD_MCP_TRANSPORT=sse because KICAD_MCP_LEGACY_SSE is false.",
-            )
-    defer_registration = selected_transport == "stdio"
-    server = build_server(cfg.profile, defer_registration=defer_registration)
-    _print_startup_diagnostics(cfg, probe_runtime=not defer_registration)
-    logger.info(
-        "starting_kicad_mcp_pro",
-        version=__version__,
-        transport=selected_transport,
-        profile=cfg.profile,
-    )
+        selected_transport = "stdio" if cfg.transport == "stdio" else "streamable-http"
+        if cfg.transport == "sse":
+            if cfg.legacy_sse:
+                selected_transport = "sse"
+                logger.warning(
+                    "legacy_sse_enabled",
+                    message="Legacy SSE transport is enabled for backward compatibility.",
+                )
+            else:
+                logger.warning(
+                    "legacy_sse_disabled",
+                    message=(
+                        "Ignoring KICAD_MCP_TRANSPORT=sse because KICAD_MCP_LEGACY_SSE is false."
+                    ),
+                )
+        defer_registration = selected_transport == "stdio"
+        server = build_server(cfg.profile, defer_registration=defer_registration)
+        _print_startup_diagnostics(cfg, probe_runtime=not defer_registration)
+        logger.info(
+            "starting_kicad_mcp_pro",
+            version=__version__,
+            transport=selected_transport,
+            profile=cfg.profile,
+        )
 
     if selected_transport == "stdio":
-        if hasattr(server, "start_lazy_registration_background"):
-            cast(_LazyRegistrationServer, server).start_lazy_registration_background()
+        _ensure_thread_aware_stdout()
         server.run(transport="stdio")
         return
 
