@@ -226,6 +226,50 @@ jobs:
           set -euo pipefail
           gh release upload "${RELEASE_TAG}" dist/* --repo "${GITHUB_REPOSITORY}" --clobber
 
+      - name: Mirror release to personal repository
+        env:
+          ORGANIZATION_GITHUB_TOKEN: ${{ github.token }}
+          PERSONAL_REPO_PUSH_TOKEN: ${{ secrets.PERSONAL_REPO_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PERSONAL_REPO_PUSH_TOKEN}" ]; then
+            echo "::error::PERSONAL_REPO_PUSH_TOKEN is required."
+            exit 1
+          fi
+
+          git remote add personal \
+            "https://x-access-token:${PERSONAL_REPO_PUSH_TOKEN}@github.com/oaslananka/kicad-mcp-pro.git"
+          existing_tag="$(git ls-remote personal "refs/tags/${RELEASE_TAG}" | awk '$2 !~ /\^\{\}$/ { print $1; exit }')"
+          organization_tag="$(git rev-parse "refs/tags/${RELEASE_TAG}")"
+          if [ -n "${existing_tag}" ] && [ "${existing_tag}" != "${organization_tag}" ]; then
+            echo "::error::Personal release tag ${RELEASE_TAG} diverges from organization tag."
+            exit 1
+          fi
+          if [ -z "${existing_tag}" ]; then
+            git push personal "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          fi
+
+          notes_file="$(mktemp)"
+          release_json="$(mktemp)"
+          GH_TOKEN="${ORGANIZATION_GITHUB_TOKEN}" gh release view "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --json name,body,isPrerelease > "${release_json}"
+          jq -r '.body // ""' "${release_json}" > "${notes_file}"
+          release_name="$(jq -r '.name // env.RELEASE_TAG' "${release_json}")"
+          prerelease="$(jq -r '.isPrerelease' "${release_json}")"
+
+          args=(--repo oaslananka/kicad-mcp-pro --title "${release_name}" --notes-file "${notes_file}")
+          if [ "${prerelease}" = "true" ]; then
+            args+=(--prerelease)
+          fi
+
+          if GH_TOKEN="${PERSONAL_REPO_PUSH_TOKEN}" gh release view "${RELEASE_TAG}" --repo oaslananka/kicad-mcp-pro >/dev/null 2>&1; then
+            GH_TOKEN="${PERSONAL_REPO_PUSH_TOKEN}" gh release edit "${RELEASE_TAG}" "${args[@]}"
+          else
+            GH_TOKEN="${PERSONAL_REPO_PUSH_TOKEN}" gh release create "${RELEASE_TAG}" --verify-tag "${args[@]}"
+          fi
+          GH_TOKEN="${PERSONAL_REPO_PUSH_TOKEN}" gh release upload "${RELEASE_TAG}" dist/* --repo oaslananka/kicad-mcp-pro --clobber
+
       - name: Upload release artifact bundle
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:

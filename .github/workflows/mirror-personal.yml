@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - gh-pages
     tags:
       - "v*.*.*"
 
@@ -20,7 +21,7 @@ defaults:
 
 jobs:
   mirror:
-    name: Mirror main and release tags
+    name: Mirror protected refs
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -43,24 +44,35 @@ jobs:
 
           git remote add personal \
             "https://x-access-token:${PERSONAL_REPO_PUSH_TOKEN}@github.com/oaslananka/kicad-mcp-pro.git"
-          git fetch origin main --tags --prune
-          git fetch personal main --tags --prune
+          git fetch origin --tags --prune
+          git fetch personal --tags --prune
 
-          if [[ "${GITHUB_REF}" == refs/heads/main ]]; then
-            if git diff --quiet refs/remotes/personal/main refs/remotes/origin/main -- .; then
-              echo "Personal showcase main already matches canonical content."
-            elif git merge-base --is-ancestor refs/remotes/personal/main refs/remotes/origin/main; then
-              git push personal refs/remotes/origin/main:refs/heads/main
+          if [[ "${GITHUB_REF}" == refs/heads/main || "${GITHUB_REF}" == refs/heads/gh-pages ]]; then
+            branch="${GITHUB_REF_NAME}"
+            git fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}" --prune
+            if git ls-remote --exit-code --heads personal "${branch}" >/dev/null 2>&1; then
+              git fetch personal "+refs/heads/${branch}:refs/remotes/personal/${branch}" --prune
+              personal_ref="refs/remotes/personal/${branch}"
             else
-              echo "::notice::Personal showcase history diverges; publishing a content mirror commit."
+              personal_ref=""
+            fi
+
+            if [ -z "${personal_ref}" ]; then
+              git push personal "refs/remotes/origin/${branch}:refs/heads/${branch}"
+            elif git diff --quiet "${personal_ref}" "refs/remotes/origin/${branch}" -- .; then
+              echo "Personal ${branch} already matches organization content."
+            elif git merge-base --is-ancestor "${personal_ref}" "refs/remotes/origin/${branch}"; then
+              git push personal "refs/remotes/origin/${branch}:refs/heads/${branch}"
+            else
+              echo "::notice::Personal ${branch} history diverges; publishing a content mirror commit."
               worktree="$(mktemp -d)"
               trap 'rm -rf "${worktree}"' EXIT
-              git worktree add --detach "${worktree}" refs/remotes/personal/main
+              git worktree add --detach "${worktree}" "${personal_ref}"
               git -C "${worktree}" config user.name "github-actions[bot]"
               git -C "${worktree}" config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-              git -C "${worktree}" read-tree --reset -u refs/remotes/origin/main
-              git -C "${worktree}" commit -m "Mirror canonical main ${GITHUB_SHA:0:12}"
-              git -C "${worktree}" push personal HEAD:refs/heads/main
+              git -C "${worktree}" read-tree --reset -u "refs/remotes/origin/${branch}"
+              git -C "${worktree}" commit -m "Mirror organization ${branch} ${GITHUB_SHA:0:12}"
+              git -C "${worktree}" push personal "HEAD:refs/heads/${branch}"
             fi
           fi
 
