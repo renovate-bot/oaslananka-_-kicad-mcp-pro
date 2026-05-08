@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.3](https://github.com/oaslananka-lab/kicad-mcp-pro/compare/v3.2.2...v3.2.3) (2026-05-08)
+
+
+### Bug Fixes
+
+* **stdio:** keep startup output off protocol stdout ([1e4c069](https://github.com/oaslananka-lab/kicad-mcp-pro/commit/1e4c0691eb60c9157616395472bfb21d21a46df2))
+
 ## [3.2.2](https://github.com/oaslananka-lab/kicad-mcp-pro/compare/v3.2.1...v3.2.2) (2026-05-08)
 
 
