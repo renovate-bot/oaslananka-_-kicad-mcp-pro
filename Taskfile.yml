@@ -31,6 +31,11 @@ tasks:
     cmds:
       - corepack pnpm run typecheck
 
+  compat:check:
+    desc: Check KiCad API compatibility constraints
+    cmds:
+      - corepack pnpm run compat:check
+
   test:
     desc: Run unit tests
     cmds:
@@ -86,6 +91,7 @@ tasks:
     cmds:
       - corepack pnpm run metadata:check
       - corepack pnpm run format:check
+      - task: compat:check
       - task: lint
       - task: typecheck
       - task: test:fast
@@ -95,6 +101,7 @@ tasks:
     desc: Run the local equivalent of CI
     cmds:
       - task: install
+      - task: compat:check
       - task: lint
       - task: typecheck
       - task: test:cov
