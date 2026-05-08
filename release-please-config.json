@@ -6,6 +6,8 @@
       "package-name": "kicad-mcp-pro",
       "changelog-path": "CHANGELOG.md",
       "draft": true,
+      "force-tag-creation": true,
+      "pull-request-header": "Release pull request",
       "extra-files": [
         {
           "type": "generic",
