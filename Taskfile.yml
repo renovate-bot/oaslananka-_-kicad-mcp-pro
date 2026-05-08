@@ -94,6 +94,7 @@ tasks:
   ci:
     desc: Run the local equivalent of CI
     cmds:
+      - task: install
       - task: lint
       - task: typecheck
       - task: test:cov
