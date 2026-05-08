@@ -30,7 +30,7 @@ uv run pytest --cov=kicad_mcp_pro --cov-report=term-missing
 ## CI Matrix
 
 Tests run against Python **3.12**, **3.13**, **3.14** on
-`ubuntu-latest`, `macos-latest`, `windows-latest` (9-job matrix).
+`ubuntu-24.04`, `macos-15`, `windows-2025-vs2026` (9-job matrix).
 
 ## Fixtures
 

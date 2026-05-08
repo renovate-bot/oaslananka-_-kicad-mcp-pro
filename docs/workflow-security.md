@@ -20,8 +20,8 @@
 ## Local Checks
 
 ```bash
-corepack npm run workflows:lint
-corepack npm run workflows:security
+corepack pnpm run workflows:lint
+corepack pnpm run workflows:security
 ```
 
 `workflows:lint` parses workflow YAML and runs actionlint. `workflows:security`
@@ -47,4 +47,4 @@ If a tag cannot be resolved, do not guess. Leave the old pin in place or documen
 the exact unresolved action and stop the change.
 
 After updating a pin, inspect the resolved `action.yml` or `action.yaml` and
-confirm JavaScript actions no longer declare `runs.using: node20`.
+confirm JavaScript actions no longer declare a deprecated Node runtime.

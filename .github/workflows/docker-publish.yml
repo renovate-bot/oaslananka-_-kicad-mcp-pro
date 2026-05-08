@@ -1,23 +1,9 @@
 name: Docker Publish
 
 on:
-  workflow_dispatch:
-    inputs:
-      ref:
-        description: "Git ref to build"
-        required: false
-        default: main
-        type: string
-      publish:
-        description: "Push the image to GHCR"
-        type: choice
-        default: "false"
-        options:
-          - "false"
-          - "true"
-  push:
-    tags:
-      - "v*.*.*"
+  release:
+    types:
+      - published
 
 permissions:
   contents: read
@@ -28,19 +14,28 @@ env:
   IMAGE_DESCRIPTION: "KiCad MCP Pro - Model Context Protocol server for KiCad EDA workflows"
   MCP_SERVER_NAME: io.github.oaslananka-lab/kicad-mcp-pro
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     name: Build image
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
+    env:
+      RELEASE_REF: ${{ github.event.release.tag_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+          ref: ${{ env.RELEASE_REF }}
           persist-credentials: false
 
       - name: Set up Docker Buildx
@@ -54,20 +49,20 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=sha-,format=short
-            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+            type=semver,pattern={{version}},value=${{ env.RELEASE_REF }}
+            type=raw,value=latest,enable=${{ !contains(env.RELEASE_REF, '-') }}
           labels: |
             org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ env.RELEASE_REF }}
             org.opencontainers.image.revision=${{ github.sha }}
             io.modelcontextprotocol.server.name=${{ env.MCP_SERVER_NAME }}
           annotations: |
             org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ env.RELEASE_REF }}
             org.opencontainers.image.revision=${{ github.sha }}
             io.modelcontextprotocol.server.name=${{ env.MCP_SERVER_NAME }}
         env:
@@ -85,23 +80,24 @@ jobs:
 
   publish:
     name: Publish image
-    if: >-
-      github.repository == 'oaslananka-lab/kicad-mcp-pro' &&
-      (startsWith(github.ref, 'refs/tags/v') ||
-      (github.event_name == 'workflow_dispatch' && inputs.publish == 'true'))
-    runs-on: ubuntu-latest
+    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
+    needs:
+      - build
     environment: release
     permissions:
       contents: read
       packages: write
       id-token: write
       attestations: write
+    env:
+      RELEASE_REF: ${{ github.event.release.tag_name }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.ref }}
+          ref: ${{ env.RELEASE_REF }}
           persist-credentials: false
 
       - name: Set up Docker Buildx
@@ -122,20 +118,20 @@ jobs:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=sha,prefix=sha-,format=short
-            type=semver,pattern={{version}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
+            type=semver,pattern={{version}},value=${{ env.RELEASE_REF }}
+            type=raw,value=latest,enable=${{ !contains(env.RELEASE_REF, '-') }}
           labels: |
             org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ env.RELEASE_REF }}
             org.opencontainers.image.revision=${{ github.sha }}
             io.modelcontextprotocol.server.name=${{ env.MCP_SERVER_NAME }}
           annotations: |
             org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.version=${{ github.ref_name }}
+            org.opencontainers.image.version=${{ env.RELEASE_REF }}
             org.opencontainers.image.revision=${{ github.sha }}
             io.modelcontextprotocol.server.name=${{ env.MCP_SERVER_NAME }}
         env:

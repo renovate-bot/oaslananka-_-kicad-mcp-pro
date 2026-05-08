@@ -52,11 +52,8 @@ GitHub-only selected secret:
 
 - `CODECOV_TOKEN`: optional Codecov coverage upload token used only by `.github/workflows/ci.yml`. Pull requests from forks receive no token and may use Codecov's public tokenless upload behavior.
 
-Legacy local-only fallback names, not required by GitHub Actions after Trusted
-Publishing migration:
-
-- `PYPI_TOKEN`
-- `TEST_PYPI_TOKEN`
+Legacy package-index token names are not required by GitHub Actions after the
+trusted publishing migration.
 
 No workflow or diagnostic output should print secret values.
 

@@ -52,7 +52,7 @@ organization GitHub repository.
 
 The recommended secret model is to store only `DOPPLER_TOKEN` in CI/CD systems and keep the actual release secrets in Doppler:
 
-- PyPI Trusted Publishing configuration for workflow `release.yml` and
+- PyPI Trusted Publishing configuration for workflow `release-please.yml` and
   environment `release`
 - `SAFETY_API_KEY`
 - `NPM_TOKEN`
@@ -70,6 +70,5 @@ Minimum setup:
 - GitLab CI/CD variable: `DOPPLER_TOKEN`
 - GitLab CI/CD variables: `DOPPLER_PROJECT=all`, `DOPPLER_CONFIG=main`
 
-Keep old native secrets such as `PYPI_TOKEN` and `TEST_PYPI_TOKEN` only for
-local fallback publishing outside GitHub Actions. The canonical release workflow
-uses OIDC Trusted Publishing.
+Do not keep native package-index tokens in CI once GitHub trusted publishing is
+configured. The canonical release workflow uses OIDC Trusted Publishing.

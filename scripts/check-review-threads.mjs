@@ -33,10 +33,6 @@ const INFORMATIONAL_BOTS = new Set([
   "codeql[bot]",
   "socket",
   "socket[bot]",
-  "jules",
-  "jules[bot]",
-  "codex",
-  "codex[bot]",
 ]);
 
 function usage() {

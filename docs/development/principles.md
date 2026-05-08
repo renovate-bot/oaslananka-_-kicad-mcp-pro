@@ -16,7 +16,7 @@ commands. Release exports stay behind explicit quality gates.
 
 Runtime code must use supported KiCad surfaces: `kicad-cli`, `kicad-python` IPC,
 or explicitly documented adapters. Deprecated SWIG/`pcbnew` imports are blocked
-by `npm run compat:check`.
+by `pnpm run compat:check`.
 
 ### 3. Least privilege by default
 
@@ -50,7 +50,7 @@ not become a second automation authority.
 | L2 | Cross-platform package quality | Linux/macOS/Windows CI, package build, metadata sync |
 | L3 | Runtime-validated KiCad integration | Real KiCad 10 CLI smoke, failure artifacts, structured errors |
 | L4 | Production-grade release integrity | release-please, version preflight, SBOM, provenance, signed artifacts |
-| L5 | Agent-safe autonomous maintenance | Jules/Copilot PR loops on the organization repo, policy-enforced gates |
+| L5 | Autonomous maintenance | Explicitly reviewed maintenance automation with policy-enforced gates |
 
-The target for `main` is L4. Jules/autonomous flows are L5 only when they are
+The target for `main` is L4. Autonomous flows are L5 only when they are
 observable, reversible and still gated by protected branch policy.

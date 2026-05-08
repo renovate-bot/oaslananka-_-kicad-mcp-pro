@@ -38,7 +38,7 @@ area:ci:
           - .azure/**/*
           - .gitlab-ci.yml
           - package.json
-          - package-lock.json
+          - pnpm-lock.yaml
 area:docs:
   - changed-files:
       - any-glob-to-any-file:
@@ -56,4 +56,4 @@ type:deps:
           - pyproject.toml
           - uv.lock
           - package.json
-          - package-lock.json
+          - pnpm-lock.yaml

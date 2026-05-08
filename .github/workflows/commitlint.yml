@@ -7,9 +7,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+defaults:
+  run:
+    shell: bash
+
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -19,9 +26,9 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version-file: .node-version
-          cache: npm
+          package-manager-cache: false
       - run: corepack enable
-      - run: corepack npm ci
+      - run: corepack pnpm install --frozen-lockfile
       - env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -30,4 +37,4 @@ jobs:
             echo "Commitlint only runs for pull_request events."
             exit 0
           fi
-          corepack npm exec -- commitlint --from "${BASE_SHA}" --to "${HEAD_SHA}" --verbose
+          corepack pnpm exec commitlint --from "${BASE_SHA}" --to "${HEAD_SHA}" --verbose

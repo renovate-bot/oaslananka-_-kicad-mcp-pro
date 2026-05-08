@@ -7,15 +7,25 @@ on:
 
 permissions:
   contents: read
-  issues: write
+  issues: read
+
+concurrency:
+  group: branch-hygiene-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   report:
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
       - name: Generate report
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -45,17 +55,9 @@ jobs:
               --jq '.[] | select(.updatedAt < (now - 60*86400 | todate)) | "- #\(.number) \(.title) - last: \(.updatedAt) by @\(.author.login)"'
           } > hygiene-report.md
 
-      - name: Open or update tracking issue
+      - name: Write report summary
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          title="Monthly branch hygiene - $(date -u +%Y-%m)"
-          body="$(cat hygiene-report.md)"
-          existing=$(gh issue list --repo "${{ github.repository }}" --search "in:title \"$title\"" --json number --jq '.[0].number' 2>/dev/null || true)
-          if [ -n "$existing" ]; then
-            gh issue edit "$existing" --repo "${{ github.repository }}" --body "$body"
-          else
-            gh issue create --repo "${{ github.repository }}" \
-              --title "$title" --body "$body" --label "type:chore,status:triage"
-          fi
+          cat hygiene-report.md >> "${GITHUB_STEP_SUMMARY}"

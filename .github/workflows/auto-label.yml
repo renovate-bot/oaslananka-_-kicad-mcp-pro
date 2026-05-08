@@ -9,17 +9,28 @@ on:
       - ready_for_review
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+defaults:
+  run:
+    shell: bash
+
 jobs:
   label:
     name: Labeler
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: read
       pull-requests: write
       issues: write
     steps:
-      - uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b
+      - uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           configuration-path: .github/labeler.yml

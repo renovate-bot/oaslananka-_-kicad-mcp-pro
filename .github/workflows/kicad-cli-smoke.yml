@@ -12,10 +12,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+defaults:
+  run:
+    shell: bash
+
 jobs:
   smoke-test:
     name: KiCad 10 CLI Smoke
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
       HUSKY: 0
@@ -29,7 +36,7 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.0.0
         with:
           node-version-file: .node-version
-          cache: npm
+          package-manager-cache: false
 
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v5.3.0
         with:
@@ -49,7 +56,7 @@ jobs:
       - name: Install project dependencies
         run: |
           corepack enable
-          corepack npm ci
+          corepack pnpm install --frozen-lockfile
           uv sync --all-extras --frozen
 
       - name: Run real KiCad CLI smoke tests
@@ -66,7 +73,9 @@ jobs:
           {
             echo "KICAD_MCP_KICAD_CLI=${KICAD_MCP_KICAD_CLI:-}"
             if [ -n "${KICAD_MCP_KICAD_CLI:-}" ] && [ -x "${KICAD_MCP_KICAD_CLI}" ]; then
-              "${KICAD_MCP_KICAD_CLI}" version || true
+              if ! "${KICAD_MCP_KICAD_CLI}" version; then
+                echo "kicad-cli version check failed after tests completed."
+              fi
             fi
           } > "${KICAD_SMOKE_ARTIFACTS}/kicad-cli-diagnostics.log" 2>&1
 

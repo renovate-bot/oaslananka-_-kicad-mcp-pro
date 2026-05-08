@@ -5,11 +5,21 @@ on:
     - cron: "25 6 1 * *"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+defaults:
+  run:
+    shell: bash
+
 jobs:
   mutmut:
     name: Mutation Testing
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 60
     permissions:
       contents: read
@@ -26,7 +36,10 @@ jobs:
           --paths-to-mutate src/kicad_mcp/utils,src/kicad_mcp/discovery.py,src/kicad_mcp/connection.py,src/kicad_mcp/tools/router.py
       - name: Export mutation results
         if: always()
-        run: uv run mutmut results > mutmut-results.txt || true
+        run: |
+          if ! uv run mutmut results > mutmut-results.txt; then
+            printf 'Mutation result export did not complete.\n' > mutmut-results.txt
+          fi
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:

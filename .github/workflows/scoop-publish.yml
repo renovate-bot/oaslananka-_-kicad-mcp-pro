@@ -1,19 +1,9 @@
 name: Scoop Publish
 
 on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: "Package version without leading v"
-        required: true
-        type: string
-      publish:
-        description: "Create a PR in oaslananka-lab/scoop-bucket"
-        type: choice
-        default: "false"
-        options:
-          - "false"
-          - "true"
+  release:
+    types:
+      - published
 
 permissions:
   contents: read
@@ -22,33 +12,53 @@ env:
   BUCKET_REPO: oaslananka-lab/scoop-bucket
   MANIFEST_PATH: bucket/kicad-mcp-pro.json
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+defaults:
+  run:
+    shell: bash
+
 jobs:
   generate:
     name: Generate Scoop manifest
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: read
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           persist-credentials: false
       - name: Generate manifest
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           mkdir -p bucket
           python - <<'PY'
           import json
           import os
+          import time
+          import urllib.error
           import urllib.request
           from pathlib import Path
 
           version = os.environ["VERSION"].removeprefix("v")
-          with urllib.request.urlopen(f"https://pypi.org/pypi/kicad-mcp-pro/{version}/json", timeout=30) as response:
-              payload = json.load(response)
+          url = f"https://pypi.org/pypi/kicad-mcp-pro/{version}/json"
+          for attempt in range(1, 11):
+              try:
+                  with urllib.request.urlopen(url, timeout=30) as response:
+                      payload = json.load(response)
+                  break
+              except urllib.error.HTTPError as error:
+                  if error.code != 404 or attempt == 10:
+                      raise
+                  print(f"PyPI metadata for {version} not available yet; retrying in 30 s...")
+                  time.sleep(30)
           wheel = next((url for url in payload["urls"] if url["packagetype"] == "bdist_wheel"), None)
           if wheel is None:
               raise SystemExit(f"No PyPI wheel found for kicad-mcp-pro {version}")
@@ -100,16 +110,16 @@ jobs:
 
   publish:
     name: Create bucket PR
-    if: >-
-      github.repository == 'oaslananka-lab/kicad-mcp-pro' &&
-      inputs.publish == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
+    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
     needs:
       - generate
     environment: release
     permissions:
       contents: read
+    env:
+      RELEASE_TAG: ${{ github.event.release.tag_name }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
@@ -126,19 +136,30 @@ jobs:
           gh repo view "${BUCKET_REPO}" >/dev/null
       - name: Generate manifest
         env:
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           mkdir -p bucket
           python - <<'PY'
           import json
           import os
+          import time
+          import urllib.error
           import urllib.request
           from pathlib import Path
 
           version = os.environ["VERSION"].removeprefix("v")
-          with urllib.request.urlopen(f"https://pypi.org/pypi/kicad-mcp-pro/{version}/json", timeout=30) as response:
-              payload = json.load(response)
+          url = f"https://pypi.org/pypi/kicad-mcp-pro/{version}/json"
+          for attempt in range(1, 11):
+              try:
+                  with urllib.request.urlopen(url, timeout=30) as response:
+                      payload = json.load(response)
+                  break
+              except urllib.error.HTTPError as error:
+                  if error.code != 404 or attempt == 10:
+                      raise
+                  print(f"PyPI metadata for {version} not available yet; retrying in 30 s...")
+                  time.sleep(30)
           wheel = next((url for url in payload["urls"] if url["packagetype"] == "bdist_wheel"), None)
           if wheel is None:
               raise SystemExit(f"No PyPI wheel found for kicad-mcp-pro {version}")
@@ -172,7 +193,7 @@ jobs:
       - name: Create pull request
         env:
           GH_TOKEN: ${{ secrets.PACKAGE_MANAGER_TOKEN }}
-          VERSION: ${{ inputs.version }}
+          VERSION: ${{ env.RELEASE_TAG }}
         run: |
           set -euo pipefail
           branch="kicad-mcp-pro-${VERSION#v}"

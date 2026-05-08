@@ -24,6 +24,7 @@ def test_release_preflight_scans_only_current_changelog_section(
 ) -> None:
     module = _load_script("check_release_preflight.py")
     monkeypatch.delenv("GITHUB_HEAD_REF", raising=False)
+    monkeypatch.delenv("RELEASE_PLEASE_GENERATED_CHANGELOG", raising=False)
     changelog = tmp_path / "CHANGELOG.md"
     changelog.write_text(
         """
@@ -61,6 +62,28 @@ def test_release_preflight_scans_only_current_changelog_section(
     errors = module._check_changelog("3.1.8")
     assert errors
     assert "current release section" in errors[0]
+
+
+def test_release_preflight_skips_release_please_generated_changelog_noise(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    module = _load_script("check_release_preflight.py")
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text(
+        """
+## [Unreleased]
+
+## [3.1.8]
+
+* Bump version to 2.0.2 and update changelog
+""".lstrip(),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "ROOT", tmp_path)
+    monkeypatch.setenv("RELEASE_PLEASE_GENERATED_CHANGELOG", "true")
+
+    assert module._check_changelog("3.1.8") == []
 
 
 def test_no_pcbnew_guard_detects_imports(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

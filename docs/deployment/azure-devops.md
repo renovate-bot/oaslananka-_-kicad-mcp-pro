@@ -1,6 +1,6 @@
 # Azure DevOps Manual CI/CD
 
-Azure DevOps is a manual compatibility fallback and release-support surface for
+Azure DevOps is a manual compatibility fallback surface for
 teams that mirror this repository into Azure DevOps. Automated GitHub CI/CD is
 owned by the `oaslananka-lab` organization mirror, while the personal
 `oaslananka` GitHub repository remains the main source repository.
@@ -15,25 +15,21 @@ It covers:
 
 - `Validate`: `uv sync`, `ruff`, `mypy`, and `pytest` with a `--cov-fail-under=70` gate
 - `Build`: `uv build` and artifact publication for the generated `dist/` output
-- `Publish`: optional manual release to TestPyPI or PyPI using Azure-managed secrets
 
 ## Recommended Azure Variables
 
-Preferred setup: store a single Doppler service token in Azure DevOps and let the pipeline fetch release secrets at runtime:
+Preferred setup: store a single Doppler service token in Azure DevOps and let
+the pipeline fetch scan-only secrets at runtime:
 
 - `DOPPLER_TOKEN`
 
-Doppler should contain:
+Doppler may contain:
 
-- `PYPI_TOKEN`
-- `TEST_PYPI_TOKEN`
 - `SAFETY_API_KEY`
 
-The compatibility Azure publish pipeline still supports native Azure variables
+The compatibility Azure security pipeline still supports native Azure variables
 as a fallback:
 
-- `PYPI_TOKEN`
-- `TEST_PYPI_TOKEN`
 - `SAFETY_API_KEY`
 
 You can store these in a variable group if you want to share them across multiple pipelines.
@@ -41,8 +37,8 @@ You can store these in a variable group if you want to share them across multipl
 ## Release Model
 
 - Automated GitHub CI/security jobs should run from `https://github.com/oaslananka-lab/kicad-mcp-pro`.
-- Azure DevOps should be queued manually when you need the Azure validation or release-support path.
-- Package publication should always be queued manually when you are ready to release.
+- Azure DevOps should be queued manually when you need the Azure validation path.
+- Package publication is handled only by the GitHub release-please workflow.
 - The personal GitHub repository should not run automatic CI/CD jobs.
 
 ## GitHub Workflows
@@ -52,7 +48,7 @@ The repository includes GitHub workflows that are automatic only in the
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/security.yml`
-- `.github/workflows/release.yml`
+- `.github/workflows/release-please.yml`
 
-Release publishing is handled by `.github/workflows/release.yml` in the org repo
-through PyPI Trusted Publishing.
+Release publishing is handled by `.github/workflows/release-please.yml` in the
+org repo through PyPI Trusted Publishing.

@@ -95,7 +95,10 @@ def _check_changelog(version: str) -> list[str]:
     # These are not human errors, so skip the noise check on release-please
     # branches. GITHUB_HEAD_REF is set by GitHub Actions on pull_request events.
     head_ref = os.environ.get("GITHUB_HEAD_REF", "")
-    if head_ref.startswith("release-please--"):
+    if (
+        head_ref.startswith("release-please--")
+        or os.environ.get("RELEASE_PLEASE_GENERATED_CHANGELOG") == "true"
+    ):
         return errors
 
     current_section = _changelog_section(changelog, version)

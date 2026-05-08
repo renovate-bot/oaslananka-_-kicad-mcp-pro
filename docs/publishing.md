@@ -8,29 +8,22 @@ All CI/CD, release, registry, package-manager, signing, provenance, and
 attestation workflows are owned by the organization repository. The personal
 repository must not be used as a release source.
 
-## PyPI and TestPyPI
+## PyPI
 
-Python package releases use `.github/workflows/release.yml` in
+Python package releases use `.github/workflows/release-please.yml` in
 `oaslananka-lab/kicad-mcp-pro`. The workflow builds the Python distributions,
 creates release artifacts, generates SBOM and checksum files, signs artifacts
-with Sigstore, creates GitHub artifact attestations, and publishes to PyPI or
-TestPyPI only when the protected `release` environment and publish inputs allow
-it.
-
-Default safe settings:
-
-- Manual dispatch defaults to `publish=false`.
-- Tag-triggered release automation is gated by `AUTO_RELEASE_PUBLISH`.
-- `AUTO_RELEASE_PUBLISH=false` keeps tag-triggered releases non-publishing.
-- `AUTO_RELEASE_INDEX=TestPyPI` keeps automatic test runs off production PyPI.
+with Sigstore, creates GitHub artifact attestations, and publishes to PyPI only
+when release-please reports that a release was created and the protected
+`release` environment is approved.
 
 The release workflow uses PyPI Trusted Publishing through GitHub Actions OIDC.
-Repository secrets named `PYPI_TOKEN` and `TEST_PYPI_TOKEN` should not be needed
-once PyPI and TestPyPI trusted publishers are configured.
+Long-lived package-index token secrets should not be needed once the PyPI
+trusted publisher is configured.
 
 ## GitHub Releases
 
-GitHub Release artifacts are produced by `.github/workflows/release.yml` in the
+GitHub Release artifacts are produced by `.github/workflows/release-please.yml` in the
 organization repository. Expected release assets include:
 
 - Python wheel and source distribution under `dist/`
@@ -51,9 +44,9 @@ in the organization repository. The image name is:
 ghcr.io/oaslananka-lab/kicad-mcp-pro
 ```
 
-Manual workflow dispatch builds without pushing unless `publish=true`.
-Version-tag pushes and approved manual runs can publish images. Provenance
-attestation runs only when an image was pushed.
+The Docker workflow runs from published GitHub Releases and uses the
+release-please tag as the image version. Provenance attestation runs only when
+an image was pushed.
 
 Use the stdio image with MCP clients:
 
@@ -104,12 +97,10 @@ URL, the adapter fails fast instead of pretending to publish.
 
 ## Homebrew
 
-Homebrew tap updates are scaffolded by
-`.github/workflows/homebrew-publish.yml`. The workflow is manual only.
+Homebrew tap updates are scaffolded by `.github/workflows/homebrew-publish.yml`
+after a GitHub Release is published.
 
-- `publish=false` prints the generated formula diff.
-- `publish=true` creates a pull request against
-  `oaslananka-lab/homebrew-tap`.
+- The workflow creates a pull request against `oaslananka-lab/homebrew-tap`.
 - The workflow uses `PACKAGE_MANAGER_TOKEN`.
 - The workflow does not push directly to the tap `main` branch.
 
@@ -118,12 +109,10 @@ virtualenv helper and generated Python resources.
 
 ## Scoop
 
-Scoop bucket updates are scaffolded by `.github/workflows/scoop-publish.yml`.
-The workflow is manual only.
+Scoop bucket updates are scaffolded by `.github/workflows/scoop-publish.yml`
+after a GitHub Release is published.
 
-- `publish=false` prints the generated manifest.
-- `publish=true` creates a pull request against
-  `oaslananka-lab/scoop-bucket`.
+- The workflow creates a pull request against `oaslananka-lab/scoop-bucket`.
 - The workflow uses `PACKAGE_MANAGER_TOKEN`.
 - The workflow does not push directly to the bucket `main` branch.
 
@@ -143,7 +132,8 @@ npm-wrapper/bin/kicad-mcp-pro.js
 ```
 
 The wrapper package name is `@oaslananka/kicad-mcp-pro`. It does not install
-Python dependencies during `npm install`; at runtime it executes:
+Python dependencies during the package-manager install lifecycle; at runtime it
+executes:
 
 ```bash
 uvx kicad-mcp-pro
@@ -169,8 +159,6 @@ Required GitHub secrets:
 Required GitHub variables:
 
 - `MCP_REGISTRY_URL`
-- `AUTO_RELEASE_PUBLISH`
-- `AUTO_RELEASE_INDEX`
 
 ## Install Examples
 

@@ -55,8 +55,6 @@ nav:
   - Workflow Security: workflow-security.md
   - Publishing: publishing.md
   - Demo Media: demo-media.md
-  - Automation:
-      - Jules: automation/jules.md
   - Install:
       - Docker: install/docker.md
       - Client Config Generator: install/client-config-generator.md
@@ -75,7 +73,6 @@ nav:
       - Repository Operations: repository-operations.md
       - Doppler Setup: doppler-setup.md
       - Branch Protection: branch-protection.md
-      - Jules CI Bridge: deployment/jules-ci-bridge.md
       - Azure DevOps CI/CD: deployment/azure-devops.md
       - Docker: deployment/docker.md
       - HTTP Mode: deployment/http-mode.md

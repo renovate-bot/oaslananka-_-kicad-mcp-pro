@@ -5,7 +5,7 @@ work. It favors small gates and measurable artifacts over large rewrites.
 
 ## P0: Stabilize current CI and release loops
 
-- Keep `corepack npm run check:ci` green on Linux and smoke coverage green on
+- Keep `corepack pnpm run check:ci` green on Linux and smoke coverage green on
   macOS/Windows.
 - Keep `release:check` scoped to current release sections so historical changelog
   entries do not break normal CI.

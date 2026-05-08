@@ -7,9 +7,7 @@
 .actrc                                  @oaslananka
 
 # Release and packaging pipeline
-scripts/publish.sh                      @oaslananka
 scripts/sync_mcp_metadata.py            @oaslananka
-scripts/bump_version.py                 @oaslananka
 pyproject.toml                          @oaslananka
 package.json                            @oaslananka
 

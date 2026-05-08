@@ -4,31 +4,231 @@ on:
   push:
     branches:
       - main
-  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   release-please:
     name: Release Please
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      version: ${{ steps.release.outputs.version }}
     permissions:
       contents: write
       pull-requests: write
       issues: write
     steps:
       - name: Validate token
+        env:
+          RELEASE_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
         run: |
-          if [ -z "${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}" ]; then
+          set -euo pipefail
+          if [ -z "${RELEASE_TOKEN}" ]; then
             echo "::error::DOPPLER_GITHUB_SERVICE_TOKEN is required."
             exit 1
           fi
-      - id: release_please
+
+      - id: release
         uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7
         with:
           token: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+  publish:
+    name: Build, publish, and attach release assets
+    needs:
+      - release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: release
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+      PACKAGE_VERSION: ${{ needs.release-please.outputs.version }}
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          python-version: "3.12"
+          enable-cache: false
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Install workflow lint tools
+        run: |
+          set -euo pipefail
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
+          echo "${HOME}/go/bin" >> "${GITHUB_PATH}"
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack pnpm install --frozen-lockfile
+          uv sync --all-extras --frozen --python 3.12
+
+      - name: Verify release version
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import tomllib
+          from pathlib import Path
+
+          expected = "${{ env.PACKAGE_VERSION }}"
+          actual = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+          if actual != expected:
+              raise SystemExit(f"release-please version output {expected} does not match pyproject.toml {actual}")
+          PY
+
+      - name: Run release verification
+        env:
+          RELEASE_PLEASE_GENERATED_CHANGELOG: "true"
+        run: |
+          set -euo pipefail
+          corepack pnpm run check:ci
+
+      - name: Build distributions
+        run: |
+          set -euo pipefail
+          corepack pnpm run build
+
+      - name: Stage Python distributions for package index
+        run: |
+          set -euo pipefail
+          rm -rf dist-pypi
+          mkdir -p dist-pypi
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+
+          source = Path("dist")
+          target = Path("dist-pypi")
+          packages = sorted(source.glob("*.whl")) + sorted(source.glob("*.tar.gz"))
+          if not packages:
+              raise SystemExit("No Python wheel or source distribution found in dist/.")
+          for package in packages:
+              shutil.copy2(package, target / package.name)
+          PY
+
+      - name: Generate CycloneDX SBOM
+        uses: anchore/sbom-action@e22c389904149dbc22b58101806040fa8d37a610
+        with:
+          path: .
+          format: cyclonedx-json
+          output-file: dist/bom.json
+          upload-artifact: false
+
+      - name: Calculate checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum -- * > SHA256SUMS.txt
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
+        with:
+          subject-path: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/bom.json
+            dist/SHA256SUMS.txt
+
+      - name: Clear project virtualenv for signing action
+        run: |
+          set -euo pipefail
+          rm -rf .venv
+
+      - name: Sign release artifacts with Sigstore
+        uses: sigstore/gh-action-sigstore-python@04cffa1d795717b140764e8b640de88853c92acc
+        env:
+          UV_NO_CONFIG: "1"
+          UV_CACHE_DIR: ${{ runner.temp }}/sigstore-uv-cache
+          UV_PYTHON: "3.14"
+          UV_PYTHON_INSTALL_DIR: ${{ runner.temp }}/sigstore-uv-python-dir
+          VIRTUAL_ENV: ""
+        with:
+          inputs: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/bom.json
+            dist/SHA256SUMS.txt
+          upload-signing-artifacts: true
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        with:
+          packages-dir: dist-pypi/
+          skip-existing: true
+
+      - name: Post-publish smoke check
+        run: |
+          set -euo pipefail
+          smoke_root="$(mktemp -d)"
+          export UV_CACHE_DIR="${smoke_root}/uv-cache"
+          export UV_PROJECT_ENVIRONMENT="${smoke_root}/project-env"
+          trap 'rm -rf "${smoke_root}"' EXIT
+          for attempt in {1..10}; do
+            rm -rf "${smoke_root}/tools" "${smoke_root}/project-env"
+            export UV_TOOL_DIR="${smoke_root}/tools"
+            if uv tool run --from "kicad-mcp-pro==${PACKAGE_VERSION}" kicad-mcp-pro --help &&
+              uv tool run --from "kicad-mcp-pro==${PACKAGE_VERSION}" kicad-mcp-pro health --json &&
+              uv run --no-project --with "kicad-mcp-pro==${PACKAGE_VERSION}" \
+                python -c 'import kicad_mcp; print(kicad_mcp.__version__)'; then
+              exit 0
+            fi
+            if [ "${attempt}" -lt 10 ]; then
+              echo "Smoke check attempt ${attempt}/10 failed; retrying in 30 s..."
+              sleep 30
+            fi
+          done
+          echo "::error::Smoke check failed: kicad-mcp-pro ${PACKAGE_VERSION} was not available on PyPI after 10 attempts."
+          exit 1
+
+      - name: Attach assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release upload "${RELEASE_TAG}" dist/* --repo "${GITHUB_REPOSITORY}" --clobber
+
+      - name: Upload release artifact bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: release-dist-${{ env.RELEASE_TAG }}
+          path: dist/
+          retention-days: 14

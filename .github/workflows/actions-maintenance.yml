@@ -33,11 +33,15 @@ concurrency:
   group: actions-maintenance
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   maintenance:
     name: Manual Actions maintenance
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - name: Checkout canonical repository

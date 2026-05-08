@@ -13,10 +13,17 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+defaults:
+  run:
+    shell: bash
+
 jobs:
   audit:
     name: Security
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     permissions:
       contents: read
@@ -29,32 +36,16 @@ jobs:
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version-file: .node-version
-          cache: npm
+          package-manager-cache: false
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           python-version: "3.12"
       - run: corepack enable
-      - run: corepack npm ci
+      - run: corepack pnpm install --frozen-lockfile
       - run: uv sync --all-extras --frozen --python 3.12
-      - run: corepack npm run security:bandit
+      - run: corepack pnpm run security:bandit
       - name: Enforced dependency audit
-        run: corepack npm run security:audit
+        run: corepack pnpm run security:audit
 
       - name: Workflow security
-        run: corepack npm run workflows:security
-
-      - name: Install Doppler CLI
-        if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-        uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73
-
-      - name: Optional Safety scan via Doppler
-        if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-        run: |
-          set +e
-          # shellcheck disable=SC2016
-          doppler run --project all --config main -- sh -c 'uv run --python 3.12 python -m safety --stage cicd --key "$SAFETY_API_KEY" scan --target .'
-          safety_exit=$?
-          set -e
-          if [ "${safety_exit}" -ne 0 ]; then
-            echo "Safety scan could not complete cleanly (exit ${safety_exit}); pip-audit remains the enforced dependency gate."
-          fi
+        run: corepack pnpm run workflows:security

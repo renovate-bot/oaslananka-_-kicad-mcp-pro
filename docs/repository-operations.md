@@ -31,57 +31,26 @@ Keep Actions enabled anywhere branch protection depends on them. Use least
 privilege workflow permissions and protected environments rather than disabling
 normal validation.
 
-## Jules Automation
+## Release Automation
 
-Jules may create or update fix branches and PRs in the organization repository
-only. It must not publish releases, packages, registry entries, SBOMs, Sigstore
-bundles, or attestations, and it must not merge PRs.
+Release automation is driven by `.github/workflows/release-please.yml` on
+merges to `main`. Release-please opens the release pull request, derives the
+SemVer version from Conventional Commits, creates the GitHub Release after the
+release pull request is merged, and exposes the release version and tag to the
+publish job.
 
-See [Jules Automation](automation/jules.md) for the workflow inventory,
-security guards, required `JULES_API_KEY` secret, and disable commands.
+Manual version inputs, manual tag creation, and hand-edited changelog entries
+are not part of the release process.
 
-## Manual Mirror
+## Maintenance Workflows
 
-Review the mirror plan without writing to the personal repository:
-
-```bash
-gh workflow run mirror-personal.yml --repo oaslananka-lab/kicad-mcp-pro \
-  -f dry_run=true \
-  -f ref_scope=main-and-tags
-```
-
-Mirror after reviewing the plan:
-
-```bash
-gh workflow run mirror-personal.yml --repo oaslananka-lab/kicad-mcp-pro \
-  -f dry_run=false \
-  -f force_mirror=false \
-  -f ref_scope=main-and-tags
-```
-
-The workflow refuses force updates unless `force_mirror=true`,
-`approval=MIRROR_CANONICAL_TO_PERSONAL`, and a manual `workflow_dispatch` run are
-used. Divergent tags should be recovered one tag at a time with `tag_name`.
-
-See [Personal Showcase Mirror](automation/mirror-personal.md) for stale tag
-recovery.
-
-## Release Control Plane
-
-The release control plane is manual-only and read-first:
-
-- `scripts/release-state.mjs` reports release state, blockers, and the next safe
-  command.
-- `.github/workflows/release-controller.yml` dispatches the existing guarded
-  release and mirror workflows only after state checks.
-- `.github/workflows/actions-maintenance.yml` lists and classifies failed runs,
-  reports stale deployments/tags, and can rerun infra-only failures when
-  explicitly requested.
+`.github/workflows/actions-maintenance.yml` can list and classify failed runs,
+reports stale deployments/tags, and can rerun infra-only failures when
+explicitly requested. It does not create releases, packages, tags, or mirror
+force pushes.
 
 References:
 
-- [Release controller](automation/release-controller.md)
-- [Release state machine](release-state-machine.md)
 - [Failure classifier](automation/failure-classifier.md)
 - [Review thread gate](automation/review-thread-gate.md)
 
@@ -89,25 +58,25 @@ References:
 
 1. Confirm `PERSONAL_REPO_PUSH_TOKEN` exists in the organization repository and
    has access only to `oaslananka/kicad-mcp-pro`.
-2. Run `.github/workflows/mirror-personal.yml` manually with `dry_run=true`.
-3. Review `git log --oneline personal/main..HEAD` in the job log.
-4. Re-run with `dry_run=false` after CI is green on the organization repository.
+2. Fix divergence through a reviewed repository maintenance change.
+3. Let `.github/workflows/mirror-personal.yml` fast-forward `main` or add the
+   missing release tag after CI is green.
 
 ## Pending: OIDC Trusted Publishing
 
 The current release pipeline publishes with `pypa/gh-action-pypi-publish` and
-GitHub Actions OIDC. Long-lived PyPI tokens (`PYPI_TOKEN`, `TEST_PYPI_TOKEN`)
-are not required by `.github/workflows/release.yml`.
+GitHub Actions OIDC. Long-lived package-index tokens are not required by
+`.github/workflows/release-please.yml`.
 
 Migration path:
 1. Configure a trusted publisher in the PyPI project settings pointing to
-   `oaslananka-lab/kicad-mcp-pro`, workflow `release.yml`, environment `release`.
+   `oaslananka-lab/kicad-mcp-pro`, workflow `release-please.yml`, environment `release`.
 2. Configure the matching trusted publisher in TestPyPI with the same owner,
    repository, workflow, and environment.
-3. Keep `id-token: write` on the release workflow so PyPI can mint short-lived
+3. Keep `id-token: write` on the release publish job so PyPI can mint short-lived
    publish credentials during the protected `release` environment run.
-4. Remove any remaining `PYPI_TOKEN` and `TEST_PYPI_TOKEN` secrets from the org
-   repo after TestPyPI and PyPI trusted publishers are confirmed.
+4. Remove any remaining package-index token secrets from the org repo after the
+   PyPI trusted publisher is confirmed.
 
 Blocked by: requires PyPI and TestPyPI account owner action to configure the
 trusted publishers.
@@ -126,7 +95,8 @@ Apply after reviewing the dry run:
 bash scripts/repo-cleanup.sh --apply
 ```
 
-The monthly `Branch hygiene report` workflow is report-only. It opens or updates an issue and does not delete branches.
+The monthly `Branch hygiene report` workflow is report-only. It writes a job
+summary and does not create issues or delete branches.
 
 ## Auto-Delete Merged PR Branches
 

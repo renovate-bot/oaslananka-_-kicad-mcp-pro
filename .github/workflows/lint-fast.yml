@@ -9,9 +9,16 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+defaults:
+  run:
+    shell: bash
+
 jobs:
   meta:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -23,11 +30,10 @@ jobs:
           fail-on-error: true
       - name: yamllint
         run: |
-          pipx install yamllint || pip install --user yamllint
-          yamllint -d "{extends: relaxed, rules: {line-length: disable}}" .github/
+          pipx run yamllint -d "{extends: relaxed, rules: {line-length: disable}}" .github/
 
   python:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -41,7 +47,7 @@ jobs:
       - run: uv run ruff format --check .
 
   node:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -54,6 +60,6 @@ jobs:
         with:
           enable-cache: true
       - run: corepack enable
-      - run: corepack npm ci
+      - run: corepack pnpm install --frozen-lockfile
       - name: Metadata check
-        run: corepack npm run check:metadata
+        run: corepack pnpm run check:metadata

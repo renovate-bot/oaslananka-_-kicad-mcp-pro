@@ -30,22 +30,20 @@ cutoff_iso() {
 
 echo "== Local branches with gone upstream and older than 30 days =="
 if command -v timeout >/dev/null 2>&1; then
-  timeout 20s git fetch --all --prune || echo "Fetch timed out or failed; continuing with local remote-tracking data." >&2
+  timeout 20s git fetch --all --prune
 else
-  git fetch --all --prune || echo "Fetch failed; continuing with local remote-tracking data." >&2
+  git fetch --all --prune
 fi
 git for-each-ref --format='%(refname:short) %(upstream:track) %(committerdate:unix)' refs/heads \
-  | awk -v cutoff="$(cutoff_unix 30)" '$2 ~ /gone/ && $3+0 < cutoff { print $1 }' \
-  | grep -v '^chore/autonomy-setup$' \
+  | awk -v cutoff="$(cutoff_unix 30)" '$2 ~ /gone/ && $3+0 < cutoff && $1 != "chore/autonomy-setup" { print $1 }' \
   | while read -r br; do
       run_or_print git branch -D -- "$br"
-    done || true
+    done
 
 echo
 echo "== Remote branches on canonical org repo older than 90 days without open PRs =="
 gh api -X GET "/repos/${REPO_CANONICAL}/branches?per_page=100" --jq '.[].name' \
-  | grep -Ev '^(main|master|develop|gh-pages)$' \
-  | grep -Ev '^(release|hotfix)/' \
+  | awk '$0 !~ /^(main|master|develop|gh-pages)$/ && $0 !~ /^(release|hotfix)[/]/ { print }' \
   | while read -r br; do
       open_count=$(gh pr list --repo "$REPO_CANONICAL" --head "$br" --state open --json number --jq 'length')
       [ "$open_count" -gt 0 ] && continue
@@ -54,46 +52,45 @@ gh api -X GET "/repos/${REPO_CANONICAL}/branches?per_page=100" --jq '.[].name' \
       if [[ "$last" < "$(cutoff_iso 90)" ]]; then
         run_or_print gh api -X DELETE "/repos/${REPO_CANONICAL}/git/refs/heads/${br}"
       fi
-    done || true
+    done
 
 echo
 echo "== Remote branches on personal showcase older than 90 days =="
 gh api -X GET "/repos/${REPO_SHOWCASE}/branches?per_page=100" --jq '.[].name' \
-  | grep -Ev '^(main|master|develop|gh-pages)$' \
-  | grep -Ev '^(release|hotfix)/' \
+  | awk '$0 !~ /^(main|master|develop|gh-pages)$/ && $0 !~ /^(release|hotfix)[/]/ { print }' \
   | while read -r br; do
       sha=$(gh api "/repos/${REPO_SHOWCASE}/branches/${br}" --jq '.commit.sha' 2>/dev/null) || continue
       last=$(gh api "/repos/${REPO_SHOWCASE}/commits/${sha}" --jq '.commit.committer.date' 2>/dev/null) || continue
       if [[ "$last" < "$(cutoff_iso 90)" ]]; then
         run_or_print gh api -X DELETE "/repos/${REPO_SHOWCASE}/git/refs/heads/${br}"
       fi
-    done || true
+    done
 
 echo
 echo "== Manual review items =="
 echo "Open PRs older than 60 days:"
 gh pr list --repo "$REPO_CANONICAL" --state open --limit 200 \
   --json number,title,updatedAt,author \
-  --jq '.[] | select(.updatedAt < (now - 60*86400 | todate)) | "  #\(.number) \(.title) (last: \(.updatedAt), by \(.author.login))"' || true
+  --jq '.[] | select(.updatedAt < (now - 60*86400 | todate)) | "  #\(.number) \(.title) (last: \(.updatedAt), by \(.author.login))"'
 
 echo
 echo "Draft PRs older than 30 days:"
 gh pr list --repo "$REPO_CANONICAL" --state open --draft --limit 200 \
   --json number,title,updatedAt \
-  --jq '.[] | select(.updatedAt < (now - 30*86400 | todate)) | "  #\(.number) \(.title) (last: \(.updatedAt))"' || true
+  --jq '.[] | select(.updatedAt < (now - 30*86400 | todate)) | "  #\(.number) \(.title) (last: \(.updatedAt))"'
 
 echo
 echo "Tags on canonical without a GitHub Release:"
 git ls-remote --tags "https://github.com/${REPO_CANONICAL}.git" \
   | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' | sort -u > /tmp/canonical_tags.txt
 gh release list --repo "$REPO_CANONICAL" --limit 200 --json tagName --jq '.[].tagName' | sort -u > /tmp/canonical_releases.txt
-comm -23 /tmp/canonical_tags.txt /tmp/canonical_releases.txt | sed 's/^/  /' || true
+comm -23 /tmp/canonical_tags.txt /tmp/canonical_releases.txt | sed 's/^/  /'
 
 echo
 echo "Tag mismatch where showcase has tags canonical lacks:"
 git ls-remote --tags "https://github.com/${REPO_SHOWCASE}.git" \
   | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' | sort -u > /tmp/org_tags.txt
-comm -23 /tmp/org_tags.txt /tmp/canonical_tags.txt | sed 's/^/  /' || true
+comm -23 /tmp/org_tags.txt /tmp/canonical_tags.txt | sed 's/^/  /'
 
 echo
 if [ "$APPLY" != "--apply" ]; then

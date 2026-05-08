@@ -132,7 +132,7 @@ def main(argv: list[str] | None = None) -> int:
     if drift and args.check:
         rel = ", ".join(str(path.relative_to(ROOT)) for path in drift)
         print(f"MCP metadata is out of sync: {rel}", file=sys.stderr)
-        print("Run: npm run metadata:sync", file=sys.stderr)
+        print("Run: pnpm run metadata:sync", file=sys.stderr)
         return 1
 
     if args.write:

@@ -5,7 +5,7 @@
 [![PyPI](https://img.shields.io/pypi/v/kicad-mcp-pro.svg)](https://pypi.org/project/kicad-mcp-pro/)
 [![CI](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/ci.yml)
 [![Docs](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/docs.yml/badge.svg)](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/docs.yml)
-[![Release](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/release.yml/badge.svg)](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/release.yml)
+[![Release](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/release-please.yml/badge.svg)](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/release-please.yml)
 [![Codecov](https://codecov.io/gh/oaslananka-lab/kicad-mcp-pro/branch/main/graph/badge.svg)](https://codecov.io/gh/oaslananka-lab/kicad-mcp-pro)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/oaslananka-lab/kicad-mcp-pro/badge)](https://scorecard.dev/viewer/?uri=github.com/oaslananka-lab/kicad-mcp-pro)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -138,17 +138,9 @@ Operational references:
 
 - [Repository operations](docs/repository-operations.md)
 - [Publishing](docs/publishing.md)
-- [Release controller](docs/automation/release-controller.md)
-- [Release state machine](docs/release-state-machine.md)
-- [Jules automation](docs/automation/jules.md)
 - [Autonomy model](docs/autonomy.md)
 - [Doppler setup](docs/doppler-setup.md)
 - [Branch protection](docs/branch-protection.md)
-
-Jules-based fixer automation is restricted to the canonical organization
-repository. Jules may open or update fix PRs, but it must not publish packages,
-registries, releases, SBOMs, signatures, or attestations, and it must not merge
-without human review.
 
 ## Contributing and Support
 

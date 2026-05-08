@@ -37,7 +37,7 @@ updates:
     cooldown:
       default-days: 3
     groups:
-      npm-development:
+      pnpm-development:
         dependency-type: development
         patterns:
           - "*"

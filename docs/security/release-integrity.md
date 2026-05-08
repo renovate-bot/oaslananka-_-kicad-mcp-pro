@@ -44,7 +44,7 @@ CLI:
 
 ```bash
 python -m sigstore verify identity \
-  --cert-identity "https://github.com/oaslananka-lab/kicad-mcp-pro/.github/workflows/release.yml@refs/tags/v<version>" \
+  --cert-identity "https://github.com/oaslananka-lab/kicad-mcp-pro/.github/workflows/release-please.yml@refs/tags/v<version>" \
   --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
   dist/kicad_mcp_pro-<version>-py3-none-any.whl
 ```
@@ -100,11 +100,11 @@ publishers for:
 
 - Owner: `oaslananka-lab`
 - Repository: `kicad-mcp-pro`
-- Workflow: `release.yml`
+- Workflow: `release-please.yml`
 - Environment: `release`
 
-After both publishers are configured, long-lived `PYPI_TOKEN` and
-`TEST_PYPI_TOKEN` secrets should not be used by CI.
+After the publisher is configured, long-lived package-index token secrets should
+not be used by CI.
 
 ## DockerHub
 

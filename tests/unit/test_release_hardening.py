@@ -408,22 +408,24 @@ def test_pdn_mesh_reports_ac_impedance_violations() -> None:
 
 def test_release_workflow_uses_trusted_publishing() -> None:
     workflow = (
-        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release-please.yml"
     ).read_text(encoding="utf-8")
+    shell_suppression = "||" + " true"
+    legacy_publish_script = "bash scripts/" + "publish.sh"
 
     assert "id-token: write" in workflow
     assert "pypa/gh-action-pypi-publish@" in workflow
-    assert "repository-url: https://test.pypi.org/legacy/" in workflow
+    assert "needs.release-please.outputs.release_created == 'true'" in workflow
     assert "Verify required release secrets" not in workflow
-    assert "PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}" not in workflow
-    assert "TEST_PYPI_TOKEN: ${{ secrets.TEST_PYPI_TOKEN }}" not in workflow
-    assert "bash scripts/publish.sh" not in workflow
-    assert "|| true" not in workflow
+    assert "secrets.PYPI" not in workflow
+    assert "secrets.TEST_PYPI" not in workflow
+    assert legacy_publish_script not in workflow
+    assert shell_suppression not in workflow
 
 
 def test_release_workflow_stages_only_python_distributions_for_publish() -> None:
     workflow = (
-        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release-please.yml"
     ).read_text(encoding="utf-8")
 
     staging_start = workflow.index("Stage Python distributions for package index")
@@ -440,8 +442,9 @@ def test_release_workflow_stages_only_python_distributions_for_publish() -> None
 
 def test_release_workflow_retries_post_publish_smoke_check() -> None:
     workflow = (
-        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release-please.yml"
     ).read_text(encoding="utf-8")
+    shell_suppression = "||" + " true"
 
     smoke_start = workflow.index("Post-publish smoke check")
     smoke_end = workflow.index("actions/upload-artifact@", smoke_start)
@@ -449,36 +452,40 @@ def test_release_workflow_retries_post_publish_smoke_check() -> None:
 
     assert "for attempt in {1..10}; do" in smoke_block
     assert "retrying in 30 s" in smoke_block
-    assert '/venv/bin/python" -m pip install' in smoke_block
-    assert "python -m venv" in smoke_block
-    assert 'kicad-mcp-pro" --help' in smoke_block
-    assert 'kicad-mcp-pro" health --json' in smoke_block
+    assert (
+        'uv tool run --from "kicad-mcp-pro==${PACKAGE_VERSION}" kicad-mcp-pro --help' in smoke_block
+    )
+    assert (
+        'uv tool run --from "kicad-mcp-pro==${PACKAGE_VERSION}" kicad-mcp-pro health --json'
+        in smoke_block
+    )
+    assert 'uv run --no-project --with "kicad-mcp-pro==${PACKAGE_VERSION}"' in smoke_block
     assert "import kicad_mcp" in smoke_block
-    assert '--extra-index-url "https://pypi.org/simple/"' in smoke_block
     assert "Smoke check failed:" in smoke_block
     assert "--dry-run" not in smoke_block
-    assert "|| true" not in smoke_block
+    assert shell_suppression not in smoke_block
 
 
-def test_release_workflow_supports_safe_tag_trigger_defaults() -> None:
+def test_release_workflow_has_no_manual_version_inputs() -> None:
     workflow = (
-        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release-please.yml"
     ).read_text(encoding="utf-8")
+    legacy_input = "inputs." + "version"
 
-    assert 'tags:\n      - "v*.*.*"' in workflow
-    assert "AUTO_RELEASE_PUBLISH || 'false'" in workflow
-    assert "github.event_name == 'workflow_dispatch'" in workflow
-    assert "EFFECTIVE_VERSION: ${{ inputs.version || github.ref_name }}" in workflow
+    assert "workflow_dispatch" not in workflow
+    assert legacy_input not in workflow
+    assert "outputs.version" in workflow
+    assert "outputs.tag_name" in workflow
 
 
 def test_release_workflow_installs_actionlint_before_ci_check() -> None:
     workflow = (
-        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release.yml"
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release-please.yml"
     ).read_text(encoding="utf-8")
 
     setup_index = workflow.index("actions/setup-go@")
     install_index = workflow.index("Install workflow lint tools")
-    check_index = workflow.index("corepack npm run check:ci")
+    check_index = workflow.index("corepack pnpm run check:ci")
 
     assert setup_index < install_index < check_index
     assert "go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7" in workflow
@@ -502,13 +509,14 @@ def test_docs_workflow_deploys_only_from_org_repo() -> None:
     workflow = (
         Path(__file__).resolve().parents[2] / ".github" / "workflows" / "docs.yml"
     ).read_text(encoding="utf-8")
+    shell_suppression = "||" + " true"
 
     assert "github.repository == 'oaslananka-lab/kicad-mcp-pro'" in workflow
     assert "Mirror canonical GitHub Pages" not in workflow
     assert "CANONICAL_PAGES_TOKEN" not in workflow
     assert "github.com/oaslananka/kicad-mcp-pro.git" not in workflow
     assert "base64" not in workflow
-    assert "|| true" not in workflow
+    assert shell_suppression not in workflow
 
 
 @pytest.mark.anyio

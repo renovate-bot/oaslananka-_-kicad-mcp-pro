@@ -27,7 +27,6 @@ Use the documentation in this folder for installation, client configuration, too
 - [KiCad Studio Integration](integration/kicad-studio.md)
 - [Azure DevOps CI/CD](deployment/azure-devops.md)
 - [Repository and CI/CD Topology](deployment/repository-topology.md)
-- [Jules Automation](automation/jules.md)
 - [Docker Install](install/docker.md)
 - [Client Config Generator](install/client-config-generator.md)
 - [HTTP Mode](deployment/http-mode.md)

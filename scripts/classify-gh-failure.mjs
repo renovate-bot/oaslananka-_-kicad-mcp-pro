@@ -96,7 +96,7 @@ const CLASSES = [
     root_cause:
       "The personal showcase mirror already has a version tag with the same name pointing at a different object.",
     safe_fix:
-      "Leave package release state alone. Run mirror-personal.yml manually with force_mirror=true, the specific tag_name, and approval=MIRROR_CANONICAL_TO_PERSONAL after reviewing refs.",
+      "Leave package release state alone and repair divergent showcase refs through a reviewed maintenance change.",
     auto_fix_allowed: false,
     publish_must_stop: false,
     human_approval_required: true,

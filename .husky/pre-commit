@@ -1,2 +1,2 @@
 #!/usr/bin/env sh
-corepack npm run hooks:pre-commit
+corepack pnpm run hooks:pre-commit

@@ -2,10 +2,9 @@
   "name": "kicad-mcp-pro-hooks",
   "private": true,
   "type": "module",
-  "packageManager": "npm@11.12.1",
+  "packageManager": "pnpm@11.0.8",
   "scripts": {
     "prepare": "husky",
-    "version:bump": "uv run python scripts/bump_version.py",
     "metadata:sync": "uv run python scripts/sync_mcp_metadata.py --write",
     "metadata:check": "uv run python scripts/sync_mcp_metadata.py --check",
     "mcp:manifest:check": "uv run python scripts/validate_mcp_manifest.py",
@@ -23,21 +22,22 @@
     "workflows:security": "uv run python scripts/workflow_security.py --min-severity high",
     "security:bandit": "uv run python -m bandit -r src/ -ll -s B104",
     "security:audit": "uv run python scripts/audit_dependencies.py",
-    "security": "npm run security:bandit && npm run security:audit",
+    "security": "pnpm run security:bandit && pnpm run security:audit",
     "security:local": "uv run python scripts/security_local.py",
-    "check": "npm run metadata:check && npm run release:check && npm run compat:check && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run security && npm run workflows:lint && npm run workflows:security && npm run build",
-    "check:format": "npm run format:check",
-    "check:lint": "npm run lint",
-    "check:type": "npm run typecheck",
-    "check:test": "npm run test",
-    "check:bandit": "npm run security:bandit",
-    "check:audit": "npm run security:audit",
-    "check:metadata": "npm run metadata:check",
-    "check:ci": "npm run metadata:check && npm run release:check && npm run compat:check && npm run format:check && npm run lint && npm run typecheck && npm run test && npm run security && npm run workflows:lint && npm run workflows:security && npm run build",
-    "hooks:pre-commit": "uv run python scripts/hook_pre_commit.py && npm run metadata:check",
-    "hooks:pre-push": "npm run metadata:check && npm run release:check && npm run compat:check && npm run format:check && npm run lint && npm run typecheck && npm run test:unit && npm run workflows:lint",
-    "hooks:security": "npm run security",
-    "compat:check": "uv run python scripts/check_no_pcbnew.py"
+    "check": "pnpm run metadata:check && pnpm run release:check && pnpm run compat:check && pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run security && pnpm run workflows:lint && pnpm run workflows:security && pnpm run release:dry-run && pnpm run build",
+    "check:format": "pnpm run format:check",
+    "check:lint": "pnpm run lint",
+    "check:type": "pnpm run typecheck",
+    "check:test": "pnpm run test",
+    "check:bandit": "pnpm run security:bandit",
+    "check:audit": "pnpm run security:audit",
+    "check:metadata": "pnpm run metadata:check",
+    "check:ci": "pnpm run metadata:check && pnpm run release:check && pnpm run compat:check && pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test && pnpm run security && pnpm run workflows:lint && pnpm run workflows:security && pnpm run release:dry-run && pnpm run build",
+    "hooks:pre-commit": "uv run python scripts/hook_pre_commit.py && pnpm run metadata:check",
+    "hooks:pre-push": "pnpm run metadata:check && pnpm run release:check && pnpm run compat:check && pnpm run format:check && pnpm run lint && pnpm run typecheck && pnpm run test:unit && pnpm run workflows:lint",
+    "hooks:security": "pnpm run security",
+    "compat:check": "uv run python scripts/check_no_pcbnew.py",
+    "release:dry-run": "pnpm run metadata:check && pnpm run release:check"
   },
   "devDependencies": {
     "@commitlint/cli": "20.5.2",
@@ -46,6 +46,6 @@
   },
   "engines": {
     "node": ">=24.11.0 <25",
-    "npm": ">=11.6.1 <12"
+    "pnpm": ">=11.0.0 <12"
   }
 }
