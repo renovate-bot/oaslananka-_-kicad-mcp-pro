@@ -96,10 +96,10 @@ def _sync_package_versions(data: dict[str, Any], metadata: dict[str, Any]) -> No
         ):
             package["version"] = metadata["version"]
         if package.get("registryType") == "oci" or package.get("registry") == "container":
+            package["registry"] = "container"
             package["version"] = metadata["version"]
             package["identifier"] = f"{GHCR_IMAGE}:{metadata['version']}"
-            if "image" in package:
-                package["image"] = GHCR_IMAGE
+            package["image"] = GHCR_IMAGE
 
 
 def _planned_updates() -> dict[Path, str]:

@@ -18,6 +18,16 @@
         },
         {
           "type": "json",
+          "path": "mcp.json",
+          "jsonpath": "$.packages[0].version"
+        },
+        {
+          "type": "json",
+          "path": "mcp.json",
+          "jsonpath": "$.packages[1].version"
+        },
+        {
+          "type": "json",
           "path": "server.json",
           "jsonpath": "$.version"
         },
@@ -25,6 +35,11 @@
           "type": "json",
           "path": "server.json",
           "jsonpath": "$.packages[0].version"
+        },
+        {
+          "type": "json",
+          "path": "server.json",
+          "jsonpath": "$.packages[1].version"
         }
       ]
     }

@@ -28,7 +28,9 @@
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"
-      }
+      },
+      "registry": "container",
+      "image": "ghcr.io/oaslananka-lab/kicad-mcp-pro"
     }
   ],
   "capabilities": {

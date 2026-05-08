@@ -21,7 +21,7 @@ jobs:
     name: Release Please
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 15
     outputs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
@@ -47,6 +47,53 @@ jobs:
           token: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+
+      - name: Checkout release automation workspace
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          token: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          python-version: "3.12"
+          enable-cache: false
+
+      - name: Sync generated release metadata
+        env:
+          GH_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
+          RELEASE_BRANCH: release-please--branches--main--components--kicad-mcp-pro
+        run: |
+          set -euo pipefail
+          release_pr="$(gh pr list \
+            --repo "${GITHUB_REPOSITORY}" \
+            --state open \
+            --head "${RELEASE_BRANCH}" \
+            --json number \
+            --jq '.[0].number // empty')"
+          if [ -z "${release_pr}" ]; then
+            echo "No open release pull request to sync."
+            exit 0
+          fi
+
+          git fetch origin "refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}"
+          git switch -C "${RELEASE_BRANCH}" "origin/${RELEASE_BRANCH}"
+          uv run --all-extras python scripts/sync_mcp_metadata.py --write
+
+          if git diff --quiet -- mcp.json server.json uv.lock; then
+            echo "Generated release metadata already synchronized."
+            exit 0
+          fi
+
+          git config user.name "Osman Aslan"
+          git config user.email "169144131+oaslananka@users.noreply.github.com"
+          git add mcp.json server.json uv.lock
+          git commit -m "chore(release): sync generated metadata"
+          git push \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
+            "HEAD:${RELEASE_BRANCH}"
 
   publish:
     name: Build, publish, and attach release assets
