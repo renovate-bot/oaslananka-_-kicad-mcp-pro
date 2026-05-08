@@ -42,11 +42,6 @@ jobs:
               return;
             }
 
-            const reviews = await github.paginate(
-              github.rest.pulls.listReviewComments,
-              { owner, repo, pull_number: prNumber, per_page: 100 }
-            );
-
             // GitHub REST doesn't expose resolved state directly;
             // use GraphQL to get unresolved thread count.
             const query = `

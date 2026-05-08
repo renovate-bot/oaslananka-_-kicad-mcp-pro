@@ -6,7 +6,6 @@ const ACTIONABLE_BOT_TERMS = [
   "Bug:",
   "Potential issue:",
   "Suggested Fix",
-  "Prompt for AI Agent",
   "security",
   "vulnerability",
   "correctness",
