@@ -38,6 +38,7 @@ jobs:
       HUSKY: 0
     permissions:
       contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -94,15 +95,17 @@ jobs:
           corepack pnpm run typecheck
           corepack pnpm run test:unit
       - name: Upload coverage to Codecov
-        if: matrix.os == 'ubuntu-24.04' && matrix.python-version == '3.12'
-        continue-on-error: true
+        if: >-
+          matrix.os == 'ubuntu-24.04' &&
+          matrix.python-version == '3.12' &&
+          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
         with:
           files: coverage.xml
           flags: py${{ matrix.python-version }}
-          fail_ci_if_error: false
+          fail_ci_if_error: true
           slug: oaslananka-lab/kicad-mcp-pro
-          token: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '' || secrets.CODECOV_TOKEN }}
+          use_oidc: true
       - name: Publish test results
         if: always() && hashFiles('**/junit.xml', '**/test-results.xml') != ''
         uses: EnricoMi/publish-unit-test-result-action@c950f6fb443cb5af20a377fd0dfaa78838901040
