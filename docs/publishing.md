@@ -46,18 +46,19 @@ ghcr.io/oaslananka-lab/kicad-mcp-pro
 
 The Docker workflow runs from published GitHub Releases and uses the
 release-please tag as the image version. Provenance attestation runs only when
-an image was pushed.
+an image was pushed. The workflow does not publish a mutable `latest` tag; use
+the release version tag or the immutable GHCR digest.
 
 Use the stdio image with MCP clients:
 
 ```bash
-docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:latest
+docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>
 ```
 
 Run streamable HTTP explicitly:
 
 ```bash
-docker run --rm -p 3334:3334 ghcr.io/oaslananka-lab/kicad-mcp-pro:latest kicad-mcp-pro serve --transport http --host 0.0.0.0 --port 3334
+docker run --rm -p 3334:3334 ghcr.io/oaslananka-lab/kicad-mcp-pro:<version> kicad-mcp-pro serve --transport http --host 0.0.0.0 --port 3334
 ```
 
 DockerHub publishing is not enabled. The configured DockerHub secrets are
@@ -167,7 +168,7 @@ Linux and macOS:
 ```bash
 uvx kicad-mcp-pro
 pipx install kicad-mcp-pro
-docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:latest
+docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>
 ```
 
 Windows PowerShell:
@@ -175,7 +176,7 @@ Windows PowerShell:
 ```powershell
 uvx kicad-mcp-pro
 pipx install kicad-mcp-pro
-docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:latest
+docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>
 ```
 
 Claude Desktop stdio example:
@@ -207,7 +208,7 @@ Container stdio example:
   "mcpServers": {
     "kicad-mcp-pro": {
       "command": "docker",
-      "args": ["run", "--rm", "-i", "ghcr.io/oaslananka-lab/kicad-mcp-pro:latest"]
+      "args": ["run", "--rm", "-i", "ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>"]
     }
   }
 }

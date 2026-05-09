@@ -12,8 +12,10 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 PYPROJECT = ROOT / "pyproject.toml"
+PACKAGE_INIT = ROOT / "src" / "kicad_mcp" / "__init__.py"
 MCP_JSON = ROOT / "mcp.json"
 SERVER_JSON = ROOT / "server.json"
+NPM_WRAPPER_PACKAGE = ROOT / "npm-wrapper" / "package.json"
 MCP_SERVER_NAME = "io.github.oaslananka-lab/kicad-mcp-pro"
 GHCR_IMAGE = "ghcr.io/oaslananka-lab/kicad-mcp-pro"
 
@@ -86,6 +88,43 @@ def _updated_server_json(metadata: dict[str, Any], original: dict[str, Any]) -> 
     return updated
 
 
+def _updated_npm_wrapper_package(
+    metadata: dict[str, Any],
+    original: dict[str, Any],
+) -> dict[str, Any]:
+    updated = deepcopy(original)
+    updated["version"] = metadata["version"]
+    updated["homepage"] = metadata["homepage"]
+    updated["mcpName"] = MCP_SERVER_NAME
+    repository = updated.setdefault("repository", {})
+    if isinstance(repository, dict):
+        repository["type"] = "git"
+        repository["url"] = f"git+{metadata['repository']}.git"
+        repository["directory"] = "npm-wrapper"
+    bugs = updated.setdefault("bugs", {})
+    if isinstance(bugs, dict):
+        bugs["url"] = f"{metadata['repository']}/issues"
+    return updated
+
+
+def _updated_init(metadata: dict[str, Any], original: str) -> str:
+    lines = original.splitlines()
+    rendered: list[str] = []
+    replaced = False
+    for line in lines:
+        if line.startswith("__version__ = "):
+            _, _, suffix = line.partition("#")
+            marker = suffix.strip() or "x-release-please-version"
+            suffix_text = f"  # {marker}"
+            rendered.append(f'__version__ = "{metadata["version"]}"{suffix_text}')
+            replaced = True
+        else:
+            rendered.append(line)
+    if not replaced:
+        rendered.append(f'__version__ = "{metadata["version"]}"  # x-release-please-version')
+    return "\n".join(rendered) + "\n"
+
+
 def _sync_package_versions(data: dict[str, Any], metadata: dict[str, Any]) -> None:
     for package in data.get("packages", []):
         if not isinstance(package, dict):
@@ -105,8 +144,12 @@ def _sync_package_versions(data: dict[str, Any], metadata: dict[str, Any]) -> No
 def _planned_updates() -> dict[Path, str]:
     metadata = _project_metadata()
     return {
+        PACKAGE_INIT: _updated_init(metadata, PACKAGE_INIT.read_text(encoding="utf-8")),
         MCP_JSON: _dump_json(_updated_mcp_json(metadata, _load_json(MCP_JSON))),
         SERVER_JSON: _dump_json(_updated_server_json(metadata, _load_json(SERVER_JSON))),
+        NPM_WRAPPER_PACKAGE: _dump_json(
+            _updated_npm_wrapper_package(metadata, _load_json(NPM_WRAPPER_PACKAGE))
+        ),
     }
 
 

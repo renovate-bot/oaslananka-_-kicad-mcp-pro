@@ -20,6 +20,7 @@ from pydantic_settings import (
 from .path_safety import assert_within, normalize_workspace_root, relative_subpath, resolve_under
 
 CONFIG_FILE = Path.home() / ".config" / "kicad-mcp-pro" / "config.toml"
+LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
 
 
 def _discover_kicad_cli() -> Path:
@@ -261,7 +262,18 @@ class KiCadMCPConfig(BaseSettings):
             "project_dir" in self.model_fields_set
         )
         self._refresh_paths()
+        self._validate_http_transport_security()
         return self
+
+    def _validate_http_transport_security(self) -> None:
+        """Fail closed before exposing HTTP transports on non-loopback interfaces."""
+        if self.transport == "stdio":
+            return
+        exposed_host = self.host.strip().casefold() not in LOOPBACK_HOSTS
+        if exposed_host and not self.auth_token:
+            raise ValueError("HTTP transport on non-loopback host requires auth_token")
+        if exposed_host and self.auth_token and len(self.auth_token) < 32:
+            raise ValueError("HTTP auth_token for non-loopback host must be at least 32 characters")
 
     def _refresh_paths(self) -> None:
         """Refresh derived project and library paths."""

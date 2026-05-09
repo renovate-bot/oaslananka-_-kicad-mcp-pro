@@ -10,7 +10,9 @@ enabled streamable HTTP endpoint.
 ```bash
 docker build -t kicad-mcp-pro .
 docker run --rm -i kicad-mcp-pro
-docker run --rm -p 3334:3334 kicad-mcp-pro kicad-mcp-pro serve --transport http --host 0.0.0.0 --port 3334
+docker run --rm -p 3334:3334 \
+  -e KICAD_MCP_AUTH_TOKEN="replace-with-strong-32-character-token" \
+  kicad-mcp-pro kicad-mcp-pro serve --transport http --host 0.0.0.0 --port 3334
 ```
 
 For production-style HTTP deployments, configure authentication, keep CORS
@@ -34,6 +36,8 @@ docker build \
 
 The `:kicad10-ci` tag is intentionally neutral. It represents the local CI image
 built for runtime validation, not a published project release version.
+The bundled KiCad 10 image binds its HTTP server to `127.0.0.1` by default so it
+remains usable for CI smoke checks without requiring a baked-in token.
 
 Then run a smoke test:
 

@@ -39,7 +39,7 @@ from typer.models import OptionInfo
 
 from . import __version__
 from .capabilities import all_records as all_capability_records
-from .config import KiCadMCPConfig, get_config, reset_config
+from .config import LOOPBACK_HOSTS, KiCadMCPConfig, get_config, reset_config
 from .connection import KiCadConnectionError, get_board
 from .diagnostics import DiagnosticReport, build_doctor_report, build_health_report
 from .discovery import ensure_studio_project_watcher, find_kicad_version
@@ -649,7 +649,10 @@ class KiCadFastMCP(FastMCP):
 
 
 class _OriginValidationMiddleware(BaseHTTPMiddleware):
-    """Reject cross-origin POST requests that are not on the configured allowlist."""
+    """Reject cross-origin mutating requests that are not on the configured allowlist."""
+
+    _MUTATING_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+    _ROTATE_PATH = "/.well-known/mcp-server/token-rotate"
 
     async def dispatch(
         self,
@@ -659,8 +662,8 @@ class _OriginValidationMiddleware(BaseHTTPMiddleware):
         cfg = get_config()
         if (
             cfg.auth_token
-            and request.method.upper() == "POST"
-            and request.url.path == cfg.mount_path
+            and request.method.upper() in self._MUTATING_METHODS
+            and request.url.path in {cfg.mount_path, self._ROTATE_PATH}
         ):
             origin = request.headers.get("origin")
             if origin and origin not in cfg.cors_origin_list:
@@ -679,6 +682,28 @@ def _bearer_token(request: Request) -> str:
     if not authorization.startswith(prefix):
         return ""
     return authorization[len(prefix) :].strip()
+
+
+def _is_loopback_host(host: str) -> bool:
+    return host.strip().casefold() in LOOPBACK_HOSTS
+
+
+def _validate_rotated_token(token: str) -> str | None:
+    if len(token) < 32:
+        return "new_token must be at least 32 characters."
+    if len(set(token)) < 12:
+        return "new_token must have higher entropy."
+    return None
+
+
+async def _request_is_authorized(
+    request: Request,
+    token_verifier: _StaticTokenVerifier | None,
+) -> bool:
+    if token_verifier is None:
+        return False
+    token = _bearer_token(request)
+    return await token_verifier.verify_token(token) is not None
 
 
 def _prometheus_metrics_payload() -> str:
@@ -798,6 +823,7 @@ def _register_profile_components(
 def build_server(profile: str | None = None, *, defer_registration: bool = False) -> FastMCP:
     """Build a FastMCP server instance for the active profile."""
     cfg = get_config()
+    cfg._validate_http_transport_security()
     selected_profile = profile or cfg.profile
     enabled = set(categories_for_profile(selected_profile))
     token_verifier = _StaticTokenVerifier(cfg.auth_token) if cfg.auth_token else None
@@ -860,14 +886,22 @@ def build_server(profile: str | None = None, *, defer_registration: bool = False
         new_token = raw_token.strip() if isinstance(raw_token, str) else ""
         if not new_token:
             return JSONResponse({"error": "new_token must be a non-empty string."}, status_code=400)
+        token_error = _validate_rotated_token(new_token)
+        if token_error is not None:
+            return JSONResponse({"error": token_error}, status_code=400)
         cfg.auth_token = new_token
         token_verifier.rotate(new_token)
+        logger.info("security_token_rotated", transport=cfg.transport, host=cfg.host)
         return JSONResponse({"rotated": True})
 
     if cfg.enable_metrics:
 
         @server.custom_route("/metrics", methods=["GET"], include_in_schema=False)
-        async def _metrics(_request: Request) -> PlainTextResponse:
+        async def _metrics(request: Request) -> PlainTextResponse | JSONResponse:
+            if not _is_loopback_host(cfg.host) and not await _request_is_authorized(
+                request, token_verifier
+            ):
+                return JSONResponse({"error": "Unauthorized."}, status_code=401)
             return PlainTextResponse(
                 _prometheus_metrics_payload(),
                 media_type="text/plain; version=0.0.4",

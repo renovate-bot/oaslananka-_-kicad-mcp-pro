@@ -43,23 +43,50 @@ jobs:
             }
 
             // GitHub REST doesn't expose resolved state directly;
-            // use GraphQL to get unresolved thread count.
+            // use GraphQL and paginate every review thread.
             const query = `
-              query($owner: String!, $repo: String!, $pr: Int!) {
+              query($owner: String!, $repo: String!, $pr: Int!, $after: String) {
                 repository(owner: $owner, name: $repo) {
                   pullRequest(number: $pr) {
-                    reviewThreads(first: 100) {
+                    reviewThreads(first: 100, after: $after) {
+                      pageInfo {
+                        hasNextPage
+                        endCursor
+                      }
                       nodes { isResolved }
                     }
                   }
                 }
               }
             `;
-            const result = await github.graphql(query, {
-              owner, repo, pr: prNumber
-            });
 
-            const threads = result.repository.pullRequest.reviewThreads.nodes;
+            const threads = [];
+            let after = null;
+            for (;;) {
+              let result;
+              try {
+                result = await github.graphql(query, {
+                  owner, repo, pr: prNumber, after
+                });
+              } catch (error) {
+                const status = error.status ?? error.response?.status;
+                if ([403, 404, 422].includes(status)) {
+                  core.setFailed(
+                    `GitHub review-thread query failed with ${status}: ${error.message}`
+                  );
+                  return;
+                }
+                throw error;
+              }
+
+              const reviewThreads = result.repository.pullRequest.reviewThreads;
+              threads.push(...reviewThreads.nodes);
+              if (!reviewThreads.pageInfo.hasNextPage) {
+                break;
+              }
+              after = reviewThreads.pageInfo.endCursor;
+            }
+
             const unresolved = threads.filter(t => !t.isResolved);
 
             if (unresolved.length > 0) {

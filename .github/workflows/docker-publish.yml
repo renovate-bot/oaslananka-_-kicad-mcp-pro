@@ -50,7 +50,6 @@ jobs:
           tags: |
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}},value=${{ env.RELEASE_REF }}
-            type=raw,value=latest,enable=${{ !contains(env.RELEASE_REF, '-') }}
           labels: |
             org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
@@ -119,7 +118,6 @@ jobs:
           tags: |
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}},value=${{ env.RELEASE_REF }}
-            type=raw,value=latest,enable=${{ !contains(env.RELEASE_REF, '-') }}
           labels: |
             org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}

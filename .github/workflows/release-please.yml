@@ -83,33 +83,29 @@ jobs:
           git switch -C "${RELEASE_BRANCH}" "origin/${RELEASE_BRANCH}"
           uv run --all-extras python scripts/sync_mcp_metadata.py --write
 
-          if git diff --quiet -- mcp.json server.json uv.lock; then
+          if git diff --quiet -- src/kicad_mcp/__init__.py mcp.json server.json npm-wrapper/package.json uv.lock; then
             echo "Generated release metadata already synchronized."
             exit 0
           fi
 
           git config user.name "Osman Aslan"
           git config user.email "169144131+oaslananka@users.noreply.github.com"
-          git add mcp.json server.json uv.lock
+          git add src/kicad_mcp/__init__.py mcp.json server.json npm-wrapper/package.json uv.lock
           git commit -m "chore(release): sync generated metadata"
           git push \
             "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" \
             "HEAD:${RELEASE_BRANCH}"
 
-  publish:
-    name: Build, publish, and attach release assets
+  verify:
+    name: Verify release source
     needs:
       - release-please
     if: ${{ needs.release-please.outputs.release_created == 'true' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    environment: release
+    timeout-minutes: 20
     permissions:
-      contents: write
-      id-token: write
-      attestations: write
+      contents: read
     env:
-      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
       PACKAGE_VERSION: ${{ needs.release-please.outputs.version }}
       RELEASE_SHA: ${{ needs.release-please.outputs.sha }}
     steps:
@@ -171,10 +167,42 @@ jobs:
           set -euo pipefail
           corepack pnpm run check:ci
 
+  build-artifacts:
+    name: Build release artifacts
+    needs:
+      - release-please
+      - verify
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+      RELEASE_SHA: ${{ needs.release-please.outputs.sha }}
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          python-version: "3.12"
+          enable-cache: false
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          uv sync --all-extras --frozen --python 3.12
+
       - name: Build distributions
         run: |
           set -euo pipefail
-          corepack pnpm run build
+          uv build
 
       - name: Stage Python distributions for package index
         run: |
@@ -208,6 +236,42 @@ jobs:
           cd dist
           sha256sum -- * > SHA256SUMS.txt
 
+      - name: Upload release distribution bundle
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: release-dist-${{ env.RELEASE_TAG }}
+          path: dist/
+          retention-days: 14
+
+      - name: Upload Python package bundle
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: pypi-dist-${{ env.RELEASE_TAG }}
+          path: dist-pypi/
+          retention-days: 14
+
+  publish-provenance:
+    name: Publish provenance attestations
+    needs:
+      - release-please
+      - build-artifacts
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    env:
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+    steps:
+      - name: Download release distribution bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: release-dist-${{ env.RELEASE_TAG }}
+          path: dist
+
       - name: Attest build provenance
         uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32
         with:
@@ -238,6 +302,34 @@ jobs:
             dist/SHA256SUMS.txt
           upload-signing-artifacts: true
 
+  publish-pypi:
+    name: Publish Python package to PyPI
+    needs:
+      - release-please
+      - build-artifacts
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PACKAGE_VERSION: ${{ needs.release-please.outputs.version }}
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+    steps:
+      - name: Download Python package bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: pypi-dist-${{ env.RELEASE_TAG }}
+          path: dist-pypi
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          python-version: "3.12"
+          enable-cache: false
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         with:
@@ -267,6 +359,35 @@ jobs:
           done
           echo "::error::Smoke check failed: kicad-mcp-pro ${PACKAGE_VERSION} was not available on PyPI after 10 attempts."
           exit 1
+
+  attach-release-assets:
+    name: Attach and publish GitHub Release assets
+    needs:
+      - release-please
+      - publish-pypi
+      - publish-provenance
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: release
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+      RELEASE_SHA: ${{ needs.release-please.outputs.sha }}
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Download release distribution bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        with:
+          name: release-dist-${{ env.RELEASE_TAG }}
+          path: dist
 
       - name: Attach assets to GitHub Release
         env:
@@ -327,7 +448,7 @@ jobs:
           GH_TOKEN="${PERSONAL_REPO_PUSH_TOKEN}" gh release upload "${RELEASE_TAG}" dist/* --repo oaslananka/kicad-mcp-pro --clobber
 
       - name: Upload release artifact bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:
           name: release-dist-${{ env.RELEASE_TAG }}
           path: dist/

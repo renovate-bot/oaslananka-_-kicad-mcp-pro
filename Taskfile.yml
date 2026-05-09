@@ -71,6 +71,16 @@ tasks:
     cmds:
       - corepack pnpm run workflows:security
 
+  mcp:manifest:check:
+    desc: Validate MCP Registry metadata
+    cmds:
+      - corepack pnpm run mcp:manifest:check
+
+  docker:metadata:check:
+    desc: Validate Docker and OCI metadata
+    cmds:
+      - corepack pnpm run docker:metadata:check
+
   build:
     desc: Build release artifacts
     cmds:
@@ -93,6 +103,8 @@ tasks:
       - corepack pnpm run format:check
       - task: compat:check
       - task: lint
+      - task: mcp:manifest:check
+      - task: docker:metadata:check
       - task: typecheck
       - task: test:fast
       - task: workflows:lint
@@ -103,6 +115,8 @@ tasks:
       - task: install
       - task: compat:check
       - task: lint
+      - task: mcp:manifest:check
+      - task: docker:metadata:check
       - task: typecheck
       - task: test:cov
       - task: security

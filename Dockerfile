@@ -1,4 +1,4 @@
-FROM python:3.12-slim AS builder
+FROM python:3.12-slim@sha256:6026d9374020066a85690cabdb66f5d06a2dd606e756c7082fccdaaaf6d048dd AS builder
 
 ARG UV_VERSION=0.9.30
 ENV UV_NO_CACHE=1
@@ -13,11 +13,22 @@ RUN uv build --wheel --out-dir /dist \
     --format requirements.txt \
     --output-file /dist/requirements.txt
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12-slim@sha256:6026d9374020066a85690cabdb66f5d06a2dd606e756c7082fccdaaaf6d048dd AS runtime
+
+ARG KICAD_MCP_VERSION=0.0.0
+ARG VCS_REF=unknown
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
   PYTHONUNBUFFERED=1
 WORKDIR /app
+
+LABEL io.modelcontextprotocol.server.name="io.github.oaslananka-lab/kicad-mcp-pro" \
+  org.opencontainers.image.title="kicad-mcp-pro" \
+  org.opencontainers.image.description="Professional MCP server for KiCad automation" \
+  org.opencontainers.image.source="https://github.com/oaslananka-lab/kicad-mcp-pro" \
+  org.opencontainers.image.version="${KICAD_MCP_VERSION}" \
+  org.opencontainers.image.revision="${VCS_REF}" \
+  org.opencontainers.image.licenses="MIT"
 
 RUN groupadd --system kicadmcp \
   && useradd --system --gid kicadmcp --home-dir /app --shell /usr/sbin/nologin kicadmcp

@@ -1,0 +1,69 @@
+"""Validate Docker and OCI metadata used by release packaging."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+MCP_SERVER_NAME = "io.github.oaslananka-lab/kicad-mcp-pro"
+
+
+def _read(path: str) -> str:
+    return (ROOT / path).read_text(encoding="utf-8")
+
+
+def main() -> int:
+    errors: list[str] = []
+    dockerfiles = {
+        "Dockerfile": _read("Dockerfile"),
+        "Dockerfile.kicad10": _read("Dockerfile.kicad10"),
+    }
+
+    for path, content in dockerfiles.items():
+        required = [
+            f'io.modelcontextprotocol.server.name="{MCP_SERVER_NAME}"',
+            'org.opencontainers.image.source="https://github.com/oaslananka-lab/kicad-mcp-pro"',
+            "ARG KICAD_MCP_VERSION",
+            "ARG VCS_REF",
+        ]
+        for marker in required:
+            if marker not in content:
+                errors.append(f"{path} is missing {marker}")
+        if "@sha256:" not in content:
+            errors.append(f"{path} must pin Docker base images by digest")
+
+    kicad10 = dockerfiles["Dockerfile.kicad10"]
+    if "pip install --no-cache-dir uv" in kicad10:
+        errors.append("Dockerfile.kicad10 must pin UV_VERSION instead of installing uv unpinned")
+    if "ARG UV_VERSION=0.9.30" not in kicad10:
+        errors.append("Dockerfile.kicad10 must pin ARG UV_VERSION=0.9.30")
+    if "ENV KICAD_MCP_HOST=127.0.0.1" not in kicad10:
+        errors.append(
+            "Dockerfile.kicad10 must bind HTTP to loopback unless an auth token is injected"
+        )
+
+    compose = _read("docker-compose.yml")
+    if ":latest" in compose:
+        errors.append("docker-compose.yml must not use :latest images")
+    if "ghcr.io/freerouting/freerouting:2.1.0@sha256:" not in compose:
+        errors.append("docker-compose.yml must pin the freerouting image by digest")
+
+    docker_workflow = _read(".github/workflows/docker-publish.yml")
+    if "type=raw,value=latest" in docker_workflow:
+        errors.append("docker-publish.yml must not publish a mutable latest tag")
+
+    for doc_path in ("docs/install/docker.md", "docs/publishing.md"):
+        if "ghcr.io/oaslananka-lab/kicad-mcp-pro:latest" in _read(doc_path):
+            errors.append(f"{doc_path} must use versioned or digest-pinned image examples")
+
+    if errors:
+        for error in errors:
+            print(error, file=sys.stderr)
+        return 1
+    print("Docker metadata validation passed.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

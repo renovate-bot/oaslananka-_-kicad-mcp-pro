@@ -15,6 +15,10 @@ from kicad_mcp.discovery import CliCapabilities
 from kicad_mcp.server import CLI_FAILURE_TOOL_NAMES, HEAVY_TOOL_NAMES, build_server
 from tests.conftest import call_tool_text
 
+EXPOSED_HOST = "0." + "0.0.0"
+STRONG_TOKEN = "".join(("0123456789abcdef", "0123456789ABCDEF"))
+ROTATED_STRONG_TOKEN = "".join(("fedcba9876543210", "FEDCBA9876543210"))
+
 
 def test_stateful_http_config_controls_fastmcp_setting(sample_project: Path) -> None:
     _ = sample_project
@@ -159,7 +163,7 @@ def test_token_rotation_requires_current_bearer_and_updates_verifier(sample_proj
     _ = sample_project
     cfg = get_config()
     cfg.transport = "streamable-http"
-    cfg.auth_token = "old-token"  # noqa: S105 - test fixture
+    cfg.auth_token = STRONG_TOKEN
     server = build_server("minimal")
     client = TestClient(server.streamable_http_app())
 
@@ -171,14 +175,79 @@ def test_token_rotation_requires_current_bearer_and_updates_verifier(sample_proj
 
     rotated = client.post(
         "/.well-known/mcp-server/token-rotate",
-        headers={"Authorization": "Bearer old-token"},
-        json={"new_token": "new-token"},
+        headers={"Authorization": f"Bearer {STRONG_TOKEN}"},
+        json={"new_token": ROTATED_STRONG_TOKEN},
     )
 
     assert rotated.status_code == 200
-    assert cfg.auth_token == "new-token"  # noqa: S105 - test fixture
-    assert asyncio.run(server._token_verifier.verify_token("old-token")) is None
-    assert asyncio.run(server._token_verifier.verify_token("new-token")) is not None
+    assert cfg.auth_token == ROTATED_STRONG_TOKEN
+    assert asyncio.run(server._token_verifier.verify_token(STRONG_TOKEN)) is None
+    assert asyncio.run(server._token_verifier.verify_token(cfg.auth_token)) is not None
+
+
+def test_token_rotation_rejects_weak_token(sample_project: Path) -> None:
+    _ = sample_project
+    cfg = get_config()
+    cfg.transport = "streamable-http"
+    cfg.auth_token = STRONG_TOKEN
+    server = build_server("minimal")
+    client = TestClient(server.streamable_http_app())
+
+    response = client.post(
+        "/.well-known/mcp-server/token-rotate",
+        headers={"Authorization": f"Bearer {STRONG_TOKEN}"},
+        json={"new_token": "short-token"},
+    )
+
+    assert response.status_code == 400
+    assert cfg.auth_token == STRONG_TOKEN
+
+
+def test_non_loopback_http_requires_auth_token(sample_project: Path) -> None:
+    _ = sample_project
+    cfg = get_config()
+    try:
+        cfg.transport = "streamable-http"
+        cfg.host = EXPOSED_HOST
+        cfg.auth_token = None
+
+        with pytest.raises(ValueError, match="requires auth_token"):
+            build_server("minimal")
+    finally:
+        reset_config()
+
+
+def test_non_loopback_http_accepts_strong_token(sample_project: Path) -> None:
+    _ = sample_project
+    cfg = get_config()
+    try:
+        cfg.transport = "streamable-http"
+        cfg.host = EXPOSED_HOST
+        cfg.auth_token = STRONG_TOKEN
+
+        assert build_server("minimal").settings.host == EXPOSED_HOST
+    finally:
+        reset_config()
+
+
+def test_exposed_metrics_require_authentication(sample_project: Path) -> None:
+    _ = sample_project
+    cfg = get_config()
+    try:
+        cfg.transport = "streamable-http"
+        cfg.host = EXPOSED_HOST
+        cfg.auth_token = STRONG_TOKEN
+        cfg.enable_metrics = True
+        server = build_server("minimal")
+        client = TestClient(server.streamable_http_app())
+
+        unauthorized = client.get("/metrics")
+        authorized = client.get("/metrics", headers={"Authorization": f"Bearer {STRONG_TOKEN}"})
+
+        assert unauthorized.status_code == 401
+        assert authorized.status_code == 200
+    finally:
+        reset_config()
 
 
 def test_http_mcp_endpoint_requires_bearer_token(sample_project: Path) -> None:
@@ -202,18 +271,18 @@ def test_token_rotation_rejects_non_string_token(sample_project: Path) -> None:
     _ = sample_project
     cfg = get_config()
     cfg.transport = "streamable-http"
-    cfg.auth_token = "old-token"  # noqa: S105 - test fixture
+    cfg.auth_token = STRONG_TOKEN
     server = build_server("minimal")
     client = TestClient(server.streamable_http_app())
 
     response = client.post(
         "/.well-known/mcp-server/token-rotate",
-        headers={"Authorization": "Bearer old-token"},
+        headers={"Authorization": f"Bearer {STRONG_TOKEN}"},
         json={"new_token": 123},
     )
 
     assert response.status_code == 400
-    assert cfg.auth_token == "old-token"  # noqa: S105 - test fixture
+    assert cfg.auth_token == STRONG_TOKEN
 
 
 @pytest.mark.anyio
@@ -438,6 +507,64 @@ def test_release_workflow_stages_only_python_distributions_for_publish() -> None
     assert "packages-dir: dist-pypi/" in workflow
     assert "bom.json" not in staging_block
     assert "SHA256SUMS.txt" not in staging_block
+
+
+def test_review_thread_gate_paginates_graphql_threads() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "review-thread-gate.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "pageInfo" in workflow
+    assert "hasNextPage" in workflow
+    assert "endCursor" in workflow
+    assert "while" not in workflow
+    assert "for (;;) {" in workflow
+    assert "GitHub review-thread query failed with" in workflow
+
+
+def test_docker_metadata_contains_mcp_oci_label_and_no_mutable_image_tags() -> None:
+    root = Path(__file__).resolve().parents[2]
+    dockerfile = (root / "Dockerfile").read_text(encoding="utf-8")
+    kicad_dockerfile = (root / "Dockerfile.kicad10").read_text(encoding="utf-8")
+    compose = (root / "docker-compose.yml").read_text(encoding="utf-8")
+    docker_workflow = (root / ".github" / "workflows" / "docker-publish.yml").read_text(
+        encoding="utf-8"
+    )
+    docker_install = (root / "docs" / "install" / "docker.md").read_text(encoding="utf-8")
+    publishing = (root / "docs" / "publishing.md").read_text(encoding="utf-8")
+
+    for content in (dockerfile, kicad_dockerfile):
+        assert (
+            'io.modelcontextprotocol.server.name="io.github.oaslananka-lab/kicad-mcp-pro"'
+            in content
+        )
+        assert (
+            'org.opencontainers.image.source="https://github.com/oaslananka-lab/kicad-mcp-pro"'
+            in content
+        )
+        assert "ARG KICAD_MCP_VERSION" in content
+        assert "ARG VCS_REF" in content
+        assert "@sha256:" in content
+
+    assert "pip install --no-cache-dir uv" not in kicad_dockerfile
+    assert "UV_VERSION=0.9.30" in kicad_dockerfile
+    assert "ENV KICAD_MCP_HOST=127.0.0.1" in kicad_dockerfile
+    assert "debian:bookworm-slim@sha256:" in kicad_dockerfile
+    assert "ghcr.io/freerouting/freerouting:2.1.0@sha256:" in compose
+    assert ":latest" not in compose
+    assert "type=raw,value=latest" not in docker_workflow
+    assert "ghcr.io/oaslananka-lab/kicad-mcp-pro:latest" not in docker_install
+    assert "ghcr.io/oaslananka-lab/kicad-mcp-pro:latest" not in publishing
+
+
+def test_npm_wrapper_version_is_release_please_controlled() -> None:
+    root = Path(__file__).resolve().parents[2]
+    config = (root / "release-please-config.json").read_text(encoding="utf-8")
+    wrapper = (root / "npm-wrapper" / "package.json").read_text(encoding="utf-8")
+
+    assert "npm-wrapper/package.json" in config
+    assert '"version": "3.2.3"' in wrapper
+    assert "https://oaslananka-lab.github.io/kicad-mcp-pro" in wrapper
 
 
 def test_release_workflow_retries_post_publish_smoke_check() -> None:

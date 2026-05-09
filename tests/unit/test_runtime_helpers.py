@@ -19,6 +19,7 @@ from kicad_mcp.server import main_callback
 from kicad_mcp.utils.logging import setup_logging
 
 DOCKER_BIND_HOST = "0.0.0.0"  # noqa: S104 - regression fixture for Docker env preservation.
+STRONG_ENV_TOKEN = "".join(("0123456789abcdef", "0123456789ABCDEF"))
 
 
 def test_setup_logging_smoke() -> None:
@@ -78,6 +79,7 @@ def test_main_callback_preserves_env_when_cli_options_missing(
     profiles: list[str] = []
     monkeypatch.setenv("KICAD_MCP_TRANSPORT", "http")
     monkeypatch.setenv("KICAD_MCP_HOST", DOCKER_BIND_HOST)
+    monkeypatch.setenv("KICAD_MCP_AUTH_TOKEN", STRONG_ENV_TOKEN)
     monkeypatch.setenv("KICAD_MCP_PORT", "4444")
     monkeypatch.setenv("KICAD_MCP_LOG_LEVEL", "DEBUG")
     monkeypatch.setenv("KICAD_MCP_LOG_FORMAT", "json")
