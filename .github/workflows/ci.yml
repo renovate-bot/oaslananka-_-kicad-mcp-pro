@@ -101,6 +101,7 @@ jobs:
           files: coverage.xml
           flags: py${{ matrix.python-version }}
           fail_ci_if_error: false
+          slug: oaslananka-lab/kicad-mcp-pro
           token: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository && '' || secrets.CODECOV_TOKEN }}
       - name: Publish test results
         if: always() && hashFiles('**/junit.xml', '**/test-results.xml') != ''
