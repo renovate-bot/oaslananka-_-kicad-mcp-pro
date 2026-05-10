@@ -3,7 +3,7 @@
   "title": "KiCad MCP Pro",
   "display_name": "KiCad MCP Pro",
   "description": "MCP server for KiCad schematic, PCB, validation, DFM, and export workflows.",
-  "version": "3.2.4",
+  "version": "3.3.0",
   "repository": {
     "url": "https://github.com/oaslananka-lab/kicad-mcp-pro",
     "source": "github"
@@ -33,7 +33,7 @@
       "registryBaseUrl": "https://pypi.org",
       "identifier": "kicad-mcp-pro",
       "name": "kicad-mcp-pro",
-      "version": "3.2.4",
+      "version": "3.3.0",
       "command": "kicad-mcp-pro",
       "runtimeHint": "uvx",
       "transport": {
@@ -44,9 +44,9 @@
       "registryType": "oci",
       "registry": "container",
       "registryBaseUrl": "https://ghcr.io",
-      "identifier": "ghcr.io/oaslananka-lab/kicad-mcp-pro:3.2.4",
+      "identifier": "ghcr.io/oaslananka-lab/kicad-mcp-pro:3.3.0",
       "image": "ghcr.io/oaslananka-lab/kicad-mcp-pro",
-      "version": "3.2.4",
+      "version": "3.3.0",
       "command": "kicad-mcp-pro",
       "runtimeHint": "docker",
       "transport": {
