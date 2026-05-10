@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import subprocess
 import tomllib
 from pathlib import Path
@@ -563,14 +564,24 @@ def test_docker_metadata_contains_mcp_oci_label_and_no_mutable_image_tags() -> N
     assert "ghcr.io/oaslananka-lab/kicad-mcp-pro:latest" not in publishing
 
 
-def test_npm_wrapper_version_is_release_please_controlled() -> None:
+def test_version_synchronization_across_release_manifests() -> None:
     root = Path(__file__).resolve().parents[2]
     config = (root / "release-please-config.json").read_text(encoding="utf-8")
-    wrapper = (root / "npm-wrapper" / "package.json").read_text(encoding="utf-8")
+    manifest = json.loads((root / ".release-please-manifest.json").read_text(encoding="utf-8"))
+    wrapper = json.loads((root / "npm-wrapper" / "package.json").read_text(encoding="utf-8"))
+    pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    mcp = json.loads((root / "mcp.json").read_text(encoding="utf-8"))
+    server = json.loads((root / "server.json").read_text(encoding="utf-8"))
+    init_py = (root / "src" / "kicad_mcp" / "__init__.py").read_text(encoding="utf-8")
 
+    version = manifest["."]
     assert "npm-wrapper/package.json" in config
-    assert '"version": "3.2.3"' in wrapper
-    assert "https://oaslananka-lab.github.io/kicad-mcp-pro" in wrapper
+    assert wrapper["version"] == pyproject["project"]["version"] == version
+    assert mcp["version"] == server["version"] == version
+    assert all(package["version"] == version for package in mcp["packages"])
+    assert all(package["version"] == version for package in server["packages"])
+    assert f'__version__ = "{version}"' in init_py
+    assert "https://oaslananka-lab.github.io/kicad-mcp-pro" in wrapper["homepage"]
 
 
 def test_release_workflow_retries_post_publish_smoke_check() -> None:

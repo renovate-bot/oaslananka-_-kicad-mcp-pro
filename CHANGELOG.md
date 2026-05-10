@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.4](https://github.com/oaslananka-lab/kicad-mcp-pro/compare/v3.2.3...v3.2.4) (2026-05-10)
+
+
+### Bug Fixes
+
+* **release:** align toolchain and publish safeguards ([aca51f5](https://github.com/oaslananka-lab/kicad-mcp-pro/commit/aca51f566f97ff9f9039917dc84073840d83f454))
+
 ## [3.2.3](https://github.com/oaslananka-lab/kicad-mcp-pro/compare/v3.2.2...v3.2.3) (2026-05-08)
 
 
