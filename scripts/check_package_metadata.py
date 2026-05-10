@@ -42,6 +42,10 @@ def _validate_metadata(path: Path, metadata: str) -> None:
         )
     if "License: MIT" not in metadata:
         raise ValueError(f"{path.name} is missing the expected License: MIT metadata field.")
+    if "License-File: LICENSE" not in metadata:
+        raise ValueError(
+            f"{path.name} is missing the expected License-File: LICENSE metadata field."
+        )
 
 
 def main() -> int:
@@ -56,6 +60,8 @@ def main() -> int:
     args = parser.parse_args()
     with Path("pyproject.toml").open("rb") as pyproject_file:
         project = tomllib.load(pyproject_file)["project"]
+    if project.get("license-files") != ["LICENSE"]:
+        raise SystemExit('pyproject.toml must include license-files = ["LICENSE"].')
     distribution_prefix = str(project["name"]).replace("-", "_")
     version = str(project["version"])
 

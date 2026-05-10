@@ -6,8 +6,12 @@ It does not install Python dependencies during `npm install`. At runtime, the
 wrapper executes:
 
 ```bash
-uvx kicad-mcp-pro
+uvx kicad-mcp-pro@<npm package version>
 ```
+
+Publish the matching Python package before publishing this wrapper. For recovery
+or compatibility testing, set `KICAD_MCP_PRO_PYPI_VERSION` to an already
+published compatible Python package version.
 
 Install `uv` first:
 

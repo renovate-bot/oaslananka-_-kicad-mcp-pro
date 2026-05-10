@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sys
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,8 +14,21 @@ def _read(path: str) -> str:
     return (ROOT / path).read_text(encoding="utf-8")
 
 
+def _uv_required_version() -> str | None:
+    try:
+        config = tomllib.loads(_read("uv.toml"))
+    except (FileNotFoundError, tomllib.TOMLDecodeError):
+        return None
+    if version := config.get("required-version"):
+        return str(version)
+    return None
+
+
 def main() -> int:
     errors: list[str] = []
+    uv_version = _uv_required_version()
+    if uv_version is None:
+        errors.append("uv.toml must define a valid required-version")
     dockerfiles = {
         "Dockerfile": _read("Dockerfile"),
         "Dockerfile.kicad10": _read("Dockerfile.kicad10"),
@@ -32,12 +46,12 @@ def main() -> int:
                 errors.append(f"{path} is missing {marker}")
         if "@sha256:" not in content:
             errors.append(f"{path} must pin Docker base images by digest")
+        if uv_version is not None and f"ARG UV_VERSION={uv_version}" not in content:
+            errors.append(f"{path} must pin ARG UV_VERSION={uv_version}")
 
     kicad10 = dockerfiles["Dockerfile.kicad10"]
     if "pip install --no-cache-dir uv" in kicad10:
         errors.append("Dockerfile.kicad10 must pin UV_VERSION instead of installing uv unpinned")
-    if "ARG UV_VERSION=0.9.30" not in kicad10:
-        errors.append("Dockerfile.kicad10 must pin ARG UV_VERSION=0.9.30")
     if "ENV KICAD_MCP_HOST=127.0.0.1" not in kicad10:
         errors.append(
             "Dockerfile.kicad10 must bind HTTP to loopback unless an auth token is injected"

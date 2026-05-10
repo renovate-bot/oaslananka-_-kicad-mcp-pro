@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import subprocess
+import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -530,8 +531,11 @@ def test_docker_metadata_contains_mcp_oci_label_and_no_mutable_image_tags() -> N
     docker_workflow = (root / ".github" / "workflows" / "docker-publish.yml").read_text(
         encoding="utf-8"
     )
+    uv_toml = (root / "uv.toml").read_text(encoding="utf-8")
     docker_install = (root / "docs" / "install" / "docker.md").read_text(encoding="utf-8")
     publishing = (root / "docs" / "publishing.md").read_text(encoding="utf-8")
+    uv_version = tomllib.loads(uv_toml).get("required-version")
+    assert uv_version
 
     for content in (dockerfile, kicad_dockerfile):
         assert (
@@ -546,8 +550,10 @@ def test_docker_metadata_contains_mcp_oci_label_and_no_mutable_image_tags() -> N
         assert "ARG VCS_REF" in content
         assert "@sha256:" in content
 
+    assert "pip install --no-cache-dir uv" not in dockerfile
     assert "pip install --no-cache-dir uv" not in kicad_dockerfile
-    assert "UV_VERSION=0.9.30" in kicad_dockerfile
+    assert f"UV_VERSION={uv_version}" in dockerfile
+    assert f"UV_VERSION={uv_version}" in kicad_dockerfile
     assert "ENV KICAD_MCP_HOST=127.0.0.1" in kicad_dockerfile
     assert "debian:bookworm-slim@sha256:" in kicad_dockerfile
     assert "ghcr.io/freerouting/freerouting:2.1.0@sha256:" in compose

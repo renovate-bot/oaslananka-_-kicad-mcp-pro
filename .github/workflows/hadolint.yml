@@ -51,3 +51,5 @@ jobs:
         with:
           persist-credentials: false
       - run: docker compose config --quiet
+        env:
+          KICAD_MCP_AUTH_TOKEN: ci-compose-validation-token-00000000000000000000000000000000

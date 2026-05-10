@@ -8,7 +8,7 @@ version = "3.2.3"
 description = "A Model Context Protocol server for KiCad EDA workflows."
 readme = "README.md"
 license = { text = "MIT" }
-license-files = []
+license-files = ["LICENSE"]
 authors = [{ name = "Osman Aslan" }]
 keywords = [
   "kicad",
@@ -41,7 +41,7 @@ dependencies = [
   "anyio>=4.4.0",
   "kicad-sch-api>=0.5.0,<0.6",
   "kicad-python>=0.6,<0.8",
-  "mcp[cli]>=1.23.0",
+  "mcp[cli]>=1.27.1,<1.28",
   "pydantic>=2.7.0",
   "pydantic-settings>=2.3.0",
   "rich>=13.7.0",

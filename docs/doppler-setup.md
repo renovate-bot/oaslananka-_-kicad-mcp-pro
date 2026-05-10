@@ -13,11 +13,11 @@ The token must be a read-only Doppler service token scoped to project `all`, con
 Set it in `oaslananka-lab/kicad-mcp-pro`. The organization repository may
 inherit the secret from the organization if that is easier to maintain.
 
-Other secret names, including `DOPPLER_GITHUB_SERVICE_TOKEN`,
-`PERSONAL_REPO_PUSH_TOKEN`, and `SAFETY_API_KEY`, may be present as GitHub
+Workflow service secrets such as `DOPPLER_GITHUB_SERVICE_TOKEN`,
+`PERSONAL_REPO_PUSH_TOKEN`, and `SAFETY_API_KEY` may be present as GitHub
 Actions secrets at runtime. Prefer projecting them into GitHub by Doppler GitHub
-Sync. Release publishing uses PyPI Trusted Publishing and does not require
-long-lived PyPI tokens in GitHub Actions.
+Sync. Release publishing uses trusted publishing where available; package-index
+tokens remain Doppler-managed fallback inputs and must not be printed.
 
 `CODECOV_TOKEN` is maintained as an organization-level selected GitHub secret
 for coverage upload only. Do not store or fetch a Codecov API token for CI.
@@ -36,13 +36,27 @@ In the Doppler dashboard:
 The authoritative secret-name list lives in this document rather than a dotfile
 so scanner exclusions do not need to hide a `.doppler/` directory.
 
-Current expected Doppler-backed names:
+Current expected Doppler-backed package/deployment names:
 
-- `DOPPLER_GITHUB_SERVICE_TOKEN`
-- `PERSONAL_REPO_PUSH_TOKEN`
-- `SAFETY_API_KEY`
+- `CLOUDFLARE_GLABAL_MAIL`
+- `CLOUDFLARE_GLOBAL_API_KEY`
+- `NPM_TOKEN`
+- `OVSX_PAT`
+- `PYPI_TOKEN`
+- `TEST_PYPI_TOKEN`
+- `VSCE_PAT`
 
 Usage:
+
+- `CLOUDFLARE_GLABAL_MAIL`: Cloudflare account mail. This spelling is a compatibility name and must remain exact until the Doppler secret and workflow mappings are intentionally migrated together.
+- `CLOUDFLARE_GLOBAL_API_KEY`: Cloudflare API key for workflows that actually deploy docs/site/domain resources.
+- `NPM_TOKEN`: npm fallback publish token when trusted publishing is unavailable.
+- `OVSX_PAT`: Open VSX fallback token, only if a real VS Code extension surface exists.
+- `PYPI_TOKEN`: PyPI fallback token when trusted publishing is unavailable.
+- `TEST_PYPI_TOKEN`: TestPyPI fallback token when trusted publishing is unavailable.
+- `VSCE_PAT`: VS Marketplace fallback token, only if a real VS Code extension surface exists.
+
+Workflow service names that may also be projected from Doppler:
 
 - `DOPPLER_GITHUB_SERVICE_TOKEN`: least-privilege GitHub service token for release-please PR creation when organization policy blocks `GITHUB_TOKEN` from opening pull requests.
 - `PERSONAL_REPO_PUSH_TOKEN`: fine-grained token scoped only to `oaslananka/kicad-mcp-pro` for the one-way showcase mirror.
