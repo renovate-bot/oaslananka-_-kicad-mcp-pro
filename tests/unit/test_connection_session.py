@@ -9,6 +9,7 @@ from kicad_mcp.config import KiCadMCPConfig
 from kicad_mcp.errors import (
     KiCadBoardNotOpenError,
     KiCadConnectionTimeoutError,
+    KiCadMcpError,
     KiCadNotRunningError,
 )
 from kicad_mcp.kicad.session import KiCadSession
@@ -166,6 +167,30 @@ def test_connection_get_kicad_uses_session(monkeypatch: pytest.MonkeyPatch) -> N
     assert connection._kicad is client
 
 
+def test_connection_get_kicad_preserves_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeSession:
+        def client(self) -> object:
+            raise connection.KiCadConnectionError("already mapped")
+
+    monkeypatch.setattr(connection, "_kicad", None)
+    monkeypatch.setattr(connection, "_session", FakeSession())
+
+    with pytest.raises(connection.KiCadConnectionError, match="already mapped"):
+        connection.get_kicad()
+
+
+def test_connection_get_kicad_maps_session_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeSession:
+        def client(self) -> object:
+            raise KiCadMcpError("session failed")
+
+    monkeypatch.setattr(connection, "_kicad", None)
+    monkeypatch.setattr(connection, "_session", FakeSession())
+
+    with pytest.raises(connection.KiCadConnectionError, match="session failed"):
+        connection.get_kicad()
+
+
 def test_connection_get_board_maps_board_not_open(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeSession:
         def board(self) -> object:
@@ -188,6 +213,28 @@ def test_connection_get_board_preserves_busy_message(monkeypatch: pytest.MonkeyP
         connection.get_board()
 
 
+def test_connection_get_board_preserves_connection_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeSession:
+        def board(self) -> object:
+            raise connection.KiCadConnectionError("mapped board error")
+
+    monkeypatch.setattr(connection, "_session", FakeSession())
+
+    with pytest.raises(connection.KiCadConnectionError, match="mapped board error"):
+        connection.get_board()
+
+
+def test_connection_get_board_maps_session_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeSession:
+        def board(self) -> object:
+            raise KiCadMcpError("board session failed")
+
+    monkeypatch.setattr(connection, "_session", FakeSession())
+
+    with pytest.raises(connection.KiCadConnectionError, match="board session failed"):
+        connection.get_board()
+
+
 def test_reset_connection_closes_cached_client(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
@@ -207,3 +254,38 @@ def test_reset_connection_closes_cached_client(monkeypatch: pytest.MonkeyPatch) 
     assert calls == ["client_closed", "session_reset"]
     assert connection._kicad is None
     assert connection._session is None
+
+
+def test_kicad_session_probe_reports_version(fake_cli: Path) -> None:
+    cfg = KiCadMCPConfig(kicad_cli=fake_cli, ipc_retries=0)
+
+    class FakeClient:
+        def get_version(self) -> str:
+            return "KiCad 10.0.2"
+
+    session = KiCadSession(client_factory=FakeClient, config_factory=lambda: cfg)
+
+    assert session.probe() == {"connected": True, "version": "KiCad 10.0.2"}
+
+
+def test_kicad_session_probe_handles_clients_without_version(fake_cli: Path) -> None:
+    cfg = KiCadMCPConfig(kicad_cli=fake_cli, ipc_retries=0)
+
+    class FakeClient:
+        pass
+
+    session = KiCadSession(client_factory=FakeClient, config_factory=lambda: cfg)
+
+    assert session.probe() == {"connected": True, "version": None}
+
+
+def test_kicad_session_board_requires_get_board(fake_cli: Path) -> None:
+    cfg = KiCadMCPConfig(kicad_cli=fake_cli, ipc_retries=0)
+
+    class FakeClient:
+        pass
+
+    session = KiCadSession(client_factory=FakeClient, config_factory=lambda: cfg)
+
+    with pytest.raises(KiCadBoardNotOpenError, match="does not expose get_board"):
+        session.board()

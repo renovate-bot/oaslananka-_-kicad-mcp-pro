@@ -29,6 +29,19 @@ def test_config_resolve_within_project(sample_project: Path) -> None:
     assert resolved == sample_project / "exports" / "demo.txt"
 
 
+def test_config_derives_project_dir_from_explicit_files(tmp_path: Path, fake_cli: Path) -> None:
+    project = tmp_path / "derived"
+    project.mkdir()
+    schematic = project / "derived.kicad_sch"
+    schematic.write_text("(kicad_sch)\n", encoding="utf-8")
+
+    cfg = KiCadMCPConfig(kicad_cli=fake_cli, sch_file=schematic)
+
+    assert cfg.project_dir == project
+    assert cfg.sch_file == schematic
+    assert cfg.output_dir == project / "output"
+
+
 def test_mount_path_is_normalized_without_trailing_slash(sample_project: Path) -> None:
     _ = sample_project
     cfg = KiCadMCPConfig(mount_path="api/")
@@ -48,6 +61,49 @@ def test_cors_origins_require_explicit_http_urls(sample_project: Path) -> None:
 
     with pytest.raises(ValueError, match="must be fully qualified"):
         KiCadMCPConfig(cors_origins="file://panel")
+
+
+EXPOSED_IPV4 = ".".join(("0", "0", "0", "0"))
+EXPOSED_IPV6 = "::"
+LAN_IPV4 = ".".join(("192", "168", "1", "10"))
+
+
+@pytest.mark.parametrize("host", [EXPOSED_IPV4, EXPOSED_IPV6, LAN_IPV4])
+def test_http_transport_requires_auth_on_exposed_hosts(
+    sample_project: Path,
+    host: str,
+) -> None:
+    _ = sample_project
+
+    with pytest.raises(ValueError, match="requires auth_token"):
+        KiCadMCPConfig(transport="streamable-http", host=host)
+
+
+def test_http_transport_requires_strong_token_on_exposed_hosts(sample_project: Path) -> None:
+    _ = sample_project
+
+    with pytest.raises(ValueError, match="at least 32 characters"):
+        KiCadMCPConfig(transport="streamable-http", host=EXPOSED_IPV4, auth_token="x" * 8)
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1"])
+def test_http_transport_allows_loopback_without_token(sample_project: Path, host: str) -> None:
+    _ = sample_project
+
+    cfg = KiCadMCPConfig(transport="http", host=host)
+
+    assert cfg.transport == "streamable-http"
+    assert cfg.host == host
+    assert cfg.auth_token is None
+
+
+def test_http_transport_allows_exposed_host_with_strong_token(sample_project: Path) -> None:
+    _ = sample_project
+    credential = "x" * 32
+
+    cfg = KiCadMCPConfig(transport="streamable-http", host=EXPOSED_IPV4, auth_token=credential)
+
+    assert cfg.auth_token == credential
 
 
 def test_watch_dir_does_not_override_explicit_project(tmp_path: Path, monkeypatch) -> None:
