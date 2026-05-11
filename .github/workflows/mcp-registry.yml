@@ -1,102 +1,44 @@
-name: MCP Registry
+name: MCP Registry Publish
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - mcp.json
-      - server.json
-      - scripts/validate_mcp_manifest.py
-      - scripts/publish_mcp_registry.py
-      - .github/workflows/mcp-registry.yml
-      - package.json
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish to the selected MCP registry"
-        type: choice
-        default: "false"
-        options:
-          - "false"
-          - "true"
+        type: boolean
+        default: true
       target:
-        description: "Registry target adapter"
-        type: choice
+        type: string
         default: official
-        options:
-          - official
-          - generic
-          - smithery
-          - glama
-          - pulsemcp
+  release:
+    types: [published]
 
 permissions:
   contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-defaults:
-  run:
-    shell: bash
+  id-token: write
 
 jobs:
-  validate:
-    name: Validate MCP metadata
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version: "3.12"
-          enable-cache: false
-      - run: uv run python scripts/validate_mcp_manifest.py
-      - run: uv run python scripts/publish_mcp_registry.py --dry-run
-
   publish:
-    name: Publish MCP metadata
-    if: >-
-      github.repository == 'oaslananka-lab/kicad-mcp-pro' &&
-      github.event_name == 'workflow_dispatch' &&
-      inputs.publish == 'true'
+    if: ${{ inputs.publish == true || github.event_name == 'release' }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    needs:
-      - validate
-    environment: release
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      MCP_PUBLISHER_VERSION: v1.7.8
-      MCP_REGISTRY_TARGET: ${{ inputs.target }}
-      MCP_REGISTRY_URL: ${{ vars.MCP_REGISTRY_URL }}
-      MCP_REGISTRY_TOKEN: ${{ secrets.MCP_REGISTRY_TOKEN }}
+    timeout-minutes: 15
+    environment: production
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version: "3.12"
-          enable-cache: false
-      - name: Install official MCP publisher
-        if: inputs.target == 'official'
+      - name: Verify server metadata
+        run: |
+          test -f server.json || { echo "MCP_REGISTRY_CONFIG_MISSING"; exit 1; }
+      - name: Install mcp-publisher
         run: |
           set -euo pipefail
-          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
           arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-          url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_${os}_${arch}.tar.gz"
-          curl -fsSL "${url}" -o mcp-publisher.tar.gz
-          tar -xzf mcp-publisher.tar.gz mcp-publisher
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_${os}_${arch}.tar.gz" | tar xz mcp-publisher
           sudo install -m 0755 mcp-publisher /usr/local/bin/mcp-publisher
-          mcp-publisher --version
+      - name: Login via GitHub OIDC
+        run: mcp-publisher login github-oidc
+      - name: Validate server.json
+        run: mcp-publisher publish --dry-run
       - name: Publish
-        run: uv run python scripts/publish_mcp_registry.py
+        run: mcp-publisher publish
