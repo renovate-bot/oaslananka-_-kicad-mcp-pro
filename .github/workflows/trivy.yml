@@ -66,7 +66,7 @@ jobs:
           vuln-type: os,library
           limit-severities-for-sarif: true
           version: v0.70.0
-      - uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7
+      - uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e
         if: always()
         with:
           sarif_file: trivy-base.sarif
@@ -120,7 +120,7 @@ jobs:
           vuln-type: os,library
           limit-severities-for-sarif: true
           version: v0.70.0
-      - uses: github/codeql-action/upload-sarif@e46ed2cbd01164d986452f91f178727624ae40d7
+      - uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e
         if: always()
         with:
           sarif_file: trivy-kicad10.sarif

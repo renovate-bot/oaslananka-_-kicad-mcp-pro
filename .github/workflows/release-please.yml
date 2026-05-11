@@ -237,14 +237,14 @@ jobs:
           sha256sum -- * > SHA256SUMS.txt
 
       - name: Upload release distribution bundle
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: release-dist-${{ env.RELEASE_TAG }}
           path: dist/
           retention-days: 14
 
       - name: Upload Python package bundle
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: pypi-dist-${{ env.RELEASE_TAG }}
           path: dist-pypi/
@@ -267,7 +267,7 @@ jobs:
       RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
     steps:
       - name: Download release distribution bundle
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: release-dist-${{ env.RELEASE_TAG }}
           path: dist
@@ -319,7 +319,7 @@ jobs:
       RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
     steps:
       - name: Download Python package bundle
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: pypi-dist-${{ env.RELEASE_TAG }}
           path: dist-pypi
@@ -384,7 +384,7 @@ jobs:
           persist-credentials: false
 
       - name: Download release distribution bundle
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: release-dist-${{ env.RELEASE_TAG }}
           path: dist
@@ -448,7 +448,7 @@ jobs:
           GH_TOKEN="${PERSONAL_REPO_PUSH_TOKEN}" gh release upload "${RELEASE_TAG}" dist/* --repo oaslananka/kicad-mcp-pro --clobber
 
       - name: Upload release artifact bundle
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: release-dist-${{ env.RELEASE_TAG }}
           path: dist/
