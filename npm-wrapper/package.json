@@ -1,6 +1,6 @@
 {
   "name": "@oaslananka/kicad-mcp-pro",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "description": "npm wrapper for the KiCad MCP Pro Python package.",
   "license": "MIT",
   "homepage": "https://oaslananka-lab.github.io/kicad-mcp-pro",
