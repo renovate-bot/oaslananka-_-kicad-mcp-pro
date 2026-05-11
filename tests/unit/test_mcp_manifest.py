@@ -4,6 +4,8 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -24,6 +26,7 @@ def test_checked_mcp_manifest_is_valid() -> None:
     assert manifest["name"] == "io.github.oaslananka-lab/kicad-mcp-pro"
     assert manifest["repository"]["url"] == "https://github.com/oaslananka-lab/kicad-mcp-pro"
     assert manifest["mcp"]["command"] == "kicad-mcp-pro"
+    assert all("registryBaseUrl" not in package for package in manifest["packages"])
 
 
 def test_validator_rejects_missing_command(tmp_path: Path) -> None:
@@ -60,3 +63,59 @@ def test_validator_rejects_unsupported_transport() -> None:
     errors = module.validate_manifest(manifest)
 
     assert "packages[0] uses unsupported transport 'websocket'." in errors
+
+
+def test_validator_rejects_oci_registry_base_url() -> None:
+    module = _load_validator()
+    manifest = json.loads((ROOT / "mcp.json").read_text(encoding="utf-8"))
+    manifest["packages"][1]["registryBaseUrl"] = "https://ghcr.io"
+
+    errors = module.validate_manifest(manifest)
+
+    assert (
+        "packages[1] must not define registryBaseUrl for OCI packages; "
+        "use a canonical registry/repository:tag identifier."
+    ) in errors
+
+
+def test_validator_accepts_oci_identifier_with_digest() -> None:
+    module = _load_validator()
+    manifest = json.loads((ROOT / "mcp.json").read_text(encoding="utf-8"))
+    digest = "a" * 64
+    manifest["packages"][1]["identifier"] = f"ghcr.io/oaslananka-lab/kicad-mcp-pro@sha256:{digest}"
+
+    errors = module.validate_manifest(manifest)
+
+    assert not errors
+
+
+def test_validator_accepts_oci_identifier_with_single_repository_segment() -> None:
+    module = _load_validator()
+    manifest = json.loads((ROOT / "mcp.json").read_text(encoding="utf-8"))
+    manifest["packages"][1]["identifier"] = "ghcr.io/kicad-mcp-pro:3.4.0"
+
+    errors = module.validate_manifest(manifest)
+
+    assert not errors
+
+
+@pytest.mark.parametrize(
+    "identifier",
+    [
+        "ghcr.io/oaslananka-lab/kicad-mcp-pro",
+        "ghcr.io/oaslananka-lab/kicad-mcp-pro:",
+        "ghcr.io/oaslananka-lab/kicad-mcp-pro:3.4.0 bad",
+        "https://ghcr.io/oaslananka-lab/kicad-mcp-pro:3.4.0",
+    ],
+)
+def test_validator_rejects_malformed_oci_identifier(identifier: str) -> None:
+    module = _load_validator()
+    manifest = json.loads((ROOT / "mcp.json").read_text(encoding="utf-8"))
+    manifest["packages"][1]["identifier"] = identifier
+
+    errors = module.validate_manifest(manifest)
+
+    assert (
+        "packages[1] OCI identifier must be registry/repository:tag "
+        "or registry/repository@algorithm:digest."
+    ) in errors

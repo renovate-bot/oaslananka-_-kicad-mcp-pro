@@ -72,6 +72,32 @@ def _package_identity(package: Mapping[str, Any]) -> tuple[str, str]:
     return registry, identifier
 
 
+def _is_oci_registry(registry: str, package: Mapping[str, Any]) -> bool:
+    return registry == "oci" or _string(package.get("registry")) == "container"
+
+
+def _is_oci_identifier(identifier: str) -> bool:
+    if not identifier or re.search(r"\s", identifier) or "://" in identifier:
+        return False
+
+    segments = identifier.split("/")
+    if len(segments) < 2 or any(not segment for segment in segments):
+        return False
+
+    image_ref = "/".join(segments[1:])
+    if "@" in image_ref:
+        name, digest = image_ref.rsplit("@", 1)
+        return (
+            bool(name) and re.fullmatch(r"[A-Za-z0-9_+.-]+:[A-Za-z0-9=_+.-]+", digest) is not None
+        )
+
+    last_segment = segments[-1]
+    if ":" not in last_segment:
+        return False
+    name, tag = last_segment.rsplit(":", 1)
+    return bool(name and tag) and re.search(r"\s|/", tag) is None
+
+
 def _has_command(manifest: Mapping[str, Any], packages: Sequence[Mapping[str, Any]]) -> bool:
     mcp = manifest.get("mcp")
     if _is_object(mcp) and _string(mcp.get("command")):
@@ -126,6 +152,17 @@ def validate_manifest(manifest: Mapping[str, Any]) -> list[str]:
             errors.append(f"packages[{index}] must define registryType or registry.")
         if not identifier:
             errors.append(f"packages[{index}] must define identifier, name, or image.")
+        if _is_oci_registry(registry, package):
+            if "registryBaseUrl" in package:
+                errors.append(
+                    f"packages[{index}] must not define registryBaseUrl for OCI packages; "
+                    "use a canonical registry/repository:tag identifier."
+                )
+            if identifier and not _is_oci_identifier(identifier):
+                errors.append(
+                    f"packages[{index}] OCI identifier must be registry/repository:tag "
+                    "or registry/repository@algorithm:digest."
+                )
         pair = (registry, identifier)
         if registry and identifier and pair in seen:
             errors.append(f"packages[{index}] duplicates package {registry}/{identifier}.")

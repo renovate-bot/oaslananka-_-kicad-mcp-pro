@@ -129,6 +129,7 @@ def _sync_package_versions(data: dict[str, Any], metadata: dict[str, Any]) -> No
     for package in data.get("packages", []):
         if not isinstance(package, dict):
             continue
+        package.pop("registryBaseUrl", None)
         if (
             package.get("identifier") == metadata["package_name"]
             or package.get("name") == metadata["package_name"]

@@ -30,7 +30,6 @@
     {
       "registryType": "pypi",
       "registry": "pypi",
-      "registryBaseUrl": "https://pypi.org",
       "identifier": "kicad-mcp-pro",
       "name": "kicad-mcp-pro",
       "version": "3.4.0",
@@ -43,7 +42,6 @@
     {
       "registryType": "oci",
       "registry": "container",
-      "registryBaseUrl": "https://ghcr.io",
       "identifier": "ghcr.io/oaslananka-lab/kicad-mcp-pro:3.4.0",
       "image": "ghcr.io/oaslananka-lab/kicad-mcp-pro",
       "version": "3.4.0",

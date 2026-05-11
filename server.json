@@ -12,7 +12,6 @@
   "packages": [
     {
       "registryType": "pypi",
-      "registryBaseUrl": "https://pypi.org",
       "identifier": "kicad-mcp-pro",
       "version": "3.4.0",
       "runtimeHint": "uvx",
@@ -22,7 +21,6 @@
     },
     {
       "registryType": "oci",
-      "registryBaseUrl": "https://ghcr.io",
       "identifier": "ghcr.io/oaslananka-lab/kicad-mcp-pro:3.4.0",
       "version": "3.4.0",
       "runtimeHint": "docker",
