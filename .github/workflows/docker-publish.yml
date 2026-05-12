@@ -4,6 +4,7 @@ on:
   release:
     types:
       - published
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,15 +23,47 @@ defaults:
     shell: bash
 
 jobs:
+  resolve-release-ref:
+    name: Resolve release ref
+    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      release_ref: ${{ steps.release.outputs.release_ref }}
+    steps:
+      - name: Resolve release tag
+        id: release
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if [ "${EVENT_NAME}" = "release" ]; then
+            release_ref="${EVENT_RELEASE_TAG}"
+          else
+            release_ref="$(gh release view --repo "${GITHUB_REPOSITORY}" --json tagName --jq '.tagName')"
+          fi
+          if [[ "${release_ref}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "release_ref=${release_ref}" >> "${GITHUB_OUTPUT}"
+          else
+            echo "::error::Resolved release ref is not a SemVer tag: ${release_ref}"
+            exit 1
+          fi
+
   build:
     name: Build image
     if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    needs:
+      - resolve-release-ref
     permissions:
       contents: read
     env:
-      RELEASE_REF: ${{ github.event.release.tag_name }}
+      RELEASE_REF: ${{ needs.resolve-release-ref.outputs.release_ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -40,6 +73,12 @@ jobs:
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+
+      - name: Resolve checked-out revision
+        id: release-meta
+        run: |
+          set -euo pipefail
+          echo "revision=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
 
       - name: Docker metadata
         id: meta
@@ -55,14 +94,14 @@ jobs:
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ env.RELEASE_REF }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.release-meta.outputs.revision }}
             io.modelcontextprotocol.server.name=${{ env.MCP_SERVER_NAME }}
           annotations: |
             org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ env.RELEASE_REF }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.release-meta.outputs.revision }}
             io.modelcontextprotocol.server.name=${{ env.MCP_SERVER_NAME }}
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest
@@ -83,6 +122,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     needs:
+      - resolve-release-ref
       - build
     environment: release
     permissions:
@@ -91,7 +131,7 @@ jobs:
       id-token: write
       attestations: write
     env:
-      RELEASE_REF: ${{ github.event.release.tag_name }}
+      RELEASE_REF: ${{ needs.resolve-release-ref.outputs.release_ref }}
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -109,6 +149,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Resolve checked-out revision
+        id: release-meta
+        run: |
+          set -euo pipefail
+          echo "revision=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
       - name: Docker metadata
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6.0.0
@@ -123,14 +169,14 @@ jobs:
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ env.RELEASE_REF }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.release-meta.outputs.revision }}
             io.modelcontextprotocol.server.name=${{ env.MCP_SERVER_NAME }}
           annotations: |
             org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ env.RELEASE_REF }}
-            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.revision=${{ steps.release-meta.outputs.revision }}
             io.modelcontextprotocol.server.name=${{ env.MCP_SERVER_NAME }}
         env:
           DOCKER_METADATA_ANNOTATIONS_LEVELS: manifest
