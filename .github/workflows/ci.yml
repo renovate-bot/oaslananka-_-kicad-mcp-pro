@@ -152,7 +152,7 @@ jobs:
                   )
 
   ci:
-    name: CI
+    name: CI Summary
     if: >-
       !cancelled() &&
       (success() || failure()) &&
