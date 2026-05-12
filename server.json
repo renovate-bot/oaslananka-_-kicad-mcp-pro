@@ -22,7 +22,6 @@
     {
       "registryType": "oci",
       "identifier": "ghcr.io/oaslananka-lab/kicad-mcp-pro:3.4.2",
-      "version": "3.4.2",
       "runtimeHint": "docker",
       "transport": {
         "type": "stdio"

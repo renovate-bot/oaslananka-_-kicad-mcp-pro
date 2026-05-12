@@ -565,8 +565,15 @@ def test_docker_metadata_contains_mcp_oci_label_and_no_mutable_image_tags() -> N
 
 
 def test_version_synchronization_across_release_manifests() -> None:
+    def is_oci_package(package: dict[str, object]) -> bool:
+        return package.get("registryType") == "oci" or package.get("registry") in {
+            "container",
+            "oci",
+        }
+
     root = Path(__file__).resolve().parents[2]
     config = (root / "release-please-config.json").read_text(encoding="utf-8")
+    release_please = json.loads(config)
     manifest = json.loads((root / ".release-please-manifest.json").read_text(encoding="utf-8"))
     wrapper = json.loads((root / "npm-wrapper" / "package.json").read_text(encoding="utf-8"))
     pyproject = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
@@ -576,10 +583,32 @@ def test_version_synchronization_across_release_manifests() -> None:
 
     version = manifest["."]
     assert "npm-wrapper/package.json" in config
+    extra_files = release_please["packages"]["."]["extra-files"]
+    assert {
+        (entry["path"], entry.get("jsonpath"))
+        for entry in extra_files
+        if entry.get("type") == "json"
+    } == {
+        ("npm-wrapper/package.json", "$.version"),
+        ("mcp.json", "$.version"),
+        ("mcp.json", "$.packages[0].version"),
+        ("server.json", "$.version"),
+        ("server.json", "$.packages[0].version"),
+    }
     assert wrapper["version"] == pyproject["project"]["version"] == version
     assert mcp["version"] == server["version"] == version
-    assert all(package["version"] == version for package in mcp["packages"])
-    assert all(package["version"] == version for package in server["packages"])
+    assert all(
+        package["version"] == version for package in mcp["packages"] if not is_oci_package(package)
+    )
+    assert all(
+        package["version"] == version
+        for package in server["packages"]
+        if not is_oci_package(package)
+    )
+    assert all("version" not in package for package in mcp["packages"] if is_oci_package(package))
+    assert all(
+        "version" not in package for package in server["packages"] if is_oci_package(package)
+    )
     assert f'__version__ = "{version}"' in init_py
     assert "https://oaslananka-lab.github.io/kicad-mcp-pro" in wrapper["homepage"]
 

@@ -63,6 +63,12 @@ Documentation = "https://docs.example.test"
 
 
 def test_release_metadata_is_synchronised() -> None:
+    def is_oci_package(package: dict[str, object]) -> bool:
+        return package.get("registryType") == "oci" or package.get("registry") in {
+            "container",
+            "oci",
+        }
+
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     version = pyproject["project"]["version"]
     server_json = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
@@ -76,16 +82,26 @@ def test_release_metadata_is_synchronised() -> None:
     assert server_json["$schema"] == REGISTRY_SCHEMA
     assert server_json["version"] == version
     assert server_json["packages"][0]["version"] == version
-    assert all(package["version"] == version for package in server_json["packages"])
-    assert all(package["version"] == version for package in mcp_json["packages"])
     server_oci = next(
         package for package in server_json["packages"] if package["registryType"] == "oci"
     )
     mcp_oci = next(package for package in mcp_json["packages"] if package["registryType"] == "oci")
+    assert all(
+        package["version"] == version
+        for package in server_json["packages"]
+        if not is_oci_package(package)
+    )
+    assert all(
+        package["version"] == version
+        for package in mcp_json["packages"]
+        if not is_oci_package(package)
+    )
     assert server_oci["registry"] == "container"
     assert server_oci["image"] == "ghcr.io/oaslananka-lab/kicad-mcp-pro"
     assert server_oci["identifier"] == f"{server_oci['image']}:{version}"
     assert mcp_oci["identifier"] == f"{mcp_oci['image']}:{version}"
+    assert "version" not in server_oci
+    assert "version" not in mcp_oci
     assert mcp_json["version"] == version
     assert server_json["name"] == "io.github.oaslananka-lab/kicad-mcp-pro"
     assert server_json["repository"]["url"] == "https://github.com/oaslananka-lab/kicad-mcp-pro"

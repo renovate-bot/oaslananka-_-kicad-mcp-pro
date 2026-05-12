@@ -158,6 +158,11 @@ def validate_manifest(manifest: Mapping[str, Any]) -> list[str]:
                     f"packages[{index}] must not define registryBaseUrl for OCI packages; "
                     "use a canonical registry/repository:tag identifier."
                 )
+            if "version" in package:
+                errors.append(
+                    f"packages[{index}] must not define version for OCI packages; "
+                    "include the version in identifier instead."
+                )
             if identifier and not _is_oci_identifier(identifier):
                 errors.append(
                     f"packages[{index}] OCI identifier must be registry/repository:tag "

@@ -1,26 +1,64 @@
 version: 2
+
 updates:
-  - package-ecosystem: "github-actions"
-    directory: "/"
+  - package-ecosystem: pip
+    directory: /
     schedule:
-      interval: "weekly"
+      interval: weekly
+      day: monday
+      time: "07:00"
+      timezone: Europe/Istanbul
     open-pull-requests-limit: 10
+    versioning-strategy: increase-if-necessary
+    cooldown:
+      default-days: 3
+    groups:
+      python-production:
+        dependency-type: production
+        patterns:
+          - "*"
+      python-development:
+        dependency-type: development
+        patterns:
+          - "*"
     labels:
-      - "dependencies"
-      - "github-actions"
-  - package-ecosystem: "uv"
-    directory: "/"
+      - dependencies
+      - area:python
+
+  - package-ecosystem: npm
+    directory: /
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: weekly
+      day: monday
+      time: "07:20"
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 5
+    versioning-strategy: lockfile-only
+    cooldown:
+      default-days: 3
+    groups:
+      pnpm-development:
+        dependency-type: development
+        patterns:
+          - "*"
     labels:
-      - "dependencies"
-      - "uv"
-  - package-ecosystem: "pip"
-    directory: "/"
+      - dependencies
+      - area:js
+
+  - package-ecosystem: github-actions
+    directory: /
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: weekly
+      day: monday
+      time: "07:40"
+      timezone: Europe/Istanbul
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 3
+    groups:
+      github-actions:
+        patterns:
+          - "*"
     labels:
-      - "dependencies"
-      - "pip"
+      - dependencies
+      - type:chore

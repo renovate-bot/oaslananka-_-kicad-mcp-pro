@@ -44,7 +44,6 @@
       "registry": "container",
       "identifier": "ghcr.io/oaslananka-lab/kicad-mcp-pro:3.4.2",
       "image": "ghcr.io/oaslananka-lab/kicad-mcp-pro",
-      "version": "3.4.2",
       "command": "kicad-mcp-pro",
       "runtimeHint": "docker",
       "transport": {

@@ -315,10 +315,12 @@ def _parse_stackup_specs_from_board_text(content: str) -> list[StackupLayerSpec]
     return specs or None
 
 
-def _current_stackup_specs() -> list[StackupLayerSpec]:
+def _current_stackup_specs(*, prefer_project_state: bool = False) -> list[StackupLayerSpec]:
+    if prefer_project_state and (state_specs := _load_stackup_state()):
+        return state_specs
     if (board_specs := _stackup_specs_from_board()) is not None:
         return board_specs
-    if (state_specs := _load_stackup_state()) is not None:
+    if state_specs := _load_stackup_state():
         return state_specs
     board_text = _get_pcb_file_for_sync().read_text(encoding="utf-8", errors="ignore")
     if (parsed_specs := _parse_stackup_specs_from_board_text(board_text)) is not None:
@@ -2603,7 +2605,7 @@ def register(mcp: FastMCP) -> None:
         if not canonical_layer.startswith("In") or not canonical_layer.endswith("_Cu"):
             return "Inner-layer footprint graphics must target In1_Cu through In30_Cu."
         try:
-            stackup_specs = _current_stackup_specs()
+            stackup_specs = _current_stackup_specs(prefer_project_state=True)
         except ValueError as exc:
             return str(exc)
         copper_layers = [entry for entry in stackup_specs if _is_copper_stackup_layer(entry)]

@@ -20,6 +20,12 @@ def _load_validator() -> object:
 
 
 def test_checked_mcp_manifest_is_valid() -> None:
+    def is_oci_package(package: dict[str, object]) -> bool:
+        return package.get("registryType") == "oci" or package.get("registry") in {
+            "container",
+            "oci",
+        }
+
     module = _load_validator()
     manifest = module.validate_manifest_file(ROOT / "mcp.json")
 
@@ -27,6 +33,9 @@ def test_checked_mcp_manifest_is_valid() -> None:
     assert manifest["repository"]["url"] == "https://github.com/oaslananka-lab/kicad-mcp-pro"
     assert manifest["mcp"]["command"] == "kicad-mcp-pro"
     assert all("registryBaseUrl" not in package for package in manifest["packages"])
+    assert all(
+        "version" not in package for package in manifest["packages"] if is_oci_package(package)
+    )
 
 
 def test_validator_rejects_missing_command(tmp_path: Path) -> None:
@@ -75,6 +84,19 @@ def test_validator_rejects_oci_registry_base_url() -> None:
     assert (
         "packages[1] must not define registryBaseUrl for OCI packages; "
         "use a canonical registry/repository:tag identifier."
+    ) in errors
+
+
+def test_validator_rejects_oci_version_field() -> None:
+    module = _load_validator()
+    manifest = json.loads((ROOT / "mcp.json").read_text(encoding="utf-8"))
+    manifest["packages"][1]["version"] = "3.4.2"
+
+    errors = module.validate_manifest(manifest)
+
+    assert (
+        "packages[1] must not define version for OCI packages; "
+        "include the version in identifier instead."
     ) in errors
 
 

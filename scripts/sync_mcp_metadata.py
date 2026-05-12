@@ -137,7 +137,7 @@ def _sync_package_versions(data: dict[str, Any], metadata: dict[str, Any]) -> No
             package["version"] = metadata["version"]
         if package.get("registryType") == "oci" or package.get("registry") == "container":
             package["registry"] = "container"
-            package["version"] = metadata["version"]
+            package.pop("version", None)
             package["identifier"] = f"{GHCR_IMAGE}:{metadata['version']}"
             package["image"] = GHCR_IMAGE
 
