@@ -5,7 +5,7 @@
   "description": "A Model Context Protocol server for KiCad EDA workflows.",
   "version": "3.4.3",
   "repository": {
-    "url": "https://github.com/oaslananka/kicad-mcp-pro",
+    "url": "https://github.com/oaslananka-lab/kicad-mcp-pro",
     "source": "github"
   },
   "websiteUrl": "https://oaslananka-lab.github.io/kicad-mcp-pro",
