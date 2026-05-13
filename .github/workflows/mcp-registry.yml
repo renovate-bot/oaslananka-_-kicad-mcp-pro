@@ -1,102 +1,92 @@
-name: MCP Registry
+name: MCP Registry Publish
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - mcp.json
-      - server.json
-      - scripts/validate_mcp_manifest.py
-      - scripts/publish_mcp_registry.py
-      - .github/workflows/mcp-registry.yml
-      - package.json
   workflow_dispatch:
     inputs:
       publish:
-        description: "Publish to the selected MCP registry"
-        type: choice
-        default: "false"
-        options:
-          - "false"
-          - "true"
+        type: boolean
+        default: true
       target:
-        description: "Registry target adapter"
-        type: choice
+        type: string
         default: official
-        options:
-          - official
-          - generic
-          - smithery
-          - glama
-          - pulsemcp
+  release:
+    types: [published]
 
 permissions:
   contents: read
+  id-token: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+  MCP_PUBLISHER_VERSION: "1.7.9"
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-defaults:
-  run:
-    shell: bash
+  group: mcp-registry-publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  validate:
-    name: Validate MCP metadata
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version: "3.12"
-          enable-cache: false
-      - run: uv run python scripts/validate_mcp_manifest.py
-      - run: uv run python scripts/publish_mcp_registry.py --dry-run
-
   publish:
-    name: Publish MCP metadata
-    if: >-
-      github.repository == 'oaslananka-lab/kicad-mcp-pro' &&
-      github.event_name == 'workflow_dispatch' &&
-      inputs.publish == 'true'
+    if: ${{ github.repository == 'oaslananka-lab/kicad-mcp-pro' && (inputs.publish == true || github.event_name == 'release') }}
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    needs:
-      - validate
-    environment: release
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      MCP_PUBLISHER_VERSION: v1.7.8
-      MCP_REGISTRY_TARGET: ${{ inputs.target }}
-      MCP_REGISTRY_URL: ${{ vars.MCP_REGISTRY_URL }}
-      MCP_REGISTRY_TOKEN: ${{ secrets.MCP_REGISTRY_TOKEN }}
+    timeout-minutes: 15
+    environment: production
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          python-version: "3.12"
-          enable-cache: false
-      - name: Install official MCP publisher
-        if: inputs.target == 'official'
+      - name: Verify server metadata
+        run: |
+          mkdir -p out
+          if [[ ! -f server.json ]]; then
+            echo "MCP_REGISTRY_CONFIG_MISSING"
+            node -e 'const fs=require("fs"); fs.writeFileSync("out/publish-report-mcp-registry.json", JSON.stringify({channel:"mcp_registry",state:"failed",result:"external_blocker",blocker:"MCP_REGISTRY_CONFIG_MISSING",package:"",version:"",run_url:process.env.GITHUB_SERVER_URL+"/"+process.env.GITHUB_REPOSITORY+"/actions/runs/"+process.env.GITHUB_RUN_ID,evidence:["server.json missing"]}, null, 2)+"\n")'
+            exit 1
+          fi
+      - name: Install mcp-publisher
         run: |
           set -euo pipefail
-          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
           arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-          url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}/mcp-publisher_${os}_${arch}.tar.gz"
-          curl -fsSL "${url}" -o mcp-publisher.tar.gz
-          tar -xzf mcp-publisher.tar.gz mcp-publisher
-          sudo install -m 0755 mcp-publisher /usr/local/bin/mcp-publisher
-          mcp-publisher --version
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          asset="mcp-publisher_${os}_${arch}.tar.gz"
+          base_url="https://github.com/modelcontextprotocol/registry/releases/download/v${MCP_PUBLISHER_VERSION}"
+          tmp="$(mktemp -d)"
+          curl -fsSL "${base_url}/${asset}" -o "${tmp}/${asset}"
+          curl -fsSL "${base_url}/registry_${MCP_PUBLISHER_VERSION}_checksums.txt" -o "${tmp}/checksums.txt"
+          grep "  ${asset}$" "${tmp}/checksums.txt" > "${tmp}/checksums.filtered"
+          (cd "${tmp}" && sha256sum -c checksums.filtered)
+          tar -xzf "${tmp}/${asset}" -C "${tmp}" mcp-publisher
+          sudo install -m 0755 "${tmp}/mcp-publisher" /usr/local/bin/mcp-publisher
+      - name: Login via GitHub OIDC
+        run: mcp-publisher login github-oidc
+      - name: Validate server.json
+        run: |
+          set +e
+          output="$(mcp-publisher publish --dry-run 2>&1)"
+          status="$?"
+          set -e
+          printf '%s\n' "${output}"
+          if [[ "${status}" -eq 0 ]]; then
+            exit 0
+          fi
+          node -e 'const fs=require("fs"); fs.writeFileSync("out/publish-report-mcp-registry.json", JSON.stringify({channel:"mcp_registry",state:"failed",result:"external_blocker",blocker:"MCP_REGISTRY_EXTERNAL_CONFIGURATION_REQUIRED",package:"",version:"",run_url:process.env.GITHUB_SERVER_URL+"/"+process.env.GITHUB_REPOSITORY+"/actions/runs/"+process.env.GITHUB_RUN_ID,evidence:["mcp-publisher dry-run failed"]}, null, 2)+"\n")'
+          exit "${status}"
       - name: Publish
-        run: uv run python scripts/publish_mcp_registry.py
+        run: |
+          set +e
+          output="$(mcp-publisher publish 2>&1)"
+          status="$?"
+          set -e
+          printf '%s\n' "${output}"
+          if [[ "${status}" -eq 0 ]]; then
+            node -e 'const fs=require("fs"); fs.writeFileSync("out/publish-report-mcp-registry.json", JSON.stringify({channel:"mcp_registry",state:"published",result:"fresh_publish_success",blocker:"",package:"",version:"",run_url:process.env.GITHUB_SERVER_URL+"/"+process.env.GITHUB_REPOSITORY+"/actions/runs/"+process.env.GITHUB_RUN_ID,evidence:["mcp-publisher publish exited 0"]}, null, 2)+"\n")'
+            exit 0
+          fi
+          node -e 'const fs=require("fs"); fs.writeFileSync("out/publish-report-mcp-registry.json", JSON.stringify({channel:"mcp_registry",state:"failed",result:"external_blocker",blocker:"MCP_REGISTRY_EXTERNAL_CONFIGURATION_REQUIRED",package:"",version:"",run_url:process.env.GITHUB_SERVER_URL+"/"+process.env.GITHUB_REPOSITORY+"/actions/runs/"+process.env.GITHUB_RUN_ID,evidence:["mcp-publisher publish failed"]}, null, 2)+"\n")'
+          exit "${status}"
+      - name: Upload MCP Registry publish report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: publish-report-${{ github.event.repository.name }}-mcp-registry
+          path: out/publish-report-mcp-registry.json
+          if-no-files-found: ignore
