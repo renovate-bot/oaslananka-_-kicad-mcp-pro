@@ -5,6 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from kicad_mcp.connection import KiCadConnectionError
+from kicad_mcp.models.pcb import StackupLayerSpec
+from kicad_mcp.resources import analysis as analysis_resources
 from kicad_mcp.resources import board_state
 from kicad_mcp.tools.validation import GateOutcome, PlacementAnalysis
 
@@ -244,3 +246,46 @@ def test_register_resources_exposes_blocked_paths(monkeypatch, tmp_path: Path) -
         "Could not evaluate this resource: placement failed"
         in mcp.resources["kicad://board/placement_quality"]()
     )
+
+
+def test_analysis_resources_expose_structured_defaults_and_stackup(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "kicad_mcp.resources.analysis._current_stackup_specs",
+        lambda: [
+            StackupLayerSpec(
+                name="F_Cu",
+                type="signal",
+                thickness_mm=0.035,
+                material="Copper",
+            ),
+            StackupLayerSpec(
+                name="prepreg_1",
+                type="dielectric",
+                thickness_mm=0.18,
+                material="FR4",
+                epsilon_r=4.2,
+                loss_tangent=0.02,
+            ),
+            StackupLayerSpec(
+                name="B_Cu",
+                type="signal",
+                thickness_mm=0.035,
+                material="Copper",
+            ),
+        ],
+    )
+
+    mcp = FakeMCP()
+    analysis_resources.register(mcp)
+
+    materials = mcp.resources["kicad://analysis/materials"]()
+    defaults = mcp.resources["kicad://analysis/defaults"]()
+    stackup = mcp.resources["kicad://analysis/stackup"]()
+
+    assert '"schema_version": "1.0"' in materials
+    assert '"fr4_standard"' in materials
+    assert '"schemas"' in defaults
+    assert '"trace_impedance"' in defaults
+    assert '"total_thickness_mm": 0.25' in stackup
+    assert '"copper_layer_count": 2' in stackup
+    assert '"loss_tangent": 0.02' in stackup

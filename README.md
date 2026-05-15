@@ -84,7 +84,7 @@ More client examples:
 - Schematic tools for symbols, wires, labels, buses, annotation, templates, routing, and IPC reload.
 - Validation gates for schematic quality, connectivity, PCB quality, placement, transfer, DFM, and manufacturing.
 - Gated release handoff through `export_manufacturing_package()`.
-- Export tools for Gerber, drill, BOM, PDF, netlist, STEP, render, pick-and-place, IPC-2581, SVG, and DXF.
+- Export tools for Gerber, drill, BOM, PDF, netlist, STEP, render, pick-and-place, IPC-2581, ODB++, SVG, and DXF.
 - SI, PI, EMC, routing, simulation, library, and version-control helper surfaces.
 - Server profiles such as `minimal`, `pcb_only`, `schematic_only`, `manufacturing`, `analysis`, and `agent_full`.
 - Machine-readable CLI diagnostics for editors and MCP clients.

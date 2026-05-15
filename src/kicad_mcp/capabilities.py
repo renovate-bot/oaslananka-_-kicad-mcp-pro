@@ -184,6 +184,7 @@ _register_many(
         "export_svg",
         "export_dxf",
         "export_ipc2581",
+        "export_odb",
         "export_pick_and_place",
     ],
     profiles=_PCB_PROFILES | _MFG_PROFILES,

@@ -661,6 +661,50 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         """Export IPC-2581 manufacturing data."""
         return _with_low_level_export_notice(_export_ipc2581())
 
+    def _export_odb(variant_name: str | None = None) -> str:
+        pcb_file = _get_pcb_file()
+        caps = get_cli_capabilities(get_config().kicad_cli)
+        if not caps.supports_odb_export:
+            return "ODB++ export is not supported by the detected KiCad CLI."
+
+        out_file = _ensure_output_dir("manufacturing") / "board.odb.zip"
+        variant_args = _active_variant_args(variant_name)
+        code, _, stderr = _run_cli_variants(
+            [
+                [
+                    "pcb",
+                    "export",
+                    "odb",
+                    *variant_args,
+                    "--compression",
+                    "zip",
+                    "--output",
+                    str(out_file),
+                    str(pcb_file),
+                ],
+                [
+                    "pcb",
+                    "export",
+                    "odb",
+                    *variant_args,
+                    "--input",
+                    str(pcb_file),
+                    "--compression",
+                    "zip",
+                    "--output",
+                    str(out_file),
+                ],
+            ]
+        )
+        if code != 0:
+            return f"ODB++ export failed: {stderr or 'unknown error'}"
+        return f"ODB++ exported to {out_file}"
+
+    @headless_compatible
+    def export_odb() -> str:
+        """Export an ODB++ manufacturing package when supported by KiCad 10+."""
+        return _with_low_level_export_notice(_export_odb())
+
     def _export_svg(layer: str = "F.Cu") -> str:
         pcb_file = _get_pcb_file()
         caps = get_cli_capabilities(get_config().kicad_cli)
@@ -799,6 +843,9 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         ipc_result = _export_ipc2581(variant_name=variant_name)
         if not ipc_result.startswith("IPC-2581 export is not supported"):
             results.append(ipc_result)
+        odb_result = _export_odb(variant_name=variant_name)
+        if not odb_result.startswith("ODB++ export is not supported"):
+            results.append(odb_result)
         await _report_progress(ctx, 100, 100, "Manufacturing package complete.")
         return "\n\n".join(results)
 
@@ -816,6 +863,7 @@ def register(mcp: FastMCP, *, include_low_level_exports: bool = True) -> None:
         mcp.tool()(export_3d_render)
         mcp.tool()(export_pick_and_place)
         mcp.tool()(export_ipc2581)
+        mcp.tool()(export_odb)
         mcp.tool()(export_svg)
         mcp.tool()(export_dxf)
 

@@ -224,7 +224,7 @@ def test_cli_version_and_capabilities_are_detected(tmp_path: Path, monkeypatch) 
         _ = (capture_output, text, timeout, check)
         if "--version" in cmd:
             return subprocess.CompletedProcess(cmd, 0, stdout="KiCad 10.0.1", stderr="")
-        help_blob = "gerbers Gerber files positions ipc2581 svg dxf step render spice"
+        help_blob = "gerbers Gerber files positions ipc2581 odb ODB++ svg dxf step render spice"
         return subprocess.CompletedProcess(cmd, 0, stdout=help_blob, stderr="")
 
     get_cli_capabilities.cache_clear()
@@ -239,6 +239,7 @@ def test_cli_version_and_capabilities_are_detected(tmp_path: Path, monkeypatch) 
         drill_command="drill",
         position_command="positions",
         supports_ipc2581=True,
+        supports_odb_export=True,
         supports_svg=True,
         supports_dxf=True,
         supports_step=True,

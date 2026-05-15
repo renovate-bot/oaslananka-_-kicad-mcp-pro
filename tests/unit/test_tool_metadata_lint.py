@@ -44,9 +44,15 @@ async def test_every_declared_tool_has_static_test_reference() -> None:
 
 
 def test_direct_tool_references_for_static_coverage_lint() -> None:
-    assert {
+    declared_tools = {
+        tool_name for category in TOOL_CATEGORIES.values() for tool_name in category["tools"]
+    }
+    direct_references = {
         "drc_export_rules",
+        "export_odb",
         "pcb_add_copper_zone",
         "pcb_bga_fanout",
         "project_infer_design_spec",
     }
+
+    assert direct_references <= declared_tools

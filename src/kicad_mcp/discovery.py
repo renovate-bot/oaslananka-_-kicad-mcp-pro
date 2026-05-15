@@ -43,6 +43,7 @@ class CliCapabilities:
     drill_command: str = "drill"
     position_command: str = "pos"
     supports_ipc2581: bool = False
+    supports_odb_export: bool = False
     supports_svg: bool = False
     supports_dxf: bool = False
     supports_step: bool = False
@@ -185,6 +186,7 @@ def get_cli_capabilities(cli_path: Path) -> CliCapabilities:
         gerber_command=gerber_command,
         position_command=position_command,
         supports_ipc2581="ipc2581" in blob,
+        supports_odb_export="odb++" in blob or "odb" in tokens,
         supports_svg=" export svg" in blob or " svg " in blob,
         supports_dxf=" export dxf" in blob or " dxf " in blob,
         supports_step=" export step" in blob or " step " in blob,

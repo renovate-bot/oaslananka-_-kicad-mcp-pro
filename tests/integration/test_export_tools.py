@@ -245,6 +245,67 @@ async def test_export_3d_pdf_and_bom_forward_active_variant_to_cli(
 
 
 @pytest.mark.anyio
+async def test_export_odb_uses_kicad_10_odb_cli_surface(sample_project, monkeypatch) -> None:
+    commands: list[list[str]] = []
+
+    def fake_run(cmd, *args: object, **kwargs: object):
+        _ = args, kwargs
+        commands.append(list(cmd))
+        command_blob = " ".join(str(part) for part in cmd)
+        if " odb " in f" {command_blob} ":
+            out_file = sample_project / "output" / "manufacturing" / "board.odb.zip"
+            out_file.parent.mkdir(parents=True, exist_ok=True)
+            out_file.write_text("odb", encoding="utf-8")
+
+        class Result:
+            returncode = 0
+            stdout = ""
+            stderr = ""
+
+        return Result()
+
+    monkeypatch.setattr("kicad_mcp.tools.export.subprocess.run", fake_run)
+    monkeypatch.setattr(
+        "kicad_mcp.tools.export.get_cli_capabilities",
+        lambda _cli: CliCapabilities(
+            version="KiCad 10.0.1",
+            supports_odb_export=True,
+            supports_cli_variant=True,
+        ),
+    )
+
+    server = build_server("full")
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+    await call_tool_text(server, "variant_create", {"name": "fab"})
+    await call_tool_text(server, "variant_set_active", {"name": "fab"})
+
+    text = await call_tool_text(server, "export_odb", {})
+
+    assert text.startswith(LOW_LEVEL_EXPORT_NOTICE)
+    assert "ODB++ exported" in text
+    assert commands
+    assert commands[0][3] == "odb"
+    assert "--compression" in commands[0]
+    assert "--variant" in commands[0] and "fab" in commands[0]
+
+
+@pytest.mark.anyio
+async def test_export_odb_reports_unsupported_cli(sample_project, monkeypatch) -> None:
+    monkeypatch.setattr(
+        "kicad_mcp.tools.export.get_cli_capabilities",
+        lambda _cli: CliCapabilities(version="KiCad 9.0.7", supports_odb_export=False),
+    )
+
+    server = build_server("full")
+    await call_tool_text(server, "kicad_set_project", {"project_dir": str(sample_project)})
+
+    text = await call_tool_text(server, "export_odb", {})
+
+    assert text.startswith(LOW_LEVEL_EXPORT_NOTICE)
+    assert "ODB++ export is not supported" in text
+
+
+@pytest.mark.anyio
 async def test_low_level_exports_include_debug_notice(sample_project, monkeypatch) -> None:
     def fake_run(cmd, *args: object, **kwargs: object):
         _ = args, kwargs

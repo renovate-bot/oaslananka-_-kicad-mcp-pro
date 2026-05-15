@@ -233,6 +233,7 @@ TOOL_CATEGORIES: dict[str, ToolCategory] = {
             "export_3d_render",
             "export_pick_and_place",
             "export_ipc2581",
+            "export_odb",
             "export_svg",
             "export_dxf",
             "pcb_export_3d_pdf",

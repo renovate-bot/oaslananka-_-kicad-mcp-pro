@@ -17,6 +17,7 @@ async def test_server_registers_tools_resources_and_prompts(sample_project, mock
 
     assert "kicad_get_version" in tool_names
     assert "kicad_set_project" in tool_names
+    assert "export_odb" in tool_names
     assert "kicad://board/summary" in resource_uris
     assert "kicad://project/quality_gate" in resource_uris
     assert "kicad://project/fix_queue" in resource_uris
@@ -28,6 +29,9 @@ async def test_server_registers_tools_resources_and_prompts(sample_project, mock
     assert "kicad://schematic/connectivity" in resource_uris
     assert "kicad://board/placement_quality" in resource_uris
     assert "kicad://board/layer_coverage" in resource_uris
+    assert "kicad://analysis/materials" in resource_uris
+    assert "kicad://analysis/defaults" in resource_uris
+    assert "kicad://analysis/stackup" in resource_uris
     assert "kicad://gate/{gate_name}" in resource_templates
     assert "first_pcb" in prompt_names
     assert "design_review_loop" in prompt_names

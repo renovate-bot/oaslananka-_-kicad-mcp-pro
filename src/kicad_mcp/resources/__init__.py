@@ -1,3 +1,3 @@
 """Resource registrations."""
 
-__all__ = ["board_state", "studio_context"]
+__all__ = ["analysis", "board_state", "studio_context"]

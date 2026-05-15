@@ -30,6 +30,8 @@ The `manufacturing` profile keeps its export surface narrow: use `get_board_stat
 and `export_manufacturing_package()` for the gated handoff. Low-level `export_*()`
 tools remain available in broader profiles such as `full` and `minimal` for debugging
 or interchange output, and those direct exports do not enforce `project_quality_gate()`.
+KiCad 10 installations that advertise ODB++ support also expose `export_odb()` for
+zip-compressed ODB++ manufacturing interchange alongside IPC-2581.
 
 For flat multi-sheet projects, `export_bom()` and
 `validate_footprints_vs_schematic()` consolidate sibling `.kicad_sch` files in the
@@ -99,6 +101,9 @@ still includes a readable summary for clients that do not consume structured out
 
 The MCP resource surface mirrors the current review state so an agent can iterate safely:
 
+- `kicad://analysis/materials`
+- `kicad://analysis/defaults`
+- `kicad://analysis/stackup`
 - `kicad://project/quality_gate`
 - `kicad://project/fix_queue`
 - `kicad://project/spec`
@@ -107,6 +112,10 @@ The MCP resource surface mirrors the current review state so an agent can iterat
 - `kicad://schematic/connectivity`
 - `kicad://board/placement_quality`
 - `kicad://gate/{gate_name}`
+
+The analysis resources are JSON-first. They expose dielectric material data,
+analysis model defaults and schemas, and the active stackup so SI, PI, and EMC
+workflows can cite their physical assumptions instead of relying on hidden defaults.
 
 ## Prompt Workflows
 
