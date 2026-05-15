@@ -20,6 +20,9 @@ defaults:
   run:
     shell: bash
 
+env:
+  HADOLINT_IMAGE: ghcr.io/hadolint/hadolint@sha256:9259e253a4e299b50c92006149dd3a171c7ea3c5bd36f060022b5d2c1ff0fbbe
+
 jobs:
   hadolint:
     name: Hadolint
@@ -31,14 +34,10 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
-      - uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5
-        with:
-          dockerfile: Dockerfile
-          failure-threshold: error
-      - uses: hadolint/hadolint-action@2332a7b74a6de0dda2e2221d575162eba76ba5e5
-        with:
-          dockerfile: Dockerfile.kicad10
-          failure-threshold: error
+      - name: Lint Dockerfile
+        run: docker run --rm -i "${HADOLINT_IMAGE}" hadolint --failure-threshold error - < Dockerfile
+      - name: Lint Dockerfile.kicad10
+        run: docker run --rm -i "${HADOLINT_IMAGE}" hadolint --failure-threshold error - < Dockerfile.kicad10
 
   compose:
     name: Compose Validation

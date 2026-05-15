@@ -27,6 +27,8 @@ jobs:
     env:
       HUSKY: 0
       KICAD_SMOKE_ARTIFACTS: artifacts/kicad-cli-smoke
+      KICAD_APPIMAGE_URL: https://mirrors.mit.edu/kicad/appimage/stable/kicad-10.0.2-x86_64-lite.AppImage.tar
+      KICAD_APPIMAGE_SHA256: 8d2a2731bab2174aa71d2692834eb3cc17d3663605b4c55cd75b59711969df76
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v4.2.2
@@ -42,16 +44,26 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install KiCad 10 from official PPA
+      - name: Install KiCad 10 from official AppImage
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends software-properties-common ca-certificates
-          sudo add-apt-repository --yes ppa:kicad/kicad-10.0-releases
-          sudo apt-get update
-          sudo apt-get install -y --install-recommends kicad
-          command -v kicad-cli
-          kicad-cli version
-          echo "KICAD_MCP_KICAD_CLI=$(command -v kicad-cli)" >> "${GITHUB_ENV}"
+          sudo apt-get install -y --no-install-recommends ca-certificates curl file libfuse2 libgl1 libglib2.0-0
+          install -d "${RUNNER_TEMP}/kicad-appimage" "${RUNNER_TEMP}/kicad-extract"
+          curl -fsSL "${KICAD_APPIMAGE_URL}" -o "${RUNNER_TEMP}/kicad.AppImage.tar"
+          printf '%s  %s\n' "${KICAD_APPIMAGE_SHA256}" "${RUNNER_TEMP}/kicad.AppImage.tar" | sha256sum -c -
+          tar -xf "${RUNNER_TEMP}/kicad.AppImage.tar" -C "${RUNNER_TEMP}/kicad-appimage"
+          appimage="$(find "${RUNNER_TEMP}/kicad-appimage" -maxdepth 1 -type f -name '*.AppImage' | head -n 1)"
+          test -n "${appimage}"
+          chmod +x "${appimage}"
+          (
+            cd "${RUNNER_TEMP}/kicad-extract"
+            "${appimage}" --appimage-extract >/dev/null
+          )
+          cli="${RUNNER_TEMP}/kicad-extract/squashfs-root/usr/bin/kicad-cli"
+          test -x "${cli}"
+          "${cli}" version
+          echo "KICAD_MCP_KICAD_CLI=${cli}" >> "${GITHUB_ENV}"
+          echo "${RUNNER_TEMP}/kicad-extract/squashfs-root/usr/bin" >> "${GITHUB_PATH}"
 
       - name: Install project dependencies
         run: |
