@@ -47,10 +47,15 @@ When rotating secrets:
 2. Re-run the sync workflow in `oaslananka/kicad-mcp-pro`.
 3. Verify no hardcoded secrets remain with `git log --all --full-history -- .env*`.
 
-## KiCad 10 Test Runner Access
+## KiCad 10 Smoke Test Runner Access
 
-For the nightly KiCad 9/10 matrix:
+For the KiCad CLI smoke gate:
 
-1. A runner with KiCad 10.0.x installed must be available.
-2. Set `KICAD_CLI_PATH` in the runner environment.
-3. Label the runner `kicad-10` in GitHub Actions.
+1. A self-hosted Linux X64 runner must be available with GitHub Actions labels
+   `[self-hosted, Linux, X64]`.
+2. The workflow downloads the KiCad 10.0.2 Linux AppImage and verifies its
+   SHA-256 before invoking `kicad-cli`.
+3. Set `KICAD_10_APPIMAGE_URL` only when overriding the default official
+   AppImage URL.
+4. Do not reintroduce PPA-based KiCad installation for this gate; the AppImage
+   flow avoids stale apt source failures on the runner.
