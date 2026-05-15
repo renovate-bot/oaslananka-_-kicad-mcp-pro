@@ -46,6 +46,8 @@ jobs:
 
       - name: Install KiCad 10 from official AppImage
         run: |
+          sudo find /etc/apt/sources.list.d -maxdepth 1 \( -name '*kicad*10*releases*.list' -o -name '*kicad*10*releases*.sources' \) -delete
+          sudo sed -i '/ppa\.launchpad\.net\/kicad\/kicad-10\.0-releases/d' /etc/apt/sources.list
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ca-certificates curl file libfuse2 libgl1 libglib2.0-0
           install -d "${RUNNER_TEMP}/kicad-appimage" "${RUNNER_TEMP}/kicad-extract"
