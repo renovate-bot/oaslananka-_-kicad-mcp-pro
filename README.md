@@ -7,7 +7,7 @@
 [![Docs](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/docs.yml/badge.svg)](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/docs.yml)
 [![Release](https://img.shields.io/github/actions/workflow/status/oaslananka/kicad-mcp-pro/release-please.yml?branch=main&label=release)](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/release-please.yml)
 [![Codecov](https://codecov.io/gh/oaslananka/kicad-mcp-pro/branch/main/graph/badge.svg)](https://codecov.io/gh/oaslananka/kicad-mcp-pro)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/oaslananka/kicad-mcp-pro/badge)](https://scorecard.dev/viewer/?uri=github.com/oaslananka/kicad-mcp-pro)
+[![OpenSSF Scorecard](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/scorecard.yml/badge.svg?branch=main)](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/scorecard.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
 [![KiCad 10](https://img.shields.io/badge/KiCad-10-success.svg)](https://www.kicad.org)
