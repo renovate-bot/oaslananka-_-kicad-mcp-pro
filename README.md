@@ -1,13 +1,13 @@
 # KiCad MCP Pro Server
 
-<!-- mcp-name: io.github.oaslananka-lab/kicad-mcp-pro -->
+<!-- mcp-name: io.github.oaslananka/kicad-mcp-pro -->
 
 [![PyPI](https://img.shields.io/pypi/v/kicad-mcp-pro.svg)](https://pypi.org/project/kicad-mcp-pro/)
-[![CI](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/ci.yml)
-[![Docs](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/docs.yml/badge.svg)](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/docs.yml)
-[![Release](https://img.shields.io/github/actions/workflow/status/oaslananka-lab/kicad-mcp-pro/release-please.yml?branch=main&label=release)](https://github.com/oaslananka-lab/kicad-mcp-pro/actions/workflows/release-please.yml)
-[![Codecov](https://codecov.io/gh/oaslananka-lab/kicad-mcp-pro/branch/main/graph/badge.svg)](https://codecov.io/gh/oaslananka-lab/kicad-mcp-pro)
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/oaslananka-lab/kicad-mcp-pro/badge)](https://scorecard.dev/viewer/?uri=github.com/oaslananka-lab/kicad-mcp-pro)
+[![CI](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/ci.yml/badge.svg)](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/ci.yml)
+[![Docs](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/docs.yml/badge.svg)](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/docs.yml)
+[![Release](https://img.shields.io/github/actions/workflow/status/oaslananka/kicad-mcp-pro/release-please.yml?branch=main&label=release)](https://github.com/oaslananka/kicad-mcp-pro/actions/workflows/release-please.yml)
+[![Codecov](https://codecov.io/gh/oaslananka/kicad-mcp-pro/branch/main/graph/badge.svg)](https://codecov.io/gh/oaslananka/kicad-mcp-pro)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/oaslananka/kicad-mcp-pro/badge)](https://scorecard.dev/viewer/?uri=github.com/oaslananka/kicad-mcp-pro)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12%2B-blue.svg)](pyproject.toml)
 [![KiCad 10](https://img.shields.io/badge/KiCad-10-success.svg)](https://www.kicad.org)
@@ -17,9 +17,11 @@ KiCad MCP Pro is a Model Context Protocol server for KiCad PCB and schematic wor
 
 Use it with Claude Desktop, Claude Code, Cursor, VS Code, Codex, or any MCP-compatible client.
 
-Canonical repository: https://github.com/oaslananka-lab/kicad-mcp-pro
+Canonical repository: https://github.com/oaslananka/kicad-mcp-pro
 
-Personal showcase mirror: https://github.com/oaslananka/kicad-mcp-pro
+Container migration: the previous GHCR namespace is retired. Use
+`ghcr.io/oaslananka/kicad-mcp-pro` for all Docker installs and MCP client
+configurations.
 
 ## Quick Start
 
@@ -117,6 +119,7 @@ Demo media guidance lives in [docs/demo-media.md](docs/demo-media.md).
 - [Maintenance policy](docs/maintenance-policy.md)
 - [Workflow security](docs/workflow-security.md)
 - [Publishing](docs/publishing.md)
+- [Privacy policy](docs/privacy.md)
 - [Release integrity](docs/security/release-integrity.md)
 - [Docker install](docs/install/docker.md)
 - [Client config generator](docs/install/client-config-generator.md)
@@ -127,7 +130,7 @@ Demo media guidance lives in [docs/demo-media.md](docs/demo-media.md).
 ## Repository Operations
 
 Normal CI and security workflows run on pull requests, pushes, and merge queue
-events. Release, publish, mirroring, deployment, and token-backed jobs remain
+events. Release, publish, deployment, and token-backed jobs remain
 guarded behind explicit repository checks and protected environments.
 
 The project uses Dependabot, Renovate, CodeQL, Gitleaks, Trivy, OpenSSF

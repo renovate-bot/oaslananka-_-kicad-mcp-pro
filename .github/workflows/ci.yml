@@ -28,11 +28,11 @@ defaults:
 
 jobs:
   validate:
-    name: Validate (${{ matrix.os }}, Python ${{ matrix.python-version }})
+    name: Validate (Python ${{ matrix.python-version }})
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.draft == false
-    runs-on: ${{ matrix.os }}
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 35
     env:
       HUSKY: 0
@@ -42,39 +42,26 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-24.04
-          - macos-15
-          - windows-2025-vs2026
         python-version:
           - "3.12"
           - "3.13"
-          - "3.14"
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
         with:
           persist-credentials: false
       - name: Set up Node.js
-        if: runner.os != 'Windows'
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version-file: .node-version
           package-manager-cache: false
-      - name: Set up Node.js
-        if: runner.os == 'Windows'
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version-file: .node-version
       - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
         with:
           python-version: ${{ matrix.python-version }}
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c
-        if: matrix.os == 'ubuntu-24.04'
         with:
           go-version: stable
           cache: false
       - name: Install workflow lint tools
-        if: matrix.os == 'ubuntu-24.04'
         run: |
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.7
           echo "${HOME}/go/bin" >> "${GITHUB_PATH}"
@@ -84,19 +71,9 @@ jobs:
           corepack pnpm install --frozen-lockfile
           uv sync --all-extras --frozen
       - name: Run full CI tasks
-        if: matrix.os == 'ubuntu-24.04'
         run: corepack pnpm run check:ci
-      - name: Run cross-platform smoke tasks
-        if: matrix.os != 'ubuntu-24.04'
-        run: |
-          corepack pnpm run check:metadata
-          corepack pnpm run lint
-          corepack pnpm run format:check
-          corepack pnpm run typecheck
-          corepack pnpm run test:unit
       - name: Upload coverage to Codecov
         if: >-
-          matrix.os == 'ubuntu-24.04' &&
           matrix.python-version == '3.12' &&
           (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
         uses: codecov/codecov-action@57e3a136b779b570ffcdbf80b3bdc90e7fab3de2
@@ -104,7 +81,7 @@ jobs:
           files: coverage.xml
           flags: py${{ matrix.python-version }}
           fail_ci_if_error: true
-          slug: oaslananka-lab/kicad-mcp-pro
+          slug: oaslananka/kicad-mcp-pro
           use_oidc: true
       - name: Publish test results
         if: always() && hashFiles('**/junit.xml', '**/test-results.xml') != ''
@@ -158,7 +135,7 @@ jobs:
       (success() || failure()) &&
       (github.event_name != 'pull_request' ||
       github.event.pull_request.draft == false)
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 5
     needs:
       - validate

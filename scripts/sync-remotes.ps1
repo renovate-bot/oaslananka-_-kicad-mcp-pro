@@ -27,12 +27,9 @@ function Ensure-Remote {
 }
 
 $repoName = Split-Path -Leaf (git rev-parse --show-toplevel)
-Ensure-Remote "personal" "git@github.com:oaslananka/${repoName}.git"
-Ensure-Remote "org" "git@github.com:oaslananka-lab/${repoName}.git"
+Ensure-Remote "origin" "git@github.com:oaslananka/${repoName}.git"
 
-git push personal $Branch
-git push org $Branch
+git push origin $Branch
 if ($pushTags -eq "true") {
-    git push personal --tags
-    git push org --tags
+    git push origin --tags
 }

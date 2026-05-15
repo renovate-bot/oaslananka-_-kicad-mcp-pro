@@ -1,7 +1,7 @@
 # Release Integrity
 
-Release integrity controls are emitted only from the canonical organization
-repository, `oaslananka-lab/kicad-mcp-pro`.
+Release integrity controls are emitted only from the canonical repository,
+`oaslananka/kicad-mcp-pro`.
 
 ## SBOM
 
@@ -44,7 +44,7 @@ CLI:
 
 ```bash
 python -m sigstore verify identity \
-  --cert-identity "https://github.com/oaslananka-lab/kicad-mcp-pro/.github/workflows/release-please.yml@refs/tags/v<version>" \
+  --cert-identity "https://github.com/oaslananka/kicad-mcp-pro/.github/workflows/release-please.yml@refs/tags/v<version>" \
   --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
   dist/kicad_mcp_pro-<version>-py3-none-any.whl
 ```
@@ -59,14 +59,14 @@ Verify a local artifact:
 
 ```bash
 gh attestation verify dist/kicad_mcp_pro-<version>-py3-none-any.whl \
-  --repo oaslananka-lab/kicad-mcp-pro
+  --repo oaslananka/kicad-mcp-pro
 ```
 
 For source distributions:
 
 ```bash
 gh attestation verify dist/kicad_mcp_pro-<version>.tar.gz \
-  --repo oaslananka-lab/kicad-mcp-pro
+  --repo oaslananka/kicad-mcp-pro
 ```
 
 ## GHCR Image Digest and Provenance
@@ -74,20 +74,20 @@ gh attestation verify dist/kicad_mcp_pro-<version>.tar.gz \
 Inspect the published image digest:
 
 ```bash
-docker buildx imagetools inspect ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>
+docker buildx imagetools inspect ghcr.io/oaslananka/kicad-mcp-pro:<version>
 ```
 
 Pull by digest for reproducible deployment:
 
 ```bash
-docker pull ghcr.io/oaslananka-lab/kicad-mcp-pro@sha256:<digest>
+docker pull ghcr.io/oaslananka/kicad-mcp-pro@sha256:<digest>
 ```
 
 Verify the image attestation with GitHub CLI:
 
 ```bash
-gh attestation verify oci://ghcr.io/oaslananka-lab/kicad-mcp-pro@sha256:<digest> \
-  --repo oaslananka-lab/kicad-mcp-pro
+gh attestation verify oci://ghcr.io/oaslananka/kicad-mcp-pro@sha256:<digest> \
+  --repo oaslananka/kicad-mcp-pro
 ```
 
 The Docker workflow publishes provenance only when the image is pushed.
@@ -98,7 +98,7 @@ The release workflow is configured for PyPI Trusted Publishing through GitHub
 Actions OIDC. PyPI and TestPyPI project owners must configure trusted
 publishers for:
 
-- Owner: `oaslananka-lab`
+- Owner: `oaslananka`
 - Repository: `kicad-mcp-pro`
 - Workflow: `release-please.yml`
 - Environment: `release`

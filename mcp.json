@@ -1,15 +1,15 @@
 {
-  "name": "io.github.oaslananka-lab/kicad-mcp-pro",
+  "name": "io.github.oaslananka/kicad-mcp-pro",
   "title": "KiCad MCP Pro",
   "display_name": "KiCad MCP Pro",
   "description": "MCP server for KiCad schematic, PCB, validation, DFM, and export workflows.",
   "version": "3.4.3",
   "repository": {
-    "url": "https://github.com/oaslananka-lab/kicad-mcp-pro",
+    "url": "https://github.com/oaslananka/kicad-mcp-pro",
     "source": "github"
   },
   "homepage": "https://github.com/oaslananka/kicad-mcp-pro",
-  "websiteUrl": "https://oaslananka-lab.github.io/kicad-mcp-pro",
+  "websiteUrl": "https://oaslananka.github.io/kicad-mcp-pro",
   "license": "MIT",
   "categories": [
     "eda",
@@ -42,8 +42,8 @@
     {
       "registryType": "oci",
       "registry": "container",
-      "identifier": "ghcr.io/oaslananka-lab/kicad-mcp-pro:3.4.3",
-      "image": "ghcr.io/oaslananka-lab/kicad-mcp-pro",
+      "identifier": "ghcr.io/oaslananka/kicad-mcp-pro:3.4.3",
+      "image": "ghcr.io/oaslananka/kicad-mcp-pro",
       "command": "kicad-mcp-pro",
       "runtimeHint": "docker",
       "transport": {

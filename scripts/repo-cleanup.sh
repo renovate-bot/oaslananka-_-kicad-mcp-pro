@@ -3,8 +3,7 @@
 set -euo pipefail
 
 APPLY="${1:-}"
-REPO_CANONICAL="oaslananka-lab/kicad-mcp-pro"
-REPO_SHOWCASE="oaslananka/kicad-mcp-pro"
+REPO_CANONICAL="oaslananka/kicad-mcp-pro"
 
 say() { printf '\033[1;36m[plan]\033[0m %s\n' "$*"; }
 
@@ -41,7 +40,7 @@ git for-each-ref --format='%(refname:short) %(upstream:track) %(committerdate:un
     done
 
 echo
-echo "== Remote branches on canonical org repo older than 90 days without open PRs =="
+echo "== Remote branches on canonical repo older than 90 days without open PRs =="
 gh api -X GET "/repos/${REPO_CANONICAL}/branches?per_page=100" --jq '.[].name' \
   | awk '$0 !~ /^(main|master|develop|gh-pages)$/ && $0 !~ /^(release|hotfix)[/]/ { print }' \
   | while read -r br; do
@@ -51,18 +50,6 @@ gh api -X GET "/repos/${REPO_CANONICAL}/branches?per_page=100" --jq '.[].name' \
       last=$(gh api "/repos/${REPO_CANONICAL}/commits/${sha}" --jq '.commit.committer.date' 2>/dev/null) || continue
       if [[ "$last" < "$(cutoff_iso 90)" ]]; then
         run_or_print gh api -X DELETE "/repos/${REPO_CANONICAL}/git/refs/heads/${br}"
-      fi
-    done
-
-echo
-echo "== Remote branches on personal showcase older than 90 days =="
-gh api -X GET "/repos/${REPO_SHOWCASE}/branches?per_page=100" --jq '.[].name' \
-  | awk '$0 !~ /^(main|master|develop|gh-pages)$/ && $0 !~ /^(release|hotfix)[/]/ { print }' \
-  | while read -r br; do
-      sha=$(gh api "/repos/${REPO_SHOWCASE}/branches/${br}" --jq '.commit.sha' 2>/dev/null) || continue
-      last=$(gh api "/repos/${REPO_SHOWCASE}/commits/${sha}" --jq '.commit.committer.date' 2>/dev/null) || continue
-      if [[ "$last" < "$(cutoff_iso 90)" ]]; then
-        run_or_print gh api -X DELETE "/repos/${REPO_SHOWCASE}/git/refs/heads/${br}"
       fi
     done
 
@@ -85,12 +72,6 @@ git ls-remote --tags "https://github.com/${REPO_CANONICAL}.git" \
   | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' | sort -u > /tmp/canonical_tags.txt
 gh release list --repo "$REPO_CANONICAL" --limit 200 --json tagName --jq '.[].tagName' | sort -u > /tmp/canonical_releases.txt
 comm -23 /tmp/canonical_tags.txt /tmp/canonical_releases.txt | sed 's/^/  /'
-
-echo
-echo "Tag mismatch where showcase has tags canonical lacks:"
-git ls-remote --tags "https://github.com/${REPO_SHOWCASE}.git" \
-  | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' | sort -u > /tmp/org_tags.txt
-comm -23 /tmp/org_tags.txt /tmp/canonical_tags.txt | sed 's/^/  /'
 
 echo
 if [ "$APPLY" != "--apply" ]; then

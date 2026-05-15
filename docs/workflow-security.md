@@ -3,12 +3,12 @@
 ## Required Posture
 
 - Default workflow permissions are `contents: read`.
-- Jobs that publish, release, mirror, deploy, attest, or mutate issues/labels use
+- Jobs that publish, release, deploy, attest, or mutate issues/labels use
   job-scoped permissions and explicit repository or environment guards.
 - Normal CI, lint, test, docs, CodeQL, Gitleaks, Trivy, and workflow-security
-  checks run on organization pull requests and canonical organization pushes.
-  Publishing, release, registry, mirror, package-manager, signing, and deploy
-  jobs keep `github.repository == 'oaslananka-lab/kicad-mcp-pro'` guards.
+  checks run on pull requests and canonical pushes.
+  Publishing, release, registry, package-manager, signing, and deploy
+  jobs keep `github.repository == 'oaslananka/kicad-mcp-pro'` guards.
 - Third-party Actions are pinned to full commit SHAs resolved from upstream refs.
   Do not replace these with fabricated SHAs.
 - JavaScript Actions should declare `runs.using: node24` when an upstream

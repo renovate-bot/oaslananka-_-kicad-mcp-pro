@@ -40,8 +40,8 @@ defaults:
 jobs:
   maintenance:
     name: Manual Actions maintenance
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
+    if: github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     steps:
       - name: Checkout canonical repository
@@ -170,5 +170,5 @@ jobs:
 
           {
             echo
-            echo "No releases, packages, tags, or mirror force pushes are created by this workflow."
+            echo "No releases, packages, tags, or force pushes are created by this workflow."
           } >> "${GITHUB_STEP_SUMMARY}"

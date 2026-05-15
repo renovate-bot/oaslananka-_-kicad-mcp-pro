@@ -23,7 +23,7 @@ defaults:
 jobs:
   audit:
     name: Security
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 25
     permissions:
       contents: read

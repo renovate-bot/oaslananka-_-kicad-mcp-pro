@@ -91,12 +91,12 @@ const CLASSES = [
     human_approval_required: false,
   },
   {
-    id: "personal-mirror-tag-clobber",
+    id: "release-tag-collision",
     patterns: [/would clobber existing tag/i, /stale tag/i, /refs\/tags\/v[\w.-]+.*rejected/i, /tag .* already exists/i],
     root_cause:
-      "The personal showcase mirror already has a version tag with the same name pointing at a different object.",
+      "The repository already has a version tag with the same name pointing at a different object.",
     safe_fix:
-      "Leave package release state alone and repair divergent showcase refs through a reviewed maintenance change.",
+      "Leave package release state alone and repair the divergent tag through a reviewed maintenance change.",
     auto_fix_allowed: false,
     publish_must_stop: false,
     human_approval_required: true,
@@ -173,7 +173,7 @@ Options:
 }
 
 function parseArgs(argv) {
-  const args = { json: false, repo: process.env.GITHUB_REPOSITORY || "oaslananka-lab/kicad-mcp-pro" };
+  const args = { json: false, repo: process.env.GITHUB_REPOSITORY || "oaslananka/kicad-mcp-pro" };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--help" || arg === "-h") {

@@ -38,7 +38,7 @@ def test_publish_adapter_dry_run_success(monkeypatch) -> None:
 
     assert result["dry_run"] is True
     assert result["target"] == "generic"
-    assert result["manifest"]["name"] == "io.github.oaslananka-lab/kicad-mcp-pro"
+    assert result["manifest"]["name"] == "io.github.oaslananka/kicad-mcp-pro"
 
 
 def test_publish_adapter_fails_without_token_on_real_publish(monkeypatch) -> None:

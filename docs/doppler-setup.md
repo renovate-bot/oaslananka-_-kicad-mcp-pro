@@ -4,22 +4,21 @@ This repository expects Doppler project `all`, config `main`.
 
 ## Manually Required GitHub Secret
 
-Set exactly one GitHub secret manually in the organization repository:
+Set exactly one GitHub secret manually in the canonical repository:
 
 - `DOPPLER_TOKEN`
 
 The token must be a read-only Doppler service token scoped to project `all`, config `main`.
 
-Set it in `oaslananka-lab/kicad-mcp-pro`. The organization repository may
-inherit the secret from the organization if that is easier to maintain.
+Set it in `oaslananka/kicad-mcp-pro`.
 
 Workflow service secrets such as `DOPPLER_GITHUB_SERVICE_TOKEN`,
-`PERSONAL_REPO_PUSH_TOKEN`, and `SAFETY_API_KEY` may be present as GitHub
-Actions secrets at runtime. Prefer projecting them into GitHub by Doppler GitHub
-Sync. Release publishing uses trusted publishing where available; package-index
-tokens remain Doppler-managed fallback inputs and must not be printed.
+and `SAFETY_API_KEY` may be present as GitHub Actions secrets at runtime.
+Prefer projecting them into GitHub by Doppler GitHub Sync. Release publishing
+uses trusted publishing where available; package-index tokens remain
+Doppler-managed fallback inputs and must not be printed.
 
-`CODECOV_TOKEN` is maintained as an organization-level selected GitHub secret
+`CODECOV_TOKEN` is maintained as a selected GitHub secret
 for coverage upload only. Do not store or fetch a Codecov API token for CI.
 
 ## Doppler GitHub Sync
@@ -27,8 +26,8 @@ for coverage upload only. Do not store or fetch a Codecov API token for CI.
 In the Doppler dashboard:
 
 1. Open project `all`, config `main`.
-2. Install the GitHub integration for `oaslananka-lab`.
-3. Create a sync to `oaslananka-lab/kicad-mcp-pro` repository secrets.
+2. Install the GitHub integration for `oaslananka`.
+3. Create a sync to `oaslananka/kicad-mcp-pro` repository secrets.
 4. Use replace mode so GitHub remains a projection of Doppler, not a second source of truth.
 
 ## Required Secrets
@@ -58,8 +57,7 @@ Usage:
 
 Workflow service names that may also be projected from Doppler:
 
-- `DOPPLER_GITHUB_SERVICE_TOKEN`: least-privilege GitHub service token for release-please PR creation when organization policy blocks `GITHUB_TOKEN` from opening pull requests.
-- `PERSONAL_REPO_PUSH_TOKEN`: fine-grained token scoped only to `oaslananka/kicad-mcp-pro` for the one-way showcase mirror.
+- `DOPPLER_GITHUB_SERVICE_TOKEN`: least-privilege GitHub service token for release-please PR creation when repository policy blocks `GITHUB_TOKEN` from opening pull requests.
 - `SAFETY_API_KEY`: optional authenticated Safety scan. It is not required for local default gates.
 
 GitHub-only selected secret:

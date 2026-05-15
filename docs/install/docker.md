@@ -3,7 +3,7 @@
 The runtime image is published to GitHub Container Registry:
 
 ```text
-ghcr.io/oaslananka-lab/kicad-mcp-pro
+ghcr.io/oaslananka/kicad-mcp-pro
 ```
 
 The image defaults to stdio MCP behavior and runs as a non-root user. It does
@@ -14,14 +14,14 @@ not include KiCad and does not contain secrets.
 Use this form for MCP clients that communicate over standard input and output:
 
 ```bash
-docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>
+docker run --rm -i ghcr.io/oaslananka/kicad-mcp-pro:<version>
 ```
 
 For reproducible deployments, pin the image by the GHCR digest shown on the
 release package page:
 
 ```bash
-docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro@sha256:<digest>
+docker run --rm -i ghcr.io/oaslananka/kicad-mcp-pro@sha256:<digest>
 ```
 
 Claude Desktop container example:
@@ -31,7 +31,7 @@ Claude Desktop container example:
   "mcpServers": {
     "kicad-mcp-pro": {
       "command": "docker",
-      "args": ["run", "--rm", "-i", "ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>"]
+      "args": ["run", "--rm", "-i", "ghcr.io/oaslananka/kicad-mcp-pro:<version>"]
     }
   }
 }
@@ -42,7 +42,7 @@ Claude Desktop container example:
 Run streamable HTTP explicitly:
 
 ```bash
-docker run --rm -p 3334:3334 ghcr.io/oaslananka-lab/kicad-mcp-pro:<version> kicad-mcp-pro serve --transport http --host 0.0.0.0 --port 3334
+docker run --rm -p 3334:3334 ghcr.io/oaslananka/kicad-mcp-pro:<version> kicad-mcp-pro serve --transport http --host 0.0.0.0 --port 3334
 ```
 
 HTTP mode is not the default because stdio is the safest MCP client path. Bind

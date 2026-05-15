@@ -1,9 +1,8 @@
 # Azure DevOps Manual CI/CD
 
 Azure DevOps is a manual compatibility fallback surface for
-teams that mirror this repository into Azure DevOps. Automated GitHub CI/CD is
-owned by the `oaslananka-lab` organization mirror, while the personal
-`oaslananka` GitHub repository remains the main source repository.
+teams that import this repository into Azure DevOps. Automated GitHub CI/CD is
+owned by `oaslananka/kicad-mcp-pro`.
 
 ## Pipeline Definition
 
@@ -36,19 +35,18 @@ You can store these in a variable group if you want to share them across multipl
 
 ## Release Model
 
-- Automated GitHub CI/security jobs should run from `https://github.com/oaslananka-lab/kicad-mcp-pro`.
+- Automated GitHub CI/security jobs should run from `https://github.com/oaslananka/kicad-mcp-pro`.
 - Azure DevOps should be queued manually when you need the Azure validation path.
 - Package publication is handled only by the GitHub release-please workflow.
-- The personal GitHub repository should not run automatic CI/CD jobs.
 
 ## GitHub Workflows
 
-The repository includes GitHub workflows that are automatic only in the
-`oaslananka-lab` organization mirror and manual elsewhere:
+The repository includes GitHub workflows that are automatic only in
+`oaslananka/kicad-mcp-pro` and manual elsewhere:
 
 - `.github/workflows/ci.yml`
 - `.github/workflows/security.yml`
 - `.github/workflows/release-please.yml`
 
-Release publishing is handled by `.github/workflows/release-please.yml` in the
-org repo through PyPI Trusted Publishing.
+Release publishing is handled by `.github/workflows/release-please.yml`
+through PyPI Trusted Publishing.

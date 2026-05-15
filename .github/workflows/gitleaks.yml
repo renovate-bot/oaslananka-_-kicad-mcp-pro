@@ -23,7 +23,7 @@ defaults:
 jobs:
   scan:
     name: Gitleaks
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 15
     permissions:
       contents: read

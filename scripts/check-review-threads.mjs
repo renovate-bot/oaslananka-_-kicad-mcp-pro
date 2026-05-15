@@ -58,7 +58,7 @@ Options:
 
 function parseArgs(argv) {
   const args = {
-    repo: process.env.GITHUB_REPOSITORY || "oaslananka-lab/kicad-mcp-pro",
+    repo: process.env.GITHUB_REPOSITORY || "oaslananka/kicad-mcp-pro",
     jsonOut: "review-thread-summary.json",
     markdownOut: "review-thread-summary.md",
     failOnBlocked: false,

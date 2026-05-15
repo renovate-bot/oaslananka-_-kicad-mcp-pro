@@ -11,9 +11,9 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: oaslananka-lab/kicad-mcp-pro
+  IMAGE_NAME: oaslananka/kicad-mcp-pro
   IMAGE_DESCRIPTION: "KiCad MCP Pro - Model Context Protocol server for KiCad EDA workflows"
-  MCP_SERVER_NAME: io.github.oaslananka-lab/kicad-mcp-pro
+  MCP_SERVER_NAME: io.github.oaslananka/kicad-mcp-pro
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -25,8 +25,8 @@ defaults:
 jobs:
   resolve-release-ref:
     name: Resolve release ref
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
+    if: github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 5
     permissions:
       contents: read
@@ -55,8 +55,8 @@ jobs:
 
   build:
     name: Build image
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
+    if: github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 30
     needs:
       - resolve-release-ref
@@ -90,14 +90,14 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}},value=${{ env.RELEASE_REF }}
           labels: |
-            org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
+            org.opencontainers.image.source=https://github.com/oaslananka/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ env.RELEASE_REF }}
             org.opencontainers.image.revision=${{ steps.release-meta.outputs.revision }}
             io.modelcontextprotocol.server.name=${{ env.MCP_SERVER_NAME }}
           annotations: |
-            org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
+            org.opencontainers.image.source=https://github.com/oaslananka/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ env.RELEASE_REF }}
@@ -118,8 +118,8 @@ jobs:
 
   publish:
     name: Publish image
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
+    if: github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 30
     needs:
       - resolve-release-ref
@@ -165,14 +165,14 @@ jobs:
             type=sha,prefix=sha-,format=short
             type=semver,pattern={{version}},value=${{ env.RELEASE_REF }}
           labels: |
-            org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
+            org.opencontainers.image.source=https://github.com/oaslananka/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ env.RELEASE_REF }}
             org.opencontainers.image.revision=${{ steps.release-meta.outputs.revision }}
             io.modelcontextprotocol.server.name=${{ env.MCP_SERVER_NAME }}
           annotations: |
-            org.opencontainers.image.source=https://github.com/oaslananka-lab/kicad-mcp-pro
+            org.opencontainers.image.source=https://github.com/oaslananka/kicad-mcp-pro
             org.opencontainers.image.description=${{ env.IMAGE_DESCRIPTION }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.version=${{ env.RELEASE_REF }}

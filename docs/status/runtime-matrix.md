@@ -29,7 +29,7 @@ This matrix describes the supported runtime surface for KiCad MCP Pro.
 
 | Transport | Status | Invocation |
 |---|---|---|
-| stdio | Default | `uvx kicad-mcp-pro` or `docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>` |
+| stdio | Default | `uvx kicad-mcp-pro` or `docker run --rm -i ghcr.io/oaslananka/kicad-mcp-pro:<version>` |
 | streamable-http | Supported | `kicad-mcp-pro serve --transport http --host 0.0.0.0 --port 3334` |
 
 HTTP mode should be bound only on trusted networks unless authentication,

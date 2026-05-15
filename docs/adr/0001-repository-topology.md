@@ -1,35 +1,33 @@
 # ADR-0001: Repository Topology
 
-**Status:** Accepted
-**Date:** 2026-05-04
+**Status:** Accepted, revised
+**Date:** 2026-05-15
 **Deciders:** @oaslananka
 
 ## Context
 
-The project uses two repos:
+The project now uses one canonical GitHub repository:
 
-- `oaslananka-lab/kicad-mcp-pro` - canonical source of truth and release authority.
-- `oaslananka/kicad-mcp-pro` - personal showcase mirror.
+- `oaslananka/kicad-mcp-pro` - canonical source of truth and release authority.
 
-The topology keeps public showcase visibility separate from the repository that
-owns CI/CD, release, registry, package-manager, and signing authority.
+The former split-repository topology has been retired. CI/CD, release, registry,
+package-manager, and signing authority now live in the canonical repository.
 
 ## Decision
 
-Maintain the dual-repo topology with the organization repository as canonical.
-The organization repository contains all source changes and runs CI, security
-scanning, release automation, docs deploy, publishing workflows, SBOM generation,
-Sigstore signing, and artifact attestations.
+Maintain a single canonical repository at `oaslananka/kicad-mcp-pro`. It
+contains all source changes and runs CI, security scanning, release automation,
+docs deploy, publishing workflows, SBOM generation, Sigstore signing, and
+artifact attestations.
 
-Normal contributors open PRs against `oaslananka-lab/kicad-mcp-pro`. The
-personal repository receives only one-way mirrors of `main` and version tags.
+Normal contributors open PRs against `oaslananka/kicad-mcp-pro`.
 
 ## Consequences
 
-- Contributors need to understand that the organization repository owns code review and automation.
-- Public health indicators must point at the organization repository workflows.
+- Contributors have one public source of truth for code review and automation.
+- Public health indicators must point at the canonical repository workflows.
 - The `docs/autonomy.md` document must accurately describe this boundary.
-- Any future maintainer must have access to both repos.
+- Any future maintainer must have access to `oaslananka/kicad-mcp-pro`.
 
 ## Verification
 

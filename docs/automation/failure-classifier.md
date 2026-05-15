@@ -21,7 +21,7 @@ The classifier emits:
 - `release-metadata-drift`
 - `changelog-release-please-noise`
 - `post-publish-smoke-propagation-delay`
-- `personal-mirror-tag-clobber`
+- `release-tag-collision`
 - `workflow-syntax`
 - `test-failure`
 - `typecheck-failure`
@@ -41,7 +41,7 @@ Classify a GitHub Actions run with `gh`:
 
 ```bash
 node scripts/classify-gh-failure.mjs \
-  --repo oaslananka-lab/kicad-mcp-pro \
+  --repo oaslananka/kicad-mcp-pro \
   --run-id 123456789 \
   --json
 ```

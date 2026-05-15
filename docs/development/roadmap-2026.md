@@ -9,7 +9,7 @@ work. It favors small gates and measurable artifacts over large rewrites.
   macOS/Windows.
 - Keep `release:check` scoped to current release sections so historical changelog
   entries do not break normal CI.
-- Ensure organization mirror CI publishes status back to personal PR commits.
+- Ensure self-hosted Linux X64 CI publishes stable status checks for PR commits.
 - Require PR descriptions to include exact commands run and generated artifact
   paths for agent-authored changes.
 
@@ -58,4 +58,4 @@ work. It favors small gates and measurable artifacts over large rewrites.
 
 - Do not add a second release automation system beside release-please.
 - Do not require KiCad GUI for normal `check:ci`.
-- Do not merge mirror-only fixes that should live in the canonical repository.
+- Do not merge fallback-only fixes that should live in the canonical repository.

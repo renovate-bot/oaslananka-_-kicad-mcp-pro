@@ -22,10 +22,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
   PYTHONUNBUFFERED=1
 WORKDIR /app
 
-LABEL io.modelcontextprotocol.server.name="io.github.oaslananka-lab/kicad-mcp-pro" \
+LABEL io.modelcontextprotocol.server.name="io.github.oaslananka/kicad-mcp-pro" \
   org.opencontainers.image.title="kicad-mcp-pro" \
   org.opencontainers.image.description="Professional MCP server for KiCad automation" \
-  org.opencontainers.image.source="https://github.com/oaslananka-lab/kicad-mcp-pro" \
+  org.opencontainers.image.source="https://github.com/oaslananka/kicad-mcp-pro" \
   org.opencontainers.image.version="${KICAD_MCP_VERSION}" \
   org.opencontainers.image.revision="${VCS_REF}" \
   org.opencontainers.image.licenses="MIT"

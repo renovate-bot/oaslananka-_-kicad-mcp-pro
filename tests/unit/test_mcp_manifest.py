@@ -29,8 +29,8 @@ def test_checked_mcp_manifest_is_valid() -> None:
     module = _load_validator()
     manifest = module.validate_manifest_file(ROOT / "mcp.json")
 
-    assert manifest["name"] == "io.github.oaslananka-lab/kicad-mcp-pro"
-    assert manifest["repository"]["url"] == "https://github.com/oaslananka-lab/kicad-mcp-pro"
+    assert manifest["name"] == "io.github.oaslananka/kicad-mcp-pro"
+    assert manifest["repository"]["url"] == "https://github.com/oaslananka/kicad-mcp-pro"
     assert manifest["mcp"]["command"] == "kicad-mcp-pro"
     assert all("registryBaseUrl" not in package for package in manifest["packages"])
     assert all(
@@ -104,7 +104,7 @@ def test_validator_accepts_oci_identifier_with_digest() -> None:
     module = _load_validator()
     manifest = json.loads((ROOT / "mcp.json").read_text(encoding="utf-8"))
     digest = "a" * 64
-    manifest["packages"][1]["identifier"] = f"ghcr.io/oaslananka-lab/kicad-mcp-pro@sha256:{digest}"
+    manifest["packages"][1]["identifier"] = f"ghcr.io/oaslananka/kicad-mcp-pro@sha256:{digest}"
 
     errors = module.validate_manifest(manifest)
 
@@ -124,10 +124,10 @@ def test_validator_accepts_oci_identifier_with_single_repository_segment() -> No
 @pytest.mark.parametrize(
     "identifier",
     [
-        "ghcr.io/oaslananka-lab/kicad-mcp-pro",
-        "ghcr.io/oaslananka-lab/kicad-mcp-pro:",
-        "ghcr.io/oaslananka-lab/kicad-mcp-pro:3.4.0 bad",
-        "https://ghcr.io/oaslananka-lab/kicad-mcp-pro:3.4.0",
+        "ghcr.io/oaslananka/kicad-mcp-pro",
+        "ghcr.io/oaslananka/kicad-mcp-pro:",
+        "ghcr.io/oaslananka/kicad-mcp-pro:3.4.0 bad",
+        "https://ghcr.io/oaslananka/kicad-mcp-pro:3.4.0",
     ],
 )
 def test_validator_rejects_malformed_oci_identifier(identifier: str) -> None:

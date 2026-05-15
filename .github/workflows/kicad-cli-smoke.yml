@@ -22,7 +22,7 @@ defaults:
 jobs:
   smoke-test:
     name: KiCad 10 CLI Smoke
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 45
     env:
       HUSKY: 0

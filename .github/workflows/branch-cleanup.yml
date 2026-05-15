@@ -19,8 +19,8 @@ defaults:
 
 jobs:
   report:
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
+    if: github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd

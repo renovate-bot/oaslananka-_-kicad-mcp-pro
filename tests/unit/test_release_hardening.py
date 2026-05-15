@@ -539,12 +539,9 @@ def test_docker_metadata_contains_mcp_oci_label_and_no_mutable_image_tags() -> N
     assert uv_version
 
     for content in (dockerfile, kicad_dockerfile):
+        assert 'io.modelcontextprotocol.server.name="io.github.oaslananka/kicad-mcp-pro"' in content
         assert (
-            'io.modelcontextprotocol.server.name="io.github.oaslananka-lab/kicad-mcp-pro"'
-            in content
-        )
-        assert (
-            'org.opencontainers.image.source="https://github.com/oaslananka-lab/kicad-mcp-pro"'
+            'org.opencontainers.image.source="https://github.com/oaslananka/kicad-mcp-pro"'
             in content
         )
         assert "ARG KICAD_MCP_VERSION" in content
@@ -560,8 +557,8 @@ def test_docker_metadata_contains_mcp_oci_label_and_no_mutable_image_tags() -> N
     assert "ghcr.io/freerouting/freerouting:2.1.0@sha256:" in compose
     assert ":latest" not in compose
     assert "type=raw,value=latest" not in docker_workflow
-    assert "ghcr.io/oaslananka-lab/kicad-mcp-pro:latest" not in docker_install
-    assert "ghcr.io/oaslananka-lab/kicad-mcp-pro:latest" not in publishing
+    assert "ghcr.io/oaslananka/kicad-mcp-pro:latest" not in docker_install
+    assert "ghcr.io/oaslananka/kicad-mcp-pro:latest" not in publishing
 
 
 def test_version_synchronization_across_release_manifests() -> None:
@@ -610,7 +607,7 @@ def test_version_synchronization_across_release_manifests() -> None:
         "version" not in package for package in server["packages"] if is_oci_package(package)
     )
     assert f'__version__ = "{version}"' in init_py
-    assert "https://oaslananka-lab.github.io/kicad-mcp-pro" in wrapper["homepage"]
+    assert "https://oaslananka.github.io/kicad-mcp-pro" in wrapper["homepage"]
 
 
 def test_release_workflow_retries_post_publish_smoke_check() -> None:
@@ -684,7 +681,7 @@ def test_docs_workflow_deploys_only_from_org_repo() -> None:
     ).read_text(encoding="utf-8")
     shell_suppression = "||" + " true"
 
-    assert "github.repository == 'oaslananka-lab/kicad-mcp-pro'" in workflow
+    assert "github.repository == 'oaslananka/kicad-mcp-pro'" in workflow
     assert "Mirror canonical GitHub Pages" not in workflow
     assert "CANONICAL_PAGES_TOKEN" not in workflow
     assert "github.com/oaslananka/kicad-mcp-pro.git" not in workflow

@@ -16,8 +16,8 @@ PACKAGE_INIT = ROOT / "src" / "kicad_mcp" / "__init__.py"
 MCP_JSON = ROOT / "mcp.json"
 SERVER_JSON = ROOT / "server.json"
 NPM_WRAPPER_PACKAGE = ROOT / "npm-wrapper" / "package.json"
-MCP_SERVER_NAME = "io.github.oaslananka-lab/kicad-mcp-pro"
-GHCR_IMAGE = "ghcr.io/oaslananka-lab/kicad-mcp-pro"
+MCP_SERVER_NAME = "io.github.oaslananka/kicad-mcp-pro"
+GHCR_IMAGE = "ghcr.io/oaslananka/kicad-mcp-pro"
 
 
 def _license_text(project: dict[str, Any]) -> str:

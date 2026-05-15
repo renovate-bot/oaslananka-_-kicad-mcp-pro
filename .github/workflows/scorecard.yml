@@ -25,8 +25,8 @@ defaults:
 jobs:
   analysis:
     name: Scorecard
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
+    if: github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     permissions:
       contents: read

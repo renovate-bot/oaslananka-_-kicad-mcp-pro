@@ -1,7 +1,7 @@
 site_name: KiCad MCP Pro
-site_url: https://oaslananka-lab.github.io/kicad-mcp-pro
-repo_url: https://github.com/oaslananka-lab/kicad-mcp-pro
-repo_name: oaslananka-lab/kicad-mcp-pro
+site_url: https://oaslananka.github.io/kicad-mcp-pro
+repo_url: https://github.com/oaslananka/kicad-mcp-pro
+repo_name: oaslananka/kicad-mcp-pro
 theme:
   name: material
   palette:
@@ -54,6 +54,7 @@ nav:
   - Maintenance Policy: maintenance-policy.md
   - Workflow Security: workflow-security.md
   - Publishing: publishing.md
+  - Privacy Policy: privacy.md
   - Demo Media: demo-media.md
   - Install:
       - Docker: install/docker.md

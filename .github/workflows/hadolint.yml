@@ -23,7 +23,7 @@ defaults:
 jobs:
   hadolint:
     name: Hadolint
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     permissions:
       contents: read
@@ -42,7 +42,7 @@ jobs:
 
   compose:
     name: Compose Validation
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     permissions:
       contents: read

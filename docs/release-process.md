@@ -16,8 +16,8 @@ back to `GITHUB_TOKEN` and hide token-sync drift.
 4. Approve the protected `release` environment gate for the publish job.
 5. Confirm PyPI publish, SBOM, checksums, Sigstore signing artifacts,
    and GitHub attestations.
-6. Confirm docs deploy to the organization repository `gh-pages` branch and
-   `https://oaslananka-lab.github.io/kicad-mcp-pro/` Pages site.
+6. Confirm docs deploy to the canonical repository `gh-pages` branch and
+   `https://oaslananka.github.io/kicad-mcp-pro/` Pages site.
 7. Post a short GitHub Discussions announcement.
 
 ## Release Workflow

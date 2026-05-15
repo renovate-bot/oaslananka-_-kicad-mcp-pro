@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  BUCKET_REPO: oaslananka-lab/scoop-bucket
+  BUCKET_REPO: oaslananka/scoop-bucket
   MANIFEST_PATH: bucket/kicad-mcp-pro.json
 
 concurrency:
@@ -22,8 +22,8 @@ defaults:
 jobs:
   generate:
     name: Generate Scoop manifest
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
+    if: github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     permissions:
       contents: read
@@ -110,8 +110,8 @@ jobs:
 
   publish:
     name: Create bucket PR
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
+    if: github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     needs:
       - generate

@@ -19,8 +19,8 @@ jobs:
     name: Auto-merge Dependabot patch/minor
     if: >-
       github.event.pull_request.user.login == 'dependabot[bot]' &&
-      github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: ubuntu-24.04
+      github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     permissions:
       contents: write

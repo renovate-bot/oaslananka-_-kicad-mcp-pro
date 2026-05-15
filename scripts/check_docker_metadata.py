@@ -7,7 +7,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MCP_SERVER_NAME = "io.github.oaslananka-lab/kicad-mcp-pro"
+MCP_SERVER_NAME = "io.github.oaslananka/kicad-mcp-pro"
 
 
 def _read(path: str) -> str:
@@ -37,7 +37,7 @@ def main() -> int:
     for path, content in dockerfiles.items():
         required = [
             f'io.modelcontextprotocol.server.name="{MCP_SERVER_NAME}"',
-            'org.opencontainers.image.source="https://github.com/oaslananka-lab/kicad-mcp-pro"',
+            'org.opencontainers.image.source="https://github.com/oaslananka/kicad-mcp-pro"',
             "ARG KICAD_MCP_VERSION",
             "ARG VCS_REF",
         ]
@@ -68,7 +68,7 @@ def main() -> int:
         errors.append("docker-publish.yml must not publish a mutable latest tag")
 
     for doc_path in ("docs/install/docker.md", "docs/publishing.md"):
-        if "ghcr.io/oaslananka-lab/kicad-mcp-pro:latest" in _read(doc_path):
+        if "ghcr.io/oaslananka/kicad-mcp-pro:latest" in _read(doc_path):
             errors.append(f"{doc_path} must use versioned or digest-pinned image examples")
 
     if errors:

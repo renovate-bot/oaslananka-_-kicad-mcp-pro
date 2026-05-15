@@ -51,7 +51,7 @@ description = "Test metadata"
 {license_toml}
 
 [project.urls]
-Repository = "https://github.com/oaslananka-lab/kicad-mcp-pro"
+Repository = "https://github.com/oaslananka/kicad-mcp-pro"
 Documentation = "https://docs.example.test"
 """.lstrip(),
         encoding="utf-8",
@@ -97,24 +97,21 @@ def test_release_metadata_is_synchronised() -> None:
         if not is_oci_package(package)
     )
     assert server_oci["registry"] == "container"
-    assert server_oci["image"] == "ghcr.io/oaslananka-lab/kicad-mcp-pro"
+    assert server_oci["image"] == "ghcr.io/oaslananka/kicad-mcp-pro"
     assert server_oci["identifier"] == f"{server_oci['image']}:{version}"
     assert mcp_oci["identifier"] == f"{mcp_oci['image']}:{version}"
     assert "version" not in server_oci
     assert "version" not in mcp_oci
     assert mcp_json["version"] == version
-    assert server_json["name"] == "io.github.oaslananka-lab/kicad-mcp-pro"
-    assert server_json["repository"]["url"] == "https://github.com/oaslananka-lab/kicad-mcp-pro"
-    assert mcp_json["repository"]["url"] == "https://github.com/oaslananka-lab/kicad-mcp-pro"
+    assert server_json["name"] == "io.github.oaslananka/kicad-mcp-pro"
+    assert server_json["repository"]["url"] == "https://github.com/oaslananka/kicad-mcp-pro"
+    assert mcp_json["repository"]["url"] == "https://github.com/oaslananka/kicad-mcp-pro"
     assert npm_wrapper["version"] == version
-    assert npm_wrapper["homepage"] == "https://oaslananka-lab.github.io/kicad-mcp-pro"
-    assert npm_wrapper["mcpName"] == "io.github.oaslananka-lab/kicad-mcp-pro"
-    assert (
-        npm_wrapper["repository"]["url"]
-        == "git+https://github.com/oaslananka-lab/kicad-mcp-pro.git"
-    )
+    assert npm_wrapper["homepage"] == "https://oaslananka.github.io/kicad-mcp-pro"
+    assert npm_wrapper["mcpName"] == "io.github.oaslananka/kicad-mcp-pro"
+    assert npm_wrapper["repository"]["url"] == "git+https://github.com/oaslananka/kicad-mcp-pro.git"
     assert f'__version__ = "{version}"  # x-release-please-version' in package_init
-    assert "<!-- mcp-name: io.github.oaslananka-lab/kicad-mcp-pro -->" in readme
+    assert "<!-- mcp-name: io.github.oaslananka/kicad-mcp-pro -->" in readme
     assert "development/v2-migration.md" in mkdocs
     assert "| `3.x`   | Yes" in security
     assert "CVE-2025-69872" in security

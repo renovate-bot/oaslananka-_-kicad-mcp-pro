@@ -2,28 +2,11 @@
 
 ## Repositories
 
-- Canonical source-of-truth: `oaslananka-lab/kicad-mcp-pro`
-- Personal showcase mirror: `oaslananka/kicad-mcp-pro`
+- Canonical source-of-truth: `oaslananka/kicad-mcp-pro`
 
-The organization repository is the only source repository for CI/CD, release,
+The canonical repository is the only source repository for CI/CD, release,
 publishing, registry updates, package-manager updates, signing, SBOM generation,
-and artifact attestations. The personal repository is a showcase mirror only.
-If repository state differs, the organization repository wins.
-
-## Showcase Mirror
-
-The organization repository mirrors only `main` and version tags to the personal
-showcase repository with `.github/workflows/mirror-personal.yml`.
-
-Direction:
-
-- `oaslananka-lab/kicad-mcp-pro` `main` branch to `oaslananka/kicad-mcp-pro` `main`
-- `v*.*.*` tags from organization to personal showcase
-
-The mirror does not sync pull request branches, release-please branches,
-workflow run state, issues, or GitHub Releases. The mirror workflow uses
-`PERSONAL_REPO_PUSH_TOKEN`, which must be scoped only to the personal showcase
-repository. It does not use the default `GITHUB_TOKEN` for cross-repo writes.
+and artifact attestations.
 
 ## Actions Policy
 
@@ -46,21 +29,13 @@ are not part of the release process.
 
 `.github/workflows/actions-maintenance.yml` can list and classify failed runs,
 reports stale deployments/tags, and can rerun infra-only failures when
-explicitly requested. It does not create releases, packages, tags, or mirror
-force pushes.
+explicitly requested. It does not create releases, packages, tags, or force
+pushes.
 
 References:
 
 - [Failure classifier](automation/failure-classifier.md)
 - [Review thread gate](automation/review-thread-gate.md)
-
-## Mirror Recovery
-
-1. Confirm `PERSONAL_REPO_PUSH_TOKEN` exists in the organization repository and
-   has access only to `oaslananka/kicad-mcp-pro`.
-2. Fix divergence through a reviewed repository maintenance change.
-3. Let `.github/workflows/mirror-personal.yml` fast-forward `main` or add the
-   missing release tag after CI is green.
 
 ## Pending: OIDC Trusted Publishing
 
@@ -70,7 +45,7 @@ GitHub Actions OIDC. Long-lived package-index tokens are not required by
 
 Migration path:
 1. Configure a trusted publisher in the PyPI project settings pointing to
-   `oaslananka-lab/kicad-mcp-pro`, workflow `release-please.yml`, environment `release`.
+   `oaslananka/kicad-mcp-pro`, workflow `release-please.yml`, environment `release`.
 2. Configure the matching trusted publisher in TestPyPI with the same owner,
    repository, workflow, and environment.
 3. Keep `id-token: write` on the release publish job so PyPI can mint short-lived
@@ -100,8 +75,8 @@ summary and does not create issues or delete branches.
 
 ## Auto-Delete Merged PR Branches
 
-Recommended one-time setting on the organization repository:
+Recommended one-time setting on the canonical repository:
 
 ```bash
-gh api -X PATCH /repos/oaslananka-lab/kicad-mcp-pro -f delete_branch_on_merge=true
+gh api -X PATCH /repos/oaslananka/kicad-mcp-pro -f delete_branch_on_merge=true
 ```

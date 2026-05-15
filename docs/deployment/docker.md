@@ -31,7 +31,7 @@ Pass an official Linux x86_64 KiCad 10 AppImage URL from the
 docker build \
   -f Dockerfile.kicad10 \
   --build-arg KICAD_APPIMAGE_URL="https://downloads.kicad.org/path/to/KiCad-10.x-x86_64.AppImage" \
-  -t ghcr.io/oaslananka-lab/kicad-mcp-pro:kicad10-ci .
+  -t ghcr.io/oaslananka/kicad-mcp-pro:kicad10-ci .
 ```
 
 The `:kicad10-ci` tag is intentionally neutral. It represents the local CI image
@@ -43,7 +43,7 @@ Then run a smoke test:
 
 ```bash
 docker run --rm -v "$PWD:/project" \
-  ghcr.io/oaslananka-lab/kicad-mcp-pro:kicad10-ci \
+  ghcr.io/oaslananka/kicad-mcp-pro:kicad10-ci \
   kicad-mcp-pro --help
 ```
 

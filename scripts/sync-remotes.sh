@@ -19,12 +19,9 @@ ensure_remote() {
 }
 
 repo_name="$(basename "$(git rev-parse --show-toplevel)")"
-ensure_remote personal "git@github.com:oaslananka/${repo_name}.git"
-ensure_remote org "git@github.com:oaslananka-lab/${repo_name}.git"
+ensure_remote origin "git@github.com:oaslananka/${repo_name}.git"
 
-git push personal "$branch"
-git push org "$branch"
+git push origin "$branch"
 if [ "$PUSH_TAGS" = "true" ]; then
-  git push personal --tags
-  git push org --tags
+  git push origin --tags
 fi

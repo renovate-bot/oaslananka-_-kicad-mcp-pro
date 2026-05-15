@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 env:
-  TAP_REPO: oaslananka-lab/homebrew-tap
+  TAP_REPO: oaslananka/homebrew-tap
   FORMULA_NAME: kicad-mcp-pro.rb
 
 concurrency:
@@ -22,8 +22,8 @@ defaults:
 jobs:
   generate:
     name: Generate formula
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: macos-15
+    if: github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     permissions:
       contents: read
@@ -100,8 +100,8 @@ jobs:
 
   publish:
     name: Create tap PR
-    if: github.repository == 'oaslananka-lab/kicad-mcp-pro'
-    runs-on: macos-15
+    if: github.repository == 'oaslananka/kicad-mcp-pro'
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     needs:
       - generate

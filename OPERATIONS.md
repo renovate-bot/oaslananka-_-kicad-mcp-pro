@@ -5,7 +5,7 @@ human operator with the appropriate permissions.
 
 ## PyPI Trusted Publishing Setup
 
-Status: not yet configured as of May 2026. The package is published through twine.
+Status: configure before the next protected release if it is not already active.
 
 Required steps:
 
@@ -13,10 +13,10 @@ Required steps:
 2. Navigate to Publishing, then add a new publisher.
 3. Select GitHub Actions.
 4. Set owner to `oaslananka`, repository to `kicad-mcp-pro`, workflow name to
-   `release.yml`, and environment to `release`.
+   `release-please.yml`, and environment to `release`.
 5. Remove token-based PyPI secrets after Trusted Publishing is active.
-6. Update `.github/workflows/release.yml` to use `pypa/gh-action-pypi-publish` with
-   attestations enabled instead of twine.
+6. Keep `.github/workflows/release-please.yml` on OIDC publishing with
+   `id-token: write`.
 
 ## GitHub Protected Environment: release
 
@@ -32,20 +32,19 @@ Required steps:
 
 Create a `docs` protected environment with required reviewers for documentation deployment.
 
-## Scorecard and Codecov Badges on Canonical Repo
+## Scorecard and Codecov Badges
 
 Required steps:
 
 1. Enable GitHub Actions on `oaslananka/kicad-mcp-pro`.
-2. If the lab mirror remains the only CI runner, update README badge notes so the target
-   repository is explicit and not misleading.
+2. Verify README badges point at `oaslananka/kicad-mcp-pro`.
 
 ## Doppler Secret Rotation
 
 When rotating secrets:
 
 1. Update Doppler project `all`, config `main`.
-2. Re-run the sync workflow in `oaslananka-lab/kicad-mcp-pro`.
+2. Re-run the sync workflow in `oaslananka/kicad-mcp-pro`.
 3. Verify no hardcoded secrets remain with `git log --all --full-history -- .env*`.
 
 ## KiCad 10 Test Runner Access

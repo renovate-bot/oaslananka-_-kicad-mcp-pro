@@ -1,17 +1,15 @@
 # Publishing
 
 The canonical source and release authority is
-`https://github.com/oaslananka-lab/kicad-mcp-pro`. The personal repository at
-`https://github.com/oaslananka/kicad-mcp-pro` is a showcase mirror only.
+`https://github.com/oaslananka/kicad-mcp-pro`.
 
 All CI/CD, release, registry, package-manager, signing, provenance, and
-attestation workflows are owned by the organization repository. The personal
-repository must not be used as a release source.
+attestation workflows are owned by that canonical repository.
 
 ## PyPI
 
 Python package releases use `.github/workflows/release-please.yml` in
-`oaslananka-lab/kicad-mcp-pro`. The workflow builds the Python distributions,
+`oaslananka/kicad-mcp-pro`. The workflow builds the Python distributions,
 creates release artifacts, generates SBOM and checksum files, signs artifacts
 with Sigstore, creates GitHub artifact attestations, and publishes to PyPI only
 when release-please reports that a release was created and the protected
@@ -23,8 +21,8 @@ trusted publisher is configured.
 
 ## GitHub Releases
 
-GitHub Release artifacts are produced by `.github/workflows/release-please.yml` in the
-organization repository. Expected release assets include:
+GitHub Release artifacts are produced by `.github/workflows/release-please.yml`.
+Expected release assets include:
 
 - Python wheel and source distribution under `dist/`
 - `SHA256SUMS.txt`
@@ -38,10 +36,10 @@ Verification guidance lives in
 ## GHCR Container Image
 
 Container image publishing is handled by `.github/workflows/docker-publish.yml`
-in the organization repository. The image name is:
+in the canonical repository. The image name is:
 
 ```text
-ghcr.io/oaslananka-lab/kicad-mcp-pro
+ghcr.io/oaslananka/kicad-mcp-pro
 ```
 
 The Docker workflow runs from published GitHub Releases and uses the
@@ -52,13 +50,13 @@ the release version tag or the immutable GHCR digest.
 Use the stdio image with MCP clients:
 
 ```bash
-docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>
+docker run --rm -i ghcr.io/oaslananka/kicad-mcp-pro:<version>
 ```
 
 Run streamable HTTP explicitly:
 
 ```bash
-docker run --rm -p 3334:3334 ghcr.io/oaslananka-lab/kicad-mcp-pro:<version> kicad-mcp-pro serve --transport http --host 0.0.0.0 --port 3334
+docker run --rm -p 3334:3334 ghcr.io/oaslananka/kicad-mcp-pro:<version> kicad-mcp-pro serve --transport http --host 0.0.0.0 --port 3334
 ```
 
 DockerHub publishing is not enabled. The configured DockerHub secrets are
@@ -101,7 +99,7 @@ URL, the adapter fails fast instead of pretending to publish.
 Homebrew tap updates are scaffolded by `.github/workflows/homebrew-publish.yml`
 after a GitHub Release is published.
 
-- The workflow creates a pull request against `oaslananka-lab/homebrew-tap`.
+- The workflow creates a pull request against `oaslananka/homebrew-tap`.
 - The workflow uses `PACKAGE_MANAGER_TOKEN`.
 - The workflow does not push directly to the tap `main` branch.
 
@@ -113,7 +111,7 @@ virtualenv helper and generated Python resources.
 Scoop bucket updates are scaffolded by `.github/workflows/scoop-publish.yml`
 after a GitHub Release is published.
 
-- The workflow creates a pull request against `oaslananka-lab/scoop-bucket`.
+- The workflow creates a pull request against `oaslananka/scoop-bucket`.
 - The workflow uses `PACKAGE_MANAGER_TOKEN`.
 - The workflow does not push directly to the bucket `main` branch.
 
@@ -153,7 +151,6 @@ Required GitHub secrets:
 
 - `MCP_REGISTRY_TOKEN`
 - `PACKAGE_MANAGER_TOKEN`
-- `PERSONAL_REPO_PUSH_TOKEN`
 - `NPM_TOKEN` only if npm trusted publishing is not used for a future wrapper
   publish workflow
 
@@ -168,7 +165,7 @@ Linux and macOS:
 ```bash
 uvx kicad-mcp-pro
 pipx install kicad-mcp-pro
-docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>
+docker run --rm -i ghcr.io/oaslananka/kicad-mcp-pro:<version>
 ```
 
 Windows PowerShell:
@@ -176,7 +173,7 @@ Windows PowerShell:
 ```powershell
 uvx kicad-mcp-pro
 pipx install kicad-mcp-pro
-docker run --rm -i ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>
+docker run --rm -i ghcr.io/oaslananka/kicad-mcp-pro:<version>
 ```
 
 Claude Desktop stdio example:
@@ -208,7 +205,7 @@ Container stdio example:
   "mcpServers": {
     "kicad-mcp-pro": {
       "command": "docker",
-      "args": ["run", "--rm", "-i", "ghcr.io/oaslananka-lab/kicad-mcp-pro:<version>"]
+      "args": ["run", "--rm", "-i", "ghcr.io/oaslananka/kicad-mcp-pro:<version>"]
     }
   }
 }

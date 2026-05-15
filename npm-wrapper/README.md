@@ -27,5 +27,5 @@ npx @oaslananka/kicad-mcp-pro health --json
 ```
 
 The canonical repository and release authority is
-`https://github.com/oaslananka-lab/kicad-mcp-pro`. The personal repository at
+`https://github.com/oaslananka/kicad-mcp-pro`. The personal repository at
 `https://github.com/oaslananka/kicad-mcp-pro` is a showcase mirror.

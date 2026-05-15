@@ -36,11 +36,11 @@ Agent-created PRs must include exact commands run, relevant artifact paths,
 KiCad CLI version output when applicable, and a statement that no gates were
 relaxed.
 
-### 6. Separate canonical and showcase responsibilities
+### 6. Keep one canonical release authority
 
-The organization repository owns review, history, CI/CD, publishing, signing,
-and release state. The personal repository is a showcase mirror only and must
-not become a second automation authority.
+The canonical repository owns review, history, CI/CD, publishing, signing,
+and release state. Fallback imports must not become a second automation
+authority.
 
 ## Quality levels
 

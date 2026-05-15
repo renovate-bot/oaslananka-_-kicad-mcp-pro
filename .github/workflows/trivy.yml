@@ -30,7 +30,7 @@ defaults:
 jobs:
   scan:
     name: Trivy (base image)
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 25
     permissions:
       contents: read
@@ -74,10 +74,10 @@ jobs:
   scan-kicad10:
     name: Trivy (KiCad 10 image)
     if: >
-      github.repository == 'oaslananka-lab/kicad-mcp-pro' &&
+      github.repository == 'oaslananka/kicad-mcp-pro' &&
       github.event_name == 'workflow_dispatch' &&
       inputs.kicad_appimage_url != ''
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 30
     permissions:
       contents: read
