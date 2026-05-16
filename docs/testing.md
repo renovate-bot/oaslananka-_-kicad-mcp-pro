@@ -31,8 +31,9 @@ uv run pytest --cov=kicad_mcp_pro --cov-report=term-missing
 
 Tests run against Python **3.12** and **3.13** on self-hosted Linux X64
 GitHub Actions runners (`runs-on: [self-hosted, Linux, X64]`). The public CI
-matrix intentionally excludes macOS, Windows, and Python 3.14 because the
-repository is pinned to the available self-hosted Linux runner fleet.
+matrix intentionally excludes other operating-system runners and preview Python
+minors because the repository is pinned to the available self-hosted Linux
+runner fleet.
 
 ## Fixtures
 

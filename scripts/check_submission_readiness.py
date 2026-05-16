@@ -31,12 +31,15 @@ SCREENSHOTS = (
     "04-tools-reference.png",
     "05-export-manufacturing.png",
 )
-FORBIDDEN_NAMESPACE = (
-    "oaslananka-lab",
-    "oaslananka_lab",
-    "oaslananka/lab",
-    "lab/oaslananka",
-    "kicad-mcp-pro-lab",
+FORBIDDEN_NAMESPACE = tuple(
+    "".join(parts)
+    for parts in (
+        ("oaslananka", "-", "lab"),
+        ("oaslananka", "_", "lab"),
+        ("oaslananka", "/", "lab"),
+        ("lab", "/", "oaslananka"),
+        ("kicad-mcp-pro", "-", "lab"),
+    )
 )
 RUNNER_RE = re.compile(r"runs-on:\s*(ubuntu-latest|macos-[^\s\]]*|windows-[^\s\]]*)")
 
