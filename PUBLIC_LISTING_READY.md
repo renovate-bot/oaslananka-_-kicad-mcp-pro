@@ -1,8 +1,8 @@
 # Public Listing Readiness Report
 
 **Status:** READY FOR SUBMISSION
-**Date (UTC):** 2026-05-16T00:47:33Z
-**Commit SHA:** f7d1ff781edf8b8fd0888cbaf94fb408ca82f932
+**Date (UTC):** 2026-05-16T03:05:01Z
+**Commit SHA:** d9517861ebbc60e41f27084cecf6dc71d01d2db9
 **Branch:** chore/public-listing-readiness
 **Version:** 3.4.3
 
@@ -43,7 +43,7 @@ $ uv run --all-extras python scripts/check_submission_readiness.py
 | privacy policy | PASS | privacy.md covers data and telemetry |
 | icon assets | PASS | all icon sizes present |
 | screenshot assets | PASS | all screenshot slots valid |
-| demo cast | PASS | 13 frames |
+| demo cast | PASS | 13 frames and demo.gif present |
 | submission docs | PASS | six files at >=150 lines |
 | reviewer prompts | PASS | five prompts |
 | README listing references | PASS | demo and privacy linked |
@@ -52,6 +52,16 @@ $ uv run --all-extras python scripts/check_submission_readiness.py
 | namespace regression | PASS | no forbidden owner strings |
 | runner regression | PASS | no GitHub-hosted runner tokens |
 ```
+
+## Additional Local Verification
+
+| Check | Result | Notes |
+|---|---|---|
+| `pnpm run check` | PASS | Full local check chain passed, including full pytest coverage, Bandit, dependency audit, workflow lint/security, release dry-run, and build. |
+| `uv sync --extra dev --frozen` | PASS | Lockfile resolves with Pillow 12.2.0 for asset tooling. |
+| `uv run mkdocs build --strict` | PASS | Docs build completed under the same command used by the docs workflow. |
+| `lychee --verbose --no-progress README.md docs/**/*.md` | PASS | 118 links checked, 118 OK, 0 errors, 5 redirects. |
+| Demo media asset | PASS | `docs/assets/demo.gif` is committed and produced by the deterministic fallback path when `agg` is unavailable. |
 
 ## Next Steps for Maintainer
 
