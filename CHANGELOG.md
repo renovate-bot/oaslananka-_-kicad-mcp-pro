@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.5.0 (2026-05-16)
+
+### Features
+
+* **assets:** render a deterministic icon PNG set from the SVG source ([c7b1e26](https://github.com/oaslananka/kicad-mcp-pro/commit/c7b1e2699ff3a542da9cc608bdfc68eb096db311))
+* **assets:** add screenshot placeholders and a capture manifest for public listings ([f0d3b8f](https://github.com/oaslananka/kicad-mcp-pro/commit/f0d3b8febc4b1212d4d33bb1fc4fe2dbde62a4d6))
+* **assets:** add a synthetic demo cast and GIF pipeline ([0b7acb6](https://github.com/oaslananka/kicad-mcp-pro/commit/0b7acb6ae35b9989d44c9cd15b7d8688f0b72455))
+* **scripts:** add a public submission readiness validator ([5203615](https://github.com/oaslananka/kicad-mcp-pro/commit/52036156bcc0a7fa907a7f6d482b0deae93d1515))
+
+### Bug Fixes
+
+* **release:** close local link and asset audit gaps before publishing ([d951786](https://github.com/oaslananka/kicad-mcp-pro/commit/d9517861ebbc60e41f27084cecf6dc71d01d2db9))
+* **review:** address public listing readiness review feedback ([c71c218](https://github.com/oaslananka/kicad-mcp-pro/commit/c71c2184eacb44e355a13bf64fe34385ed284267))
+* **scripts:** make branch hygiene succeed on empty stale-branch results ([a1963fe](https://github.com/oaslananka/kicad-mcp-pro/commit/a1963febdbabd1cff79d582e2503d90c176bce6e))
+
+### Documentation
+
+* add the public listing readiness report ([d3a1d15](https://github.com/oaslananka/kicad-mcp-pro/commit/d3a1d159dc81655ac4ea49d2782a20085b4c0fda))
+* clean review markdown spacing in submission documentation ([8340221](https://github.com/oaslananka/kicad-mcp-pro/commit/834022174c35790ff16940976cc1c7aebddb3328))
+* **mkdocs:** add submission navigation and privacy entries ([955cb01](https://github.com/oaslananka/kicad-mcp-pro/commit/955cb01d450137983c5c52853a46b53ade67d38e))
+* add the public listing single source of truth ([247e8ce](https://github.com/oaslananka/kicad-mcp-pro/commit/247e8ced967baa8cc9fd6ccd5112e01d9707e989))
+* **readme:** add the demo GIF, public listings section, and privacy link ([5ccc0ae](https://github.com/oaslananka/kicad-mcp-pro/commit/5ccc0ae8971bda22b1471e83fbf9918bbe196b8e))
+* refresh readiness reports after local and review validation ([d7ebdd1](https://github.com/oaslananka/kicad-mcp-pro/commit/d7ebdd1e329c7340895da6e4deb3a8f5471e788c), [4b21a3b](https://github.com/oaslananka/kicad-mcp-pro/commit/4b21a3be77749043a876a5234ea430b7f115db9b))
+* remove legacy cross-platform and Python 3.14 documentation references ([e2ae97e](https://github.com/oaslananka/kicad-mcp-pro/commit/e2ae97ea0b344b507f525f8b6bf75f045d6895cb))
+* **submission:** add platform-specific submission guides ([578eedd](https://github.com/oaslananka/kicad-mcp-pro/commit/578eedd2249eea9b674e7ef48904ed6b0ad4e538))
+* **tools:** expand the tools reference to the full catalog ([ed779ee](https://github.com/oaslananka/kicad-mcp-pro/commit/ed779ee063ff41e7286a5fc1c6722b0fcc9217f9))
+
+### Tests
+
+* **reviewer:** add machine-readable reviewer prompts ([f86b7d5](https://github.com/oaslananka/kicad-mcp-pro/commit/f86b7d513f699b36dccc303bfd921afb7c61eb8d))
+
 ## [3.4.3](https://github.com/oaslananka/kicad-mcp-pro/compare/v3.4.2...v3.4.3) (2026-05-12)
 
 
@@ -26,7 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * **mcp:** align registry package metadata ([14beab8](https://github.com/oaslananka/kicad-mcp-pro/commit/14beab8cc79cbee1e73c8b2efc537cd6c7d7f66a))
 
-## [3.4.0](https://github.com/oaslananka/kicad-mcp-pro/compare/v3.3.0...v3.4.0) (2026-05-10)
+## 3.4.0 (2026-05-10)
 
 
 ### Features
@@ -102,7 +133,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * point CI badge to public lab workflow ([6d68766](https://github.com/oaslananka/kicad-mcp-pro/commit/6d68766ef3d10bb4c2b2c52971381127ffb20976))
 
-## [3.3.0](https://github.com/oaslananka/kicad-mcp-pro/compare/v3.2.4...v3.3.0) (2026-05-10)
+## 3.3.0 (2026-05-10)
 
 
 ### Features
@@ -179,7 +210,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 * point CI badge to public lab workflow ([6d68766](https://github.com/oaslananka/kicad-mcp-pro/commit/6d68766ef3d10bb4c2b2c52971381127ffb20976))
 
-## [3.2.4](https://github.com/oaslananka/kicad-mcp-pro/compare/v3.2.3...v3.2.4) (2026-05-10)
+## 3.2.4 (2026-05-10)
 
 
 ### Bug Fixes
@@ -333,7 +364,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * keep task install non-admin on windows ([3b020cf](https://github.com/oaslananka/kicad-mcp-pro/commit/3b020cf55e866e32e74c2834a580d5b8c36b0ae8))
 * keep task install non-admin on windows ([9d4b7b4](https://github.com/oaslananka/kicad-mcp-pro/commit/9d4b7b426815f67983d219d852597eaef6554bd8))
 
-## [3.1.2](https://github.com/oaslananka/kicad-mcp-pro/compare/v3.1.1...v3.1.2) (2026-04-29)
+## 3.1.2 (2026-04-29)
 
 
 ### Bug Fixes
@@ -344,7 +375,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * use pypi-compatible license metadata ([f0db726](https://github.com/oaslananka/kicad-mcp-pro/commit/f0db7269c97a305116858e8bce2b7db490ad8dda))
 * use pypi-compatible license metadata ([735f1a3](https://github.com/oaslananka/kicad-mcp-pro/commit/735f1a34e3e57cb1c583ce4457bd700fef66ac85))
 
-## [3.1.1](https://github.com/oaslananka/kicad-mcp-pro/compare/v3.1.0...v3.1.1) (2026-04-28)
+## 3.1.1 (2026-04-28)
 
 
 ### Bug Fixes
@@ -352,7 +383,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * allow release-please service token ([#20](https://github.com/oaslananka/kicad-mcp-pro/issues/20)) ([8ea4dc3](https://github.com/oaslananka/kicad-mcp-pro/commit/8ea4dc3cf747431685b1faa8ebbe17c1d091922b))
 * unblock release publish token verification ([#19](https://github.com/oaslananka/kicad-mcp-pro/issues/19)) ([4ce8aac](https://github.com/oaslananka/kicad-mcp-pro/commit/4ce8aac55cd6d36074a3aa547e6097b3361ac0d3))
 
-## [3.1.0](https://github.com/oaslananka/kicad-mcp-pro/compare/v3.0.2...v3.1.0) (2026-04-28)
+## 3.1.0 (2026-04-28)
 
 
 ### Features
