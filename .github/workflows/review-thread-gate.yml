@@ -28,72 +28,26 @@ jobs:
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 5
     steps:
-      - name: Check unresolved review threads
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
-          script: |
-            const { owner, repo } = context.repo;
-            const prNumber = context.payload.pull_request?.number
-              ?? context.payload.review?.pull_request?.number
-              ?? context.payload.comment?.pull_request_number;
+          node-version-file: .node-version
+          package-manager-cache: false
 
-            if (!prNumber) {
-              core.info('No PR number found, skipping.');
-              return;
-            }
+      - name: Check actionable review threads
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.review.pull_request.number || github.event.comment.pull_request_number }}
+        run: |
+          if [ -z "${PR_NUMBER:-}" ]; then
+            echo 'No PR number found, skipping.'
+            exit 0
+          fi
 
-            // GitHub REST doesn't expose resolved state directly;
-            // use GraphQL and paginate every review thread.
-            const query = `
-              query($owner: String!, $repo: String!, $pr: Int!, $after: String) {
-                repository(owner: $owner, name: $repo) {
-                  pullRequest(number: $pr) {
-                    reviewThreads(first: 100, after: $after) {
-                      pageInfo {
-                        hasNextPage
-                        endCursor
-                      }
-                      nodes { isResolved }
-                    }
-                  }
-                }
-              }
-            `;
-
-            const threads = [];
-            let after = null;
-            for (;;) {
-              let result;
-              try {
-                result = await github.graphql(query, {
-                  owner, repo, pr: prNumber, after
-                });
-              } catch (error) {
-                const status = error.status ?? error.response?.status;
-                if ([403, 404, 422].includes(status)) {
-                  core.setFailed(
-                    `GitHub review-thread query failed with ${status}: ${error.message}`
-                  );
-                  return;
-                }
-                throw error;
-              }
-
-              const reviewThreads = result.repository.pullRequest.reviewThreads;
-              threads.push(...reviewThreads.nodes);
-              if (!reviewThreads.pageInfo.hasNextPage) {
-                break;
-              }
-              after = reviewThreads.pageInfo.endCursor;
-            }
-
-            const unresolved = threads.filter(t => !t.isResolved);
-
-            if (unresolved.length > 0) {
-              core.setFailed(
-                `${unresolved.length} unresolved review thread(s). ` +
-                `Resolve all threads before merging.`
-              );
-            } else {
-              core.info(`All review threads resolved (${threads.length} total).`);
-            }
+          node scripts/check-review-threads.mjs \
+            --repo "$GITHUB_REPOSITORY" \
+            --pr "$PR_NUMBER" \
+            --fail-on-blocked

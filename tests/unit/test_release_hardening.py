@@ -512,16 +512,24 @@ def test_release_workflow_stages_only_python_distributions_for_publish() -> None
 
 
 def test_review_thread_gate_paginates_graphql_threads() -> None:
-    workflow = (
-        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "review-thread-gate.yml"
-    ).read_text(encoding="utf-8")
+    root = Path(__file__).resolve().parents[2]
+    workflow = (root / ".github" / "workflows" / "review-thread-gate.yml").read_text(
+        encoding="utf-8"
+    )
+    script = (root / "scripts" / "check-review-threads.mjs").read_text(encoding="utf-8")
 
-    assert "pageInfo" in workflow
-    assert "hasNextPage" in workflow
-    assert "endCursor" in workflow
-    assert "while" not in workflow
-    assert "for (;;) {" in workflow
-    assert "GitHub review-thread query failed with" in workflow
+    assert "actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd" in workflow
+    assert "actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e" in workflow
+    assert "node-version-file: .node-version" in workflow
+    assert "node scripts/check-review-threads.mjs" in workflow
+    assert "actions/checkout@v4" not in workflow
+
+    assert "pageInfo" in script
+    assert "hasNextPage" in script
+    assert "endCursor" in script
+    assert "do {" in script
+    assert "} while (cursor);" in script
+    assert "GitHub GraphQL request failed" in script
 
 
 def test_docker_metadata_contains_mcp_oci_label_and_no_mutable_image_tags() -> None:
@@ -559,6 +567,19 @@ def test_docker_metadata_contains_mcp_oci_label_and_no_mutable_image_tags() -> N
     assert "type=raw,value=latest" not in docker_workflow
     assert "ghcr.io/oaslananka/kicad-mcp-pro:latest" not in docker_install
     assert "ghcr.io/oaslananka/kicad-mcp-pro:latest" not in publishing
+
+
+def test_scorecard_workflow_avoids_artifact_storage_for_sarif() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "scorecard.yml"
+    ).read_text(encoding="utf-8")
+
+    assert "security-events: write" in workflow
+    assert "results_file: scorecard.sarif" in workflow
+    assert "github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e" in workflow
+    assert "sarif_file: scorecard.sarif" in workflow
+    assert "actions/upload-artifact@" not in workflow
+    assert "scorecard-results" not in workflow
 
 
 def test_version_synchronization_across_release_manifests() -> None:
