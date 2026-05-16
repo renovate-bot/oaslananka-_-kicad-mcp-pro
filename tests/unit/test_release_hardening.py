@@ -663,6 +663,48 @@ def test_release_workflow_retries_post_publish_smoke_check() -> None:
     assert shell_suppression not in smoke_block
 
 
+def test_release_workflow_sets_up_python_before_sigstore_signing() -> None:
+    workflow = (
+        Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release-please.yml"
+    ).read_text(encoding="utf-8")
+    setup_action = "actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065"
+
+    setup_steps = [
+        match.start()
+        for match in re.finditer(
+            r"^\s+- name: Set up Python for Sigstore$",
+            workflow,
+            flags=re.MULTILINE,
+        )
+    ]
+    signing_steps = [
+        match.start()
+        for match in re.finditer(
+            r"^\s+- name: Sign release artifacts with Sigstore$",
+            workflow,
+            flags=re.MULTILINE,
+        )
+    ]
+
+    assert len(setup_steps) == len(signing_steps) == 2
+
+    for setup_step, signing_step in zip(setup_steps, signing_steps, strict=True):
+        clear_step = workflow.rfind("Clear project virtualenv for signing action", 0, signing_step)
+        setup_block = workflow[setup_step:signing_step]
+
+        assert clear_step != -1
+        assert clear_step < setup_step < signing_step
+        assert setup_action in setup_block
+        assert 'python-version: "3.14"' in setup_block
+
+    manual_start = workflow.index("  finish-existing-release:")
+    manual_setup = workflow.index("Set up Python for Sigstore", manual_start)
+    manual_signing = workflow.index("Sign release artifacts with Sigstore", manual_setup)
+    manual_setup_block = workflow[manual_setup:manual_signing]
+
+    assert "steps.recovery-target.outputs.finish_needed == 'true'" in manual_setup_block
+
+
 def test_release_workflow_manual_dispatch_only_finishes_existing_release() -> None:
     workflow = (
         Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release-please.yml"
