@@ -636,14 +636,19 @@ def test_release_workflow_retries_post_publish_smoke_check() -> None:
     assert shell_suppression not in smoke_block
 
 
-def test_release_workflow_has_no_manual_version_inputs() -> None:
+def test_release_workflow_manual_dispatch_only_finishes_existing_release() -> None:
     workflow = (
         Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release-please.yml"
     ).read_text(encoding="utf-8")
     legacy_input = "inputs." + "version"
 
-    assert "workflow_dispatch" not in workflow
+    assert "workflow_dispatch" in workflow
+    assert "release_tag:" in workflow
+    assert "release_sha:" in workflow
+    assert "package_version:" not in workflow
     assert legacy_input not in workflow
+    assert "inputs.release_tag" in workflow
+    assert "inputs.release_sha" in workflow
     assert "outputs.version" in workflow
     assert "outputs.tag_name" in workflow
 

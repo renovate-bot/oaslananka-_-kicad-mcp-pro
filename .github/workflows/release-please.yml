@@ -4,6 +4,16 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to finish publishing.
+        required: true
+        default: v3.5.0
+      release_sha:
+        description: Commit SHA for the release tag.
+        required: true
+        default: 527aeb9a2b0ac9914c8454120787974f62bd4437
 
 permissions:
   contents: read
@@ -100,14 +110,14 @@ jobs:
     name: Verify release source
     needs:
       - release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     permissions:
       contents: read
     env:
-      PACKAGE_VERSION: ${{ needs.release-please.outputs.version }}
-      RELEASE_SHA: ${{ needs.release-please.outputs.sha }}
+      PACKAGE_VERSION: ${{ needs.release-please.outputs.version || inputs.release_tag }}
+      RELEASE_SHA: ${{ needs.release-please.outputs.sha || inputs.release_sha }}
     steps:
       - name: Checkout release source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -150,11 +160,11 @@ jobs:
       - name: Verify release version
         run: |
           set -euo pipefail
-          python - <<'PY'
+          uv run python - <<'PY'
           import tomllib
           from pathlib import Path
 
-          expected = "${{ env.PACKAGE_VERSION }}"
+          expected = "${{ env.PACKAGE_VERSION }}".removeprefix("v")
           actual = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
           if actual != expected:
               raise SystemExit(f"release-please version output {expected} does not match pyproject.toml {actual}")
@@ -172,14 +182,14 @@ jobs:
     needs:
       - release-please
       - verify
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     permissions:
       contents: read
     env:
-      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
-      RELEASE_SHA: ${{ needs.release-please.outputs.sha }}
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || inputs.release_tag }}
+      RELEASE_SHA: ${{ needs.release-please.outputs.sha || inputs.release_sha }}
     steps:
       - name: Checkout release source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
@@ -209,7 +219,7 @@ jobs:
           set -euo pipefail
           rm -rf dist-pypi
           mkdir -p dist-pypi
-          python - <<'PY'
+          uv run python - <<'PY'
           from pathlib import Path
           import shutil
 
@@ -255,7 +265,7 @@ jobs:
     needs:
       - release-please
       - build-artifacts
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 10
     environment: release
@@ -264,7 +274,7 @@ jobs:
       id-token: write
       attestations: write
     env:
-      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || inputs.release_tag }}
     steps:
       - name: Download release distribution bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -307,7 +317,7 @@ jobs:
     needs:
       - release-please
       - build-artifacts
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 20
     environment: release
@@ -315,8 +325,8 @@ jobs:
       contents: read
       id-token: write
     env:
-      PACKAGE_VERSION: ${{ needs.release-please.outputs.version }}
-      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+      PACKAGE_VERSION: ${{ needs.release-please.outputs.version || inputs.release_tag }}
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || inputs.release_tag }}
     steps:
       - name: Download Python package bundle
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
@@ -339,6 +349,7 @@ jobs:
       - name: Post-publish smoke check
         run: |
           set -euo pipefail
+          PACKAGE_VERSION="${PACKAGE_VERSION#v}"
           smoke_root="$(mktemp -d)"
           export UV_CACHE_DIR="${smoke_root}/uv-cache"
           export UV_PROJECT_ENVIRONMENT="${smoke_root}/project-env"
@@ -366,15 +377,15 @@ jobs:
       - release-please
       - publish-pypi
       - publish-provenance
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: [self-hosted, Linux, X64]
     timeout-minutes: 15
     environment: release
     permissions:
       contents: write
     env:
-      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
-      RELEASE_SHA: ${{ needs.release-please.outputs.sha }}
+      RELEASE_TAG: ${{ needs.release-please.outputs.tag_name || inputs.release_tag }}
+      RELEASE_SHA: ${{ needs.release-please.outputs.sha || inputs.release_sha }}
     steps:
       - name: Checkout release source
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
