@@ -30,7 +30,10 @@ LABEL io.modelcontextprotocol.server.name="io.github.oaslananka/kicad-mcp-pro" \
   org.opencontainers.image.revision="${VCS_REF}" \
   org.opencontainers.image.licenses="MIT"
 
-RUN groupadd --system kicadmcp \
+RUN apt-get update \
+  && apt-get upgrade -y --no-install-recommends \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --system kicadmcp \
   && useradd --system --gid kicadmcp --home-dir /app --shell /usr/sbin/nologin kicadmcp
 
 COPY --from=builder /dist/ /tmp/dist/

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import subprocess
 import tomllib
 from pathlib import Path
@@ -558,6 +559,8 @@ def test_docker_metadata_contains_mcp_oci_label_and_no_mutable_image_tags() -> N
 
     assert "pip install --no-cache-dir uv" not in dockerfile
     assert "pip install --no-cache-dir uv" not in kicad_dockerfile
+    assert "apt-get upgrade -y --no-install-recommends" in dockerfile
+    assert "apt-get upgrade -y --no-install-recommends" in kicad_dockerfile
     assert f"UV_VERSION={uv_version}" in dockerfile
     assert f"UV_VERSION={uv_version}" in kicad_dockerfile
     assert "ENV KICAD_MCP_HOST=127.0.0.1" in kicad_dockerfile
@@ -578,6 +581,9 @@ def test_scorecard_workflow_avoids_artifact_storage_for_sarif() -> None:
     assert "results_file: scorecard.sarif" in workflow
     assert "github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e" in workflow
     assert "sarif_file: scorecard.sarif" in workflow
+    assert "Detect Scorecard SARIF" in workflow
+    assert "steps.scorecard-sarif.outputs.present == 'true'" in workflow
+    assert "Scorecard did not emit scorecard.sarif; skipping SARIF upload." in workflow
     assert "actions/upload-artifact@" not in workflow
     assert "scorecard-results" not in workflow
 
@@ -662,6 +668,24 @@ def test_release_workflow_manual_dispatch_only_finishes_existing_release() -> No
         Path(__file__).resolve().parents[2] / ".github" / "workflows" / "release-please.yml"
     ).read_text(encoding="utf-8")
     legacy_input = "inputs." + "version"
+    jobs_match = re.search(r"^jobs:\n", workflow, flags=re.MULTILINE)
+    assert jobs_match is not None
+    jobs_block = workflow[jobs_match.start() :]
+    manual_match = re.search(r"^  finish-existing-release:\n", jobs_block, flags=re.MULTILINE)
+    assert manual_match is not None
+    manual_start = manual_match.start()
+    automatic_jobs = jobs_block[:manual_start]
+    manual_remainder = jobs_block[manual_start:]
+    next_job_match = re.search(
+        r"^  [a-zA-Z0-9_-]+:\n",
+        manual_remainder[1:],
+        flags=re.MULTILINE,
+    )
+    manual_job = (
+        manual_remainder[: 1 + next_job_match.start()] if next_job_match else manual_remainder
+    )
+    release_tag = _workflow_input_default(workflow, "release_tag")
+    release_sha = _workflow_input_default(workflow, "release_sha")
 
     assert "workflow_dispatch" in workflow
     assert "release_tag:" in workflow
@@ -672,6 +696,39 @@ def test_release_workflow_manual_dispatch_only_finishes_existing_release() -> No
     assert "inputs.release_sha" in workflow
     assert "outputs.version" in workflow
     assert "outputs.tag_name" in workflow
+    assert "github.event_name == 'workflow_dispatch'" not in automatic_jobs
+    assert "inputs.release_tag" not in automatic_jobs
+    assert "inputs.release_sha" not in automatic_jobs
+    assert "needs.release-please.outputs.release_created == 'true'" in automatic_jobs
+
+    assert re.fullmatch(r"v\d+\.\d+\.\d+", release_tag)
+    assert re.fullmatch(r"[0-9a-f]{40}", release_sha)
+    assert f'allowed_tag="{release_tag}"' in manual_job
+    assert f'allowed_sha="{release_sha}"' in manual_job
+    assert "permissions:\n      contents: read" in manual_job
+    assert "contents: write" not in manual_job
+    assert "git ls-remote --tags" in manual_job
+    assert "gh release view" in manual_job
+    assert "GH_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}" in manual_job
+    assert "finish_needed=true" in manual_job
+    assert "steps.recovery-target.outputs.finish_needed == 'true'" in manual_job
+    assert "Stage Python distributions for package index" in manual_job
+    assert "packages-dir: dist-pypi/" in manual_job
+    assert "actions/upload-artifact@" not in manual_job
+
+
+def _workflow_input_default(workflow: str, name: str) -> str:
+    input_match = re.search(
+        rf"^      {re.escape(name)}:\n(?P<body>(?:        .+\n)+)",
+        workflow,
+        flags=re.MULTILINE,
+    )
+    assert input_match is not None
+    default_match = re.search(
+        r"^        default: (?P<value>\S+)$", input_match.group("body"), re.MULTILINE
+    )
+    assert default_match is not None
+    return default_match.group("value")
 
 
 def test_release_workflow_installs_actionlint_before_ci_check() -> None:

@@ -26,6 +26,7 @@ ARG KICAD_MCP_VERSION=0.0.0
 ARG VCS_REF=unknown
 WORKDIR /app
 RUN apt-get update \
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends ca-certificates libgl1 libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system kicadmcp \
