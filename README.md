@@ -13,6 +13,8 @@
 [![KiCad 10](https://img.shields.io/badge/KiCad-10-success.svg)](https://www.kicad.org)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-oaslananka-yellow?logo=buy-me-a-coffee)](https://buymeacoffee.com/oaslananka)
 
+![KiCad MCP Pro demo](docs/assets/demo.gif)
+
 KiCad MCP Pro is a Model Context Protocol server for KiCad PCB and schematic workflows. It gives agents project setup, schematic editing, PCB inspection and edits, validation gates, DFM checks, SI/PI helpers, simulation helpers, and release-gated manufacturing export.
 
 Use it with Claude Desktop, Claude Code, Cursor, VS Code, Codex, or any MCP-compatible client.
@@ -107,6 +109,12 @@ export_manufacturing_package()
 
 Demo media guidance lives in [docs/demo-media.md](docs/demo-media.md).
 
+## Public Listings
+
+- [Public listing source of truth](PUBLIC_LISTING.md)
+- [Anthropic Directory submission guide](docs/submission/anthropic-directory.md)
+- [ChatGPT Apps submission guide](docs/submission/chatgpt-apps.md)
+
 ## Documentation
 
 - [Installation](docs/installation.md)
@@ -119,7 +127,7 @@ Demo media guidance lives in [docs/demo-media.md](docs/demo-media.md).
 - [Maintenance policy](docs/maintenance-policy.md)
 - [Workflow security](docs/workflow-security.md)
 - [Publishing](docs/publishing.md)
-- [Privacy policy](docs/privacy.md)
+- [Privacy policy](https://oaslananka.github.io/kicad-mcp-pro/privacy/)
 - [Release integrity](docs/security/release-integrity.md)
 - [Docker install](docs/install/docker.md)
 - [Client config generator](docs/install/client-config-generator.md)

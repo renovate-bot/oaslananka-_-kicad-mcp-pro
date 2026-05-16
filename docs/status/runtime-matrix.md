@@ -8,15 +8,13 @@ This matrix describes the supported runtime surface for KiCad MCP Pro.
 |---|---|---|
 | 3.12 | Tested | Primary package and Docker runtime. |
 | 3.13 | Tested | Covered by CI for pure Python behavior. |
-| 3.14 | Preview | Used by selected signing/tooling paths; runtime support is best effort until Python 3.14 is stable in downstream tooling. |
 
 ## Operating Systems
 
 | Platform | Status | Notes |
 |---|---|---|
-| Linux | Tested | Primary CI and container platform. |
-| macOS | Tested | Homebrew workflow generation runs on macOS. |
-| Windows | Tested | PowerShell, path handling, and CLI smoke tests run in CI. |
+| Linux X64 | Tested | Primary and only CI runner platform: `[self-hosted, Linux, X64]`. |
+| Other platforms | Supported by package design | Local users may run the package elsewhere, but public CI is intentionally limited to the self-hosted Linux X64 runner fleet. |
 
 ## KiCad Availability
 

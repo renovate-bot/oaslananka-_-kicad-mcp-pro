@@ -54,8 +54,16 @@ nav:
   - Maintenance Policy: maintenance-policy.md
   - Workflow Security: workflow-security.md
   - Publishing: publishing.md
-  - Privacy Policy: privacy.md
   - Demo Media: demo-media.md
+  - Submission:
+      - Overview: submission/README.md
+      - Anthropic Directory: submission/anthropic-directory.md
+      - ChatGPT Apps: submission/chatgpt-apps.md
+      - MCP Registry: submission/openai-mcp-registry.md
+      - Reviewer Test Prompts: submission/reviewer-test-prompts.md
+      - Safety and Permissions: submission/safety-and-permissions.md
+  - Privacy Policy: privacy.md
+  - Public Listings: public-listing.md
   - Install:
       - Docker: install/docker.md
       - Client Config Generator: install/client-config-generator.md
