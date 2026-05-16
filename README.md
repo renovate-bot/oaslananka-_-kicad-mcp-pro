@@ -109,6 +109,12 @@ export_manufacturing_package()
 
 Demo media guidance lives in [docs/demo-media.md](docs/demo-media.md).
 
+## Public Listings
+
+- [Public listing source of truth](PUBLIC_LISTING.md)
+- [Anthropic Directory submission guide](docs/submission/anthropic-directory.md)
+- [ChatGPT Apps submission guide](docs/submission/chatgpt-apps.md)
+
 ## Documentation
 
 - [Installation](docs/installation.md)
