@@ -98,58 +98,55 @@ cosign verify ghcr.io/oaslananka/kicad-mcp-pro:${VERSION}
 - [ ] Do not include private key files in submissions.
 - [ ] Do not include customer board files in submissions.
 - [ ] Do not include private screenshots with local usernames.
-- Safety control item 101: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 102: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 103: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 104: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 105: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 106: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 107: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 108: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 109: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 110: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 111: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 112: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 113: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 114: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 115: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 116: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 117: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 118: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 119: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 120: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 121: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 122: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 123: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 124: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 125: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 126: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 127: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 128: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 129: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 130: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 131: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 132: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 133: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 134: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 135: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 136: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 137: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 138: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 139: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 140: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 141: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 142: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 143: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 144: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 145: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 146: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 147: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 148: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 149: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 150: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 151: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 152: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 153: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 154: verify local-only stdio behavior and release provenance before submission.
-- Safety control item 155: verify local-only stdio behavior and release provenance before submission.
+## Final Safety Review Controls
+
+- [ ] Confirm stdio mode is described as local-only.
+- [ ] Confirm the server itself is described as not collecting telemetry.
+- [ ] Confirm the server itself is described as not storing remote user data.
+- [ ] Confirm the server itself is described as not setting cookies.
+- [ ] Confirm the server itself is described as not collecting IP addresses.
+- [ ] Confirm filesystem scope references the selected project directory.
+- [ ] Confirm filesystem scope references `KICAD_MCP_WORKSPACE_ROOT` when set.
+- [ ] Confirm path traversal is described as rejected by `path_safety.py`.
+- [ ] Confirm read-only inspection tools are distinguished from write tools.
+- [ ] Confirm destructive tools require explicit user intent through MCP calls.
+- [ ] Confirm manufacturing package export is described as quality-gated.
+- [ ] Confirm `kicad-cli` is the required subprocess surface.
+- [ ] Confirm Docker/Freerouting is described as optional and opt-in.
+- [ ] Confirm no general shell execution capability is claimed or exposed.
+- [ ] Confirm HTTP mode is described separately from local stdio mode.
+- [ ] Confirm HTTP mode production notes mention bearer authentication.
+- [ ] Confirm HTTP mode production notes mention explicit CORS allowlists.
+- [ ] Confirm optional Nexar usage is described as third-party governed.
+- [ ] Confirm optional third-party integrations are not described as default behavior.
+- [ ] Confirm no reviewer evidence includes `.env` content.
+- [ ] Confirm no reviewer evidence includes bearer token values.
+- [ ] Confirm no reviewer evidence includes API key values.
+- [ ] Confirm no reviewer evidence includes OAuth client secrets.
+- [ ] Confirm no reviewer evidence includes auth cookies.
+- [ ] Confirm no reviewer evidence includes private key files.
+- [ ] Confirm no reviewer evidence includes customer board files.
+- [ ] Confirm no screenshots include local usernames or private paths.
+- [ ] Confirm release evidence references PyPI Trusted Publisher.
+- [ ] Confirm release evidence references GitHub OIDC.
+- [ ] Confirm release evidence references Sigstore signing.
+- [ ] Confirm release evidence references GHCR provenance.
+- [ ] Confirm release evidence references CycloneDX SBOM output.
+- [ ] Confirm release evidence references SHA-256 checksums.
+- [ ] Confirm reviewers can run `pnpm run submission:check` independently.
+- [ ] Confirm reviewers can run `pnpm run mcp:manifest:check` independently.
+- [ ] Confirm reviewers can run `pnpm run docs:tools:check` independently.
+- [ ] Confirm reviewers can inspect `docs/privacy.md` for data handling.
+- [ ] Confirm reviewers can inspect `docs/security/threat-model.md` for trust boundaries.
+- [ ] Confirm reviewers can inspect `docs/security/release-integrity.md` for provenance.
+- [ ] Confirm reviewers can inspect `docs/deployment/docker.md` for container behavior.
+- [ ] Confirm reviewers can inspect `docs/deployment/http-mode.md` for remote mode behavior.
+- [ ] Confirm reviewer fixture instructions avoid private project files.
+- [ ] Confirm wrong-path failures are documented as client setup errors.
+- [ ] Confirm safety language is not diluted by marketing claims.
+- [ ] Confirm safety language does not promise controls not implemented in code.
+- [ ] Confirm every optional integration is explicitly named as optional.
+- [ ] Confirm production deployment notes do not weaken local stdio guarantees.
+- [ ] Confirm post-review fixes update this statement and the privacy page together.
+- [ ] Confirm final submission uses the exact current version and commit SHA.
+- [ ] Confirm the current repository state is clean before safety evidence is captured.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
@@ -46,34 +47,68 @@ def _parse_iso(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def find_stale_branches(repo: str, days: int) -> list[StaleBranch]:
-    branch_output = _require_gh(
-        ["api", "-X", "GET", f"/repos/{repo}/branches?per_page=100", "--jq", ".[].name"]
+def _gh_json(args: list[str]) -> object:
+    return json.loads(_require_gh(args))
+
+
+def _paginated_api(repo: str, path: str) -> list[dict[str, object]]:
+    page = 1
+    records: list[dict[str, object]] = []
+    while True:
+        payload = _gh_json(
+            [
+                "api",
+                "-X",
+                "GET",
+                f"/repos/{repo}/{path}",
+                "-f",
+                "per_page=100",
+                "-f",
+                f"page={page}",
+            ]
+        )
+        if not payload:
+            return records
+        if not isinstance(payload, list):
+            msg = f"expected list response for {path}"
+            raise RuntimeError(msg)
+        records.extend(record for record in payload if isinstance(record, dict))
+        if len(payload) < 100:
+            return records
+        page += 1
+
+
+def _open_pr_heads(repo: str) -> set[str]:
+    output = _require_gh(
+        [
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--state",
+            "open",
+            "--limit",
+            "1000",
+            "--json",
+            "headRefName",
+            "--jq",
+            ".[].headRefName",
+        ]
     )
+    return {line.strip() for line in output.splitlines() if line.strip()}
+
+
+def find_stale_branches(repo: str, days: int) -> list[StaleBranch]:
+    branches = _paginated_api(repo, "branches")
+    open_pr_heads = _open_pr_heads(repo)
     cutoff = datetime.now(UTC) - timedelta(days=days)
     stale: list[StaleBranch] = []
 
-    for branch in (line.strip() for line in branch_output.splitlines()):
+    for branch_info in branches:
+        branch = str(branch_info.get("name", "")).strip()
         if not branch or not _candidate_branch(branch):
             continue
-
-        pr_count_text = _require_gh(
-            [
-                "pr",
-                "list",
-                "--repo",
-                repo,
-                "--head",
-                branch,
-                "--state",
-                "open",
-                "--json",
-                "number",
-                "--jq",
-                "length",
-            ]
-        ).strip()
-        if int(pr_count_text or "0") > 0:
+        if branch in open_pr_heads:
             continue
 
         encoded_branch = quote(branch, safe="")

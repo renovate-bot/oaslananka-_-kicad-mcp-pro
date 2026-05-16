@@ -134,7 +134,10 @@ def _normalize_png(png_data: bytes) -> bytes:
 def _render_png(size: int) -> bytes:
     try:
         import cairosvg
+    except ImportError:
+        return _fallback_render(size)
 
+    try:
         rendered = cairosvg.svg2png(
             url=str(SVG_PATH),
             output_width=size,

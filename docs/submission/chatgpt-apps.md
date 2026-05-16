@@ -85,71 +85,67 @@ Use this document for the ChatGPT Apps submission path.
 - [ ] Use fixture project evidence for all reviewer tests.
 - [ ] Do not upload secrets, logs with tokens, or private KiCad designs.
 - [ ] Update `PUBLIC_LISTING.md` after submission.
-- ChatGPT Apps control item 88: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 89: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 90: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 91: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 92: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 93: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 94: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 95: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 96: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 97: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 98: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 99: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 100: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 101: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 102: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 103: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 104: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 105: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 106: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 107: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 108: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 109: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 110: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 111: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 112: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 113: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 114: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 115: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 116: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 117: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 118: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 119: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 120: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 121: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 122: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 123: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 124: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 125: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 126: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 127: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 128: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 129: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 130: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 131: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 132: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 133: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 134: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 135: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 136: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 137: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 138: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 139: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 140: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 141: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 142: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 143: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 144: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 145: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 146: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 147: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 148: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 149: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 150: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 151: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 152: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 153: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 154: verify dashboard values still match this document before pressing submit.
-- ChatGPT Apps control item 155: verify dashboard values still match this document before pressing submit.
+## Final ChatGPT Apps Dashboard Controls
+
+- [ ] Confirm app name is exactly `KiCad MCP Pro`.
+- [ ] Confirm short description is still at or below 80 characters.
+- [ ] Confirm long description is still at or below 500 characters.
+- [ ] Confirm category is `Developer Tools` unless a hardware design category is offered.
+- [ ] Confirm support URL points to GitHub issues.
+- [ ] Confirm privacy URL points to the GitHub Pages privacy page.
+- [ ] Confirm repository URL points to the canonical GitHub repository.
+- [ ] Confirm documentation URL points to the GitHub Pages site.
+- [ ] Confirm the domain verification TXT record is copied only from the dashboard.
+- [ ] Confirm the domain verification TXT record is not committed to the repository.
+- [ ] Confirm `oaslananka.dev` remains the primary domain placeholder in docs.
+- [ ] Confirm no dashboard field references a retired owner namespace.
+- [ ] Confirm tool annotation evidence references `src/kicad_mcp/tools/metadata.py`.
+- [ ] Confirm `readOnlyHint` is present for inspection-oriented tools.
+- [ ] Confirm `destructiveHint` is present for project mutation tools.
+- [ ] Confirm `openWorldHint` is present where broader context may be used.
+- [ ] Confirm annotation exports are regenerated after tool registry changes.
+- [ ] Confirm the complete tool catalog is generated before dashboard upload.
+- [ ] Confirm screenshots are at least 1280x800.
+- [ ] Confirm committed screenshot slots remain 1920x1080.
+- [ ] Confirm production screenshots replace placeholders before final launch.
+- [ ] Confirm screenshot filenames match the manifest in `docs/assets/screenshots/README.md`.
+- [ ] Confirm screenshots avoid local usernames, machine names, and private paths.
+- [ ] Confirm screenshots use the fixture project or sanitized demo data only.
+- [ ] Confirm reviewer prompts are copied from `docs/submission/reviewer-test-prompts.md`.
+- [ ] Confirm machine-readable prompts match `tests/reviewer/prompts.json`.
+- [ ] Confirm the app does not claim hosted data residency for stdio mode.
+- [ ] Confirm the app describes default processing as local-only.
+- [ ] Confirm the app does not claim telemetry exists.
+- [ ] Confirm the app does not request OAuth for local stdio review.
+- [ ] Confirm optional HTTP mode is described as a separate configured deployment path.
+- [ ] Confirm HTTP mode notes mention bearer auth for production.
+- [ ] Confirm HTTP mode notes mention explicit CORS allowlists for production.
+- [ ] Confirm optional Freerouting Docker is described as opt-in.
+- [ ] Confirm optional Nexar integration is described as user configured.
+- [ ] Confirm `pnpm run submission:check` passes before dashboard save.
+- [ ] Confirm `pnpm run assets:icons:check` passes before icon upload.
+- [ ] Confirm `pnpm run docs:tools:check` passes before tool evidence upload.
+- [ ] Confirm `uv run --all-extras mkdocs build --strict` passes before docs URL review.
+- [ ] Confirm `lychee --verbose --no-progress README.md docs/**/*.md` passes before link review.
+- [ ] Confirm `SUBMISSION_MODE=1 pnpm run submission:check` fails only for placeholders before final screenshots.
+- [ ] Confirm `SUBMISSION_MODE=1 pnpm run submission:check` passes after real screenshots are committed.
+- [ ] Confirm the README demo GIF exists before dashboard reviewers open the repository.
+- [ ] Confirm the README demo GIF contains no real hostnames or local filesystem paths.
+- [ ] Confirm the privacy page states personal information is not collected.
+- [ ] Confirm the privacy page states telemetry is not collected.
+- [ ] Confirm the privacy page explains optional third-party integrations separately.
+- [ ] Confirm the safety statement explains filesystem scope restrictions.
+- [ ] Confirm the safety statement explains subprocess scope.
+- [ ] Confirm the safety statement explains reproducible release verification.
+- [ ] Confirm package version values are synchronized before submission.
+- [ ] Confirm PyPI, GHCR, and documentation links match the current version being reviewed.
+- [ ] Confirm reviewer-facing copy remains in English at launch.
+- [ ] Confirm Turkish localization is described only as future work.
+- [ ] Confirm approval and rejection status are recorded in `PUBLIC_LISTING.md` after dashboard updates.
+- [ ] Confirm no private dashboard screenshots are committed.
+- [ ] Confirm no API keys, OAuth secrets, or auth cookies appear in evidence.
+- [ ] Confirm no customer board files are attached to the submission.
+- [ ] Confirm the current branch is clean before final evidence is captured.
+- [ ] Confirm GitHub checks for the submission branch are green before merging.
+- [ ] Confirm the public docs site is reachable after the merge to `main`.
+- [ ] Confirm post-approval operations are recorded in the public listing source of truth.

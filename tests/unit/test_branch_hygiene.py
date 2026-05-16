@@ -16,9 +16,8 @@ import sys
 
 args = sys.argv[1:]
 joined = " ".join(args)
-if args[:1] == ["api"] and "/branches?per_page=100" in joined:
-    print("main")
-    print("develop")
+if args[:3] == ["api", "-X", "GET"] and "/branches" in joined:
+    print('[{"name":"main"},{"name":"develop"}]')
     raise SystemExit(0)
 if args[:2] == ["pr", "list"]:
     raise SystemExit(0)

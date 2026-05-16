@@ -112,44 +112,47 @@ Use this document when submitting KiCad MCP Pro to the Anthropic Connector Direc
 - Known rejection cause: Broken docs URL.
 - Concrete repo control: Verify `https://oaslananka.github.io/kicad-mcp-pro` before submission.
 - Reviewer response: point to the exact file or command, then rerun `pnpm run submission:check`.
-- Anthropic control item 115: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 116: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 117: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 118: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 119: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 120: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 121: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 122: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 123: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 124: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 125: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 126: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 127: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 128: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 129: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 130: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 131: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 132: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 133: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 134: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 135: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 136: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 137: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 138: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 139: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 140: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 141: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 142: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 143: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 144: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 145: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 146: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 147: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 148: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 149: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 150: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 151: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 152: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 153: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 154: keep the submitted wording aligned with `server.json` and README quickstart.
-- Anthropic control item 155: keep the submitted wording aligned with `server.json` and README quickstart.
+## Final Anthropic Consistency Controls
+
+- [ ] Compare the submitted server name with `server.json` before opening the form.
+- [ ] Compare the submitted short description with the README opening paragraph.
+- [ ] Confirm the category selection still says `EDA / Hardware Design` when the option exists.
+- [ ] Confirm the fallback category still says `Developer Tools` when EDA is unavailable.
+- [ ] Verify the repository URL resolves without redirects to the canonical owner.
+- [ ] Verify the documentation URL resolves to the GitHub Pages site.
+- [ ] Verify the privacy URL renders the current no-telemetry statement.
+- [ ] Verify the support URL opens the GitHub issue tracker.
+- [ ] Confirm the transport answer says local stdio, not hosted OAuth.
+- [ ] Confirm the OAuth answer says not required for this local server path.
+- [ ] Confirm the safety answer mentions read-only inspection as the default posture.
+- [ ] Confirm the safety answer mentions explicit user intent for file writes.
+- [ ] Confirm the safety answer mentions `project_quality_gate` before manufacturing export.
+- [ ] Confirm the safety answer mentions no server-operated backend in default mode.
+- [ ] Confirm the safety answer mentions no telemetry collection by the server itself.
+- [ ] Confirm the reviewer fixture path exists locally before sending prompts.
+- [ ] Confirm each reviewer prompt names the fixture project exactly once.
+- [ ] Confirm wrong-path failures are documented as client configuration issues.
+- [ ] Confirm screenshots do not show private usernames, hostnames, or paths.
+- [ ] Confirm screenshots are final captures if this is a production submission.
+- [ ] Confirm placeholder screenshots are disclosed if this is a pre-submission packet.
+- [ ] Confirm `pnpm run submission:check` passes before the form is submitted.
+- [ ] Confirm `pnpm run docs:tools:check` passes after tool metadata changes.
+- [ ] Confirm `uv run --all-extras mkdocs build --strict` passes after docs edits.
+- [ ] Confirm `lychee --verbose --no-progress README.md docs/**/*.md` passes after link edits.
+- [ ] Confirm `server.json` and `mcp.json` versions match the package version.
+- [ ] Confirm the PyPI package name remains `kicad-mcp-pro`.
+- [ ] Confirm the OCI image namespace remains `ghcr.io/oaslananka/kicad-mcp-pro`.
+- [ ] Confirm no retired owner namespace appears in copied form text.
+- [ ] Confirm no token, cookie, private key, or `.env` value appears in evidence.
+- [ ] Confirm no customer KiCad project is uploaded as reviewer evidence.
+- [ ] Confirm optional Nexar or Freerouting notes do not imply default network egress.
+- [ ] Confirm the expected review timeline is recorded as an estimate, not a promise.
+- [ ] Confirm any rejection response is tracked in a GitHub issue before resubmission.
+- [ ] Confirm `PUBLIC_LISTING.md` is updated only after the form is actually sent.
+- [ ] Confirm approval status is recorded only after the public listing URL is visible.
+- [ ] Confirm the maintainer identity is Osman Aslan with handle `oaslananka`.
+- [ ] Confirm the final submission packet contains this document, reviewer prompts, and safety statement.
+- [ ] Confirm reviewer-facing language remains English for the initial launch.
+- [ ] Confirm release evidence references Sigstore, SBOM, and provenance only when artifacts exist.
+- [ ] Confirm the final copied text does not mention internal automation notes.
+- [ ] Confirm the current branch has a clean working tree before submission evidence is captured.

@@ -77,79 +77,78 @@ cosign verify ghcr.io/oaslananka/kicad-mcp-pro:${VERSION} \
 - [ ] If cosign verification fails, treat release as blocked.
 - [ ] If registry rejects metadata, open a GitHub issue with the exact rejected field.
 - [ ] If network is offline, treat PyPI reachability as warning-only in local checks.
-- Registry control item 80: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 81: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 82: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 83: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 84: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 85: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 86: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 87: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 88: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 89: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 90: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 91: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 92: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 93: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 94: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 95: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 96: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 97: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 98: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 99: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 100: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 101: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 102: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 103: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 104: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 105: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 106: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 107: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 108: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 109: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 110: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 111: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 112: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 113: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 114: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 115: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 116: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 117: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 118: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 119: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 120: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 121: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 122: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 123: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 124: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 125: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 126: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 127: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 128: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 129: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 130: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 131: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 132: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 133: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 134: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 135: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 136: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 137: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 138: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 139: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 140: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 141: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 142: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 143: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 144: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 145: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 146: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 147: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 148: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 149: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 150: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 151: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 152: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 153: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 154: keep publish evidence tied to `server.json` and the current release version.
-- Registry control item 155: keep publish evidence tied to `server.json` and the current release version.
+## Final Registry Publish Controls
+
+- [ ] Confirm `server.json` remains the registry payload source of truth.
+- [ ] Confirm `server.json` schema validation passes before dry run.
+- [ ] Confirm `mcp.json` stays synchronized with `server.json`.
+- [ ] Confirm `pyproject.toml` version matches both manifest files.
+- [ ] Confirm `src/kicad_mcp/__init__.py` version matches the manifests.
+- [ ] Confirm PyPI package `kicad-mcp-pro` is reachable for the current version.
+- [ ] Confirm registry package transport is `stdio`.
+- [ ] Confirm registry package runtime hint is `uvx` for PyPI.
+- [ ] Confirm registry package runtime hint is `docker` for OCI.
+- [ ] Confirm OCI identifier includes the current version tag.
+- [ ] Confirm OCI image field omits the tag where the schema expects image base.
+- [ ] Confirm GHCR image namespace is `ghcr.io/oaslananka/kicad-mcp-pro`.
+- [ ] Confirm old GHCR namespace values do not appear in dry-run output.
+- [ ] Confirm repository URL is the canonical GitHub URL.
+- [ ] Confirm website URL is the GitHub Pages URL.
+- [ ] Confirm support URL is GitHub issues when the registry asks for support.
+- [ ] Confirm privacy URL is the GitHub Pages privacy page when requested.
+- [ ] Confirm license value is `MIT`.
+- [ ] Confirm capabilities list tools.
+- [ ] Confirm capabilities list resources.
+- [ ] Confirm capabilities list prompts.
+- [ ] Confirm no registry payload includes local filesystem paths.
+- [ ] Confirm no registry payload includes secrets or auth tokens.
+- [ ] Confirm dry-run output is reviewed before live publish.
+- [ ] Confirm live publish is not attempted from a dirty working tree.
+- [ ] Confirm live publish is not attempted before release artifacts exist.
+- [ ] Confirm live publish is not attempted when PyPI current version is missing.
+- [ ] Confirm live publish is not attempted when GHCR current version is missing.
+- [ ] Confirm live publish is not attempted when cosign verification fails.
+- [ ] Confirm release workflow uses GitHub OIDC for PyPI Trusted Publisher.
+- [ ] Confirm release workflow emits Sigstore verification material.
+- [ ] Confirm release workflow emits SHA-256 checksums.
+- [ ] Confirm release workflow emits CycloneDX SBOM material.
+- [ ] Confirm release workflow emits GHCR provenance attestations.
+- [ ] Confirm the container digest is recorded in release evidence before announcement.
+- [ ] Confirm `cosign verify` command uses the current version string.
+- [ ] Confirm the certificate identity regex targets this repository only.
+- [ ] Confirm registry rejection responses are tracked as GitHub issues.
+- [ ] Confirm registry rejection responses do not include private reviewer data.
+- [ ] Confirm a corrected dry run is attached to any resubmission issue.
+- [ ] Confirm `pnpm run publish:mcp:dry-run` succeeds before live publish.
+- [ ] Confirm `pnpm run metadata:check` succeeds before live publish.
+- [ ] Confirm `pnpm run mcp:manifest:check` succeeds before live publish.
+- [ ] Confirm `pnpm run docker:metadata:check` succeeds before live publish.
+- [ ] Confirm `pnpm run release:dry-run` succeeds before live publish.
+- [ ] Confirm `pnpm run submission:check` succeeds before live publish.
+- [ ] Confirm generated tool documentation is current before live publish.
+- [ ] Confirm README public listing links are current before live publish.
+- [ ] Confirm privacy policy content is current before live publish.
+- [ ] Confirm release notes mention namespace migration when relevant.
+- [ ] Confirm package registry names are copied from manifests, not typed manually.
+- [ ] Confirm maintainer identity is Osman Aslan with handle `oaslananka`.
+- [ ] Confirm publication timestamps are recorded in UTC.
+- [ ] Confirm public listing URL is recorded only after it resolves externally.
+- [ ] Confirm failed live publish attempts are documented with exact failing field names.
+- [ ] Confirm any manual dashboard field is reviewed by a second local check command.
+- [ ] Confirm the public registry entry is rechecked after cache propagation.
+- [ ] Confirm post-publish metadata sync is run if manifests changed during release.
+- [ ] Confirm the branch used for publish evidence has been merged into `main`.
+- [ ] Confirm no temporary payload files are left in the repository after publish.
+- [ ] Confirm local logs are redacted before copying into public issues.
+- [ ] Confirm live publish is postponed if network reachability is unstable.
+- [ ] Confirm the final outcome is reflected in `PUBLIC_LISTING.md`.
+- [ ] Confirm the next release repeats this checklist rather than copying stale evidence.
+- [ ] Confirm registry docs are updated if the registry schema version changes.
+- [ ] Confirm `scripts/schemas/server.schema.json` is updated only from the official schema.
+- [ ] Confirm registry status remains `Not submitted` until the live command is actually run.
+- [ ] Confirm the submission evidence includes the exact commit SHA reviewed.
+- [ ] Confirm the release tag used for registry publication is immutable.
+- [ ] Confirm a rollback note exists if registry metadata must be corrected later.
+- [ ] Confirm public support instructions remain GitHub-issue based.
+- [ ] Confirm public documentation links do not rely on private repositories.
+- [ ] Confirm the registry publish path is not confused with Anthropic or ChatGPT dashboards.

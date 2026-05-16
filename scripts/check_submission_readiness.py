@@ -12,6 +12,7 @@ from urllib.error import URLError
 from urllib.request import urlopen
 
 import jsonschema
+import yaml
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -41,7 +42,7 @@ FORBIDDEN_NAMESPACE = tuple(
         ("kicad-mcp-pro", "-", "lab"),
     )
 )
-RUNNER_RE = re.compile(r"runs-on:\s*(ubuntu-latest|macos-[^\s\]]*|windows-[^\s\]]*)")
+RUNNER_PREFIXES = ("ubuntu-", "macos-", "windows-")
 
 
 @dataclass
@@ -100,10 +101,18 @@ def _namespace_check() -> CheckResult:
 def _runner_check() -> CheckResult:
     hits: list[str] = []
     workflow_dir = ROOT / ".github" / "workflows"
-    for path in workflow_dir.glob("*.yml"):
-        for line_number, line in enumerate(_read_text(path).splitlines(), 1):
-            if RUNNER_RE.search(line):
-                hits.append(f"{path.relative_to(ROOT)}:{line_number}: {line.strip()}")
+    for path in [*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")]:
+        payload = yaml.safe_load(_read_text(path)) or {}
+        jobs = payload.get("jobs", {}) if isinstance(payload, dict) else {}
+        for job_name, job in jobs.items():
+            if not isinstance(job, dict) or "runs-on" not in job:
+                continue
+            runs_on = job["runs-on"]
+            values = runs_on if isinstance(runs_on, list) else [runs_on]
+            for value in values:
+                text = str(value).strip().strip("'\"")
+                if text == "ubuntu-latest" or text.startswith(RUNNER_PREFIXES):
+                    hits.append(f"{path.relative_to(ROOT)} job {job_name}: {runs_on!r}")
     if hits:
         return CheckResult("runner regression", "FAIL", "; ".join(hits))
     return CheckResult("runner regression", "PASS", "no GitHub-hosted runner tokens")
@@ -200,7 +209,7 @@ def _demo_cast_check() -> CheckResult:
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
         header = json.loads(lines[0])
-        frames = [json.loads(line) for line in lines[1:]]
+        frames = [json.loads(line) for line in lines[1:] if line.strip()]
     except (IndexError, json.JSONDecodeError) as exc:
         return CheckResult("demo cast", "FAIL", str(exc))
     if header.get("version") != 2 or not all(isinstance(frame, list) for frame in frames):
@@ -252,9 +261,10 @@ def _server_schema_check() -> CheckResult:
     try:
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
         server = json.loads((ROOT / "server.json").read_text(encoding="utf-8"))
-        jsonschema.Draft202012Validator.check_schema(schema)
+        validator_cls = jsonschema.validators.validator_for(schema)
+        validator_cls.check_schema(schema)
         errors = sorted(
-            jsonschema.Draft202012Validator(schema).iter_errors(server),
+            validator_cls(schema).iter_errors(server),
             key=lambda error: list(error.path),
         )
     except (OSError, json.JSONDecodeError, jsonschema.SchemaError) as exc:
@@ -281,6 +291,16 @@ def _public_listing_check() -> CheckResult:
 def run_checks() -> list[CheckResult]:
     first_namespace = _namespace_check()
     first_runner = _runner_check()
+    final_namespace = _namespace_check()
+    final_runner = _runner_check()
+    final_namespace = CheckResult(
+        "namespace regression final pass",
+        final_namespace.status,
+        final_namespace.detail,
+    )
+    final_runner = CheckResult(
+        "runner regression final pass", final_runner.status, final_runner.detail
+    )
     return [
         first_namespace,
         first_runner,
@@ -295,8 +315,8 @@ def run_checks() -> list[CheckResult]:
         _readme_check(),
         _server_schema_check(),
         _public_listing_check(),
-        _namespace_check(),
-        _runner_check(),
+        final_namespace,
+        final_runner,
     ]
 
 

@@ -27,12 +27,7 @@
 
 ## submission:check Output
 
-```
-.../Programs/Antigravity/resources/app   | [WARN] Unsupported engine: wanted: {"node":"22.20.0"} (current: {"node":"v24.15.0","pnpm":"11.0.8"})
-.../resources/app/extensions/antigravity | [WARN] The field "resolutions" was found in C:\Users\Admin\AppData\Local\Application Data\Programs\Antigravity\resources\app\extensions\antigravity/package.json. This will not take effect. You should configure "resolutions" at the root of the workspace instead.
-.../node/corepack/v1/yarn/1.22.22        | [WARN] The field "resolutions" was found in C:\Users\Admin\AppData\Local\Application Data\node\corepack\v1\yarn\1.22.22/package.json. This will not take effect. You should configure "resolutions" at the root of the workspace instead.
-Already up to date
-Done in 333ms using pnpm v11.0.8
+```text
 $ uv run --all-extras python scripts/check_submission_readiness.py
 | Check | Result | Detail |
 |---|---|---|
@@ -49,18 +44,18 @@ $ uv run --all-extras python scripts/check_submission_readiness.py
 | README listing references | PASS | demo and privacy linked |
 | server schema | PASS | server.json validates |
 | public listing | PASS | root listing file referenced |
-| namespace regression | PASS | no forbidden owner strings |
-| runner regression | PASS | no GitHub-hosted runner tokens |
+| namespace regression final pass | PASS | no forbidden owner strings |
+| runner regression final pass | PASS | no GitHub-hosted runner tokens |
 ```
 
 ## Additional Local Verification
 
 | Check | Result | Notes |
 |---|---|---|
-| `pnpm run check` | PASS | Full local check chain passed, including full pytest coverage, Bandit, dependency audit, workflow lint/security, release dry-run, and build. |
+| `pnpm run check` | PASS | Full local check chain passed, including full pytest coverage at the restored 90 percent gate, Bandit, dependency audit, workflow lint/security, release dry-run, and build. |
 | `uv sync --extra dev --frozen` | PASS | Lockfile resolves with Pillow 12.2.0 for asset tooling. |
 | `uv run mkdocs build --strict` | PASS | Docs build completed under the same command used by the docs workflow. |
-| `lychee --verbose --no-progress README.md docs/**/*.md` | PASS | 118 links checked, 118 OK, 0 errors, 5 redirects. |
+| `lychee --verbose --no-progress README.md docs/**/*.md` | PASS | 117 links checked, 117 OK, 0 errors, 5 redirects. |
 | Demo media asset | PASS | `docs/assets/demo.gif` is committed and produced by the deterministic fallback path when `agg` is unavailable. |
 
 ## Next Steps for Maintainer

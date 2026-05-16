@@ -128,7 +128,6 @@ Demo media guidance lives in [docs/demo-media.md](docs/demo-media.md).
 - [Workflow security](docs/workflow-security.md)
 - [Publishing](docs/publishing.md)
 - [Privacy policy](https://oaslananka.github.io/kicad-mcp-pro/privacy/)
-- [Public listings](PUBLIC_LISTING.md)
 - [Release integrity](docs/security/release-integrity.md)
 - [Docker install](docs/install/docker.md)
 - [Client config generator](docs/install/client-config-generator.md)

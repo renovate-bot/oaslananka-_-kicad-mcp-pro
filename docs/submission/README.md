@@ -127,29 +127,32 @@ Use this checklist before entering any external review form.
 - [ ] Do not submit with old organization namespace strings.
 - [ ] Do not submit with non-self-hosted workflow runner declarations.
 - [ ] Do not submit before `PUBLIC_LISTING_READY.md` says `READY FOR SUBMISSION`.
-- [ ] Evidence line 130: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 131: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 132: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 133: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 134: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 135: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 136: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 137: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 138: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 139: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 140: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 141: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 142: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 143: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 144: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 145: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 146: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 147: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 148: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 149: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 150: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 151: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 152: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 153: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 154: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
-- [ ] Evidence line 155: keep reviewer-facing values synchronized with `PUBLIC_LISTING.md` and `server.json`.
+## Final Evidence Controls
+
+- [ ] Confirm every platform-specific document has been reviewed in the same branch as the submission.
+- [ ] Confirm `PUBLIC_LISTING.md` is the only place where external submission status is recorded.
+- [ ] Confirm `PUBLIC_LISTING_READY.md` reflects the latest local gate result before merge.
+- [ ] Confirm the README public listing section links to the root status file.
+- [ ] Confirm the README documentation section does not duplicate the same public listing link.
+- [ ] Confirm the demo GIF exists locally and is committed.
+- [ ] Confirm link checking passes with the same lychee command used by the docs workflow.
+- [ ] Confirm generated icon assets pass dimension checks before any dashboard upload.
+- [ ] Confirm reviewer prompt JSON remains synchronized with the human-readable prompt guide.
+- [ ] Confirm release evidence is current before referencing Sigstore or provenance in forms.
+- [ ] Confirm screenshot placeholders are replaced before final production submission.
+- [ ] Confirm placeholder screenshots are intentionally reported by `SUBMISSION_MODE=1` until replaced.
+- [ ] Confirm the current branch has no unrelated dirty files before merge.
+- [ ] Confirm all GitHub PR checks are green before merging to `main`.
+- [ ] Confirm the PR is merged or closed so no stale submission PR remains open.
+- [ ] Confirm the remote feature branch is deleted after merge if GitHub does not delete it automatically.
+- [ ] Confirm docs deployment from `main` succeeds before marking listing docs live.
+- [ ] Confirm GitHub Pages serves the privacy policy after deployment.
+- [ ] Confirm the maintainer records manual directory submissions only after external forms are sent.
+- [ ] Confirm any reviewer rejection is tracked as an issue with no private content.
+- [ ] Confirm the next public listing pass starts by rerunning this checklist.
+- [ ] Confirm all copied URLs are taken from this repo, not browser history or stale notes.
+- [ ] Confirm no private workspace path appears in copied evidence.
+- [ ] Confirm no automation token or auth state appears in copied evidence.
+- [ ] Confirm post-approval operations update docs and manifests in the same release cycle.
+- [ ] Confirm the final release branch contains no temporary `.bak`, `.orig`, or `.new` files.
+- [ ] Confirm NotebookLM sync notes, if used, do not include secrets or local auth files.

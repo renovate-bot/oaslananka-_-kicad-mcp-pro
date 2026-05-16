@@ -36,13 +36,11 @@ def _registered_tools(profile: str) -> dict[str, object]:
     buffer = io.StringIO()
     with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(buffer):
         server = build_server(profile=profile)
-    tool_manager = server._tool_manager
-    tools = tool_manager._tools
-    return dict(tools)
+    return {tool.name: tool for tool in server.list_tools_sync()}
 
 
 def _annotation_bool(annotations: ToolAnnotations, field: str) -> bool:
-    return bool(getattr(annotations, field))
+    return bool(getattr(annotations, field, False))
 
 
 def _summary(tool: object) -> str:
