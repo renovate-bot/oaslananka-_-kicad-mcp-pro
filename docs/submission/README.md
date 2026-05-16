@@ -1,7 +1,7 @@
 # Submission Readiness Checklist
 
 This page is the working index for public listing submissions.
-It links platform-specific instructions to the root listing source of truth: [`PUBLIC_LISTING.md`](../../PUBLIC_LISTING.md).
+It links platform-specific instructions to the root listing source of truth: [`PUBLIC_LISTING.md`](../public-listing.md).
 Use this checklist before entering any external review form.
 
 ## Platform Documents
@@ -11,7 +11,7 @@ Use this checklist before entering any external review form.
 - [ ] Open [`openai-mcp-registry.md`](openai-mcp-registry.md) before publishing to the OpenAI/MCP registry.
 - [ ] Open [`reviewer-test-prompts.md`](reviewer-test-prompts.md) before sending reviewer instructions.
 - [ ] Open [`safety-and-permissions.md`](safety-and-permissions.md) before answering security questions.
-- [ ] Open [`../../PUBLIC_LISTING.md`](../../PUBLIC_LISTING.md) before recording submission status.
+- [ ] Open [`PUBLIC_LISTING.md`](../public-listing.md) before recording submission status.
 
 ## Identity Fields
 
