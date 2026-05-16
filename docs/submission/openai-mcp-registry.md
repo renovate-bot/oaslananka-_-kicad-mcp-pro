@@ -77,6 +77,7 @@ cosign verify ghcr.io/oaslananka/kicad-mcp-pro:${VERSION} \
 - [ ] If cosign verification fails, treat release as blocked.
 - [ ] If registry rejects metadata, open a GitHub issue with the exact rejected field.
 - [ ] If network is offline, treat PyPI reachability as warning-only in local checks.
+
 ## Final Registry Publish Controls
 
 - [ ] Confirm `server.json` remains the registry payload source of truth.

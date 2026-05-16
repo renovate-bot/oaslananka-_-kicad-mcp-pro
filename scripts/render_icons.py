@@ -134,7 +134,7 @@ def _normalize_png(png_data: bytes) -> bytes:
 def _render_png(size: int) -> bytes:
     try:
         import cairosvg
-    except ImportError:
+    except (ImportError, OSError):
         return _fallback_render(size)
 
     try:

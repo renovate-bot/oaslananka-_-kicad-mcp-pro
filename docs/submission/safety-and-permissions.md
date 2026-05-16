@@ -98,6 +98,7 @@ cosign verify ghcr.io/oaslananka/kicad-mcp-pro:${VERSION}
 - [ ] Do not include private key files in submissions.
 - [ ] Do not include customer board files in submissions.
 - [ ] Do not include private screenshots with local usernames.
+
 ## Final Safety Review Controls
 
 - [ ] Confirm stdio mode is described as local-only.

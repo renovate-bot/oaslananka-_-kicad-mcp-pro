@@ -112,6 +112,7 @@ Use this document when submitting KiCad MCP Pro to the Anthropic Connector Direc
 - Known rejection cause: Broken docs URL.
 - Concrete repo control: Verify `https://oaslananka.github.io/kicad-mcp-pro` before submission.
 - Reviewer response: point to the exact file or command, then rerun `pnpm run submission:check`.
+
 ## Final Anthropic Consistency Controls
 
 - [ ] Compare the submitted server name with `server.json` before opening the form.

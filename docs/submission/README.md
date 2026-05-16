@@ -117,6 +117,7 @@ Use this checklist before entering any external review form.
 - [ ] Open a GitHub issue for any required repo change from a reviewer.
 - [ ] Close the issue only after the listing source of truth is updated.
 
+
 ## Final Gate
 
 - [ ] Do not submit while `pnpm run submission:check` fails.
@@ -127,6 +128,7 @@ Use this checklist before entering any external review form.
 - [ ] Do not submit with old organization namespace strings.
 - [ ] Do not submit with non-self-hosted workflow runner declarations.
 - [ ] Do not submit before `PUBLIC_LISTING_READY.md` says `READY FOR SUBMISSION`.
+
 ## Final Evidence Controls
 
 - [ ] Confirm every platform-specific document has been reviewed in the same branch as the submission.

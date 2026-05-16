@@ -85,6 +85,7 @@ Use this document for the ChatGPT Apps submission path.
 - [ ] Use fixture project evidence for all reviewer tests.
 - [ ] Do not upload secrets, logs with tokens, or private KiCad designs.
 - [ ] Update `PUBLIC_LISTING.md` after submission.
+
 ## Final ChatGPT Apps Dashboard Controls
 
 - [ ] Confirm app name is exactly `KiCad MCP Pro`.
