@@ -143,7 +143,11 @@ def _pypi_check() -> CheckResult:
         return CheckResult("pypi reachability", "WARN", f"offline or unavailable: {exc}")
     releases = payload.get("releases", {})
     if version not in releases:
-        return CheckResult("pypi current version", "FAIL", f"{version} not present on PyPI")
+        return CheckResult(
+            "pypi current version",
+            "WARN",
+            f"{version} is not published yet; expected for in-flight release branches",
+        )
     return CheckResult("pypi current version", "PASS", f"{version} is published")
 
 
