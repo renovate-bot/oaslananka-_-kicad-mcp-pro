@@ -30,8 +30,10 @@ If `agg` is available on `PATH`, `pnpm run assets:demo` also converts the cast t
 agg --speed 1.2 --theme monokai --font-size 18 docs/assets/demo.cast docs/assets/demo.gif
 ```
 
-If `agg` is not available, the command leaves the cast in place and prints the
-conversion command for a maintainer to run later.
+If `agg` is not available, the command writes a deterministic fallback
+`docs/assets/demo.gif` with Pillow so README rendering and link checks still
+pass. The fallback is intentionally simple and should be replaced by the `agg`
+terminal render before final marketplace submission when the tool is available.
 
 ## Re-recording Flow
 

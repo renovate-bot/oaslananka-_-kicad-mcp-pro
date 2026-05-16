@@ -91,9 +91,11 @@ def write_cast(path: Path = CAST_PATH) -> None:
 def convert_if_available() -> int:
     agg = shutil.which("agg")
     if agg is None:
-        print("agg not found; left docs/assets/demo.cast in place.")
+        write_fallback_gif()
+        print("agg not found; wrote deterministic fallback docs/assets/demo.gif.")
         print(
-            "Convert later with: agg --speed 1.2 --theme monokai --font-size 18 "
+            "Replace with a rendered terminal capture when available: "
+            "agg --speed 1.2 --theme monokai --font-size 18 "
             "docs/assets/demo.cast docs/assets/demo.gif"
         )
         return 0
@@ -123,6 +125,67 @@ def convert_if_available() -> int:
 
     print(f"wrote {GIF_PATH.relative_to(ROOT)}")
     return 0
+
+
+def write_fallback_gif(path: Path = GIF_PATH) -> None:
+    from PIL import Image, ImageDraw, ImageFont
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    font = ImageFont.load_default()
+    width, height = 960, 540
+    background = "#1a1a2e"
+    terminal = "#0f172a"
+    accent = "#00b894"
+    text_color = "#e5e7eb"
+    muted = "#94a3b8"
+    snapshots = [
+        [
+            "$ kicad-mcp-pro health --json",
+            '{ "status": "ok", "version": "3.4.3" }',
+            '{ "transport": "stdio", "kicad_cli": "ready" }',
+        ],
+        [
+            "$ kicad-mcp-pro doctor --json",
+            '{ "checks": ["python", "kicad-cli", "workspace-root"] }',
+            '{ "result": "pass", "profile": "agent_full" }',
+        ],
+        [
+            "$ kicad-mcp-pro serve",
+            "KiCad MCP Pro 3.4.3",
+            "MCP transport: stdio",
+            "Manufacturing export: gated by project_quality_gate",
+        ],
+    ]
+    frames: list[Image.Image] = []
+    for index, lines in enumerate(snapshots, 1):
+        image = Image.new("RGB", (width, height), background)
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle((64, 64, width - 64, height - 64), radius=18, fill=terminal)
+        draw.rectangle((64, 64, width - 64, 118), fill="#111827")
+        draw.ellipse((88, 83, 102, 97), fill="#ef4444")
+        draw.ellipse((114, 83, 128, 97), fill="#f59e0b")
+        draw.ellipse((140, 83, 154, 97), fill=accent)
+        draw.text((184, 84), "KiCad MCP Pro - Quick Start", fill=text_color, font=font)
+        draw.text((width - 176, 84), f"step {index}/3", fill=muted, font=font)
+        y = 156
+        for line in lines:
+            color = accent if line.startswith("$") else text_color
+            draw.text((104, y), line, fill=color, font=font)
+            y += 42
+        draw.text(
+            (104, height - 118), "local stdio MCP server - no telemetry", fill=muted, font=font
+        )
+        frames.extend([image] * 4)
+
+    frames[0].save(
+        path,
+        save_all=True,
+        append_images=frames[1:],
+        duration=420,
+        loop=0,
+        optimize=True,
+    )
+    print(f"wrote {path.relative_to(ROOT)}")
 
 
 def playback() -> int:

@@ -192,8 +192,11 @@ def _screenshot_check() -> CheckResult:
 
 def _demo_cast_check() -> CheckResult:
     path = ROOT / "docs" / "assets" / "demo.cast"
+    gif_path = ROOT / "docs" / "assets" / "demo.gif"
     if not path.is_file():
         return CheckResult("demo cast", "FAIL", "docs/assets/demo.cast missing")
+    if not gif_path.is_file():
+        return CheckResult("demo cast", "FAIL", "docs/assets/demo.gif missing")
     try:
         lines = path.read_text(encoding="utf-8").splitlines()
         header = json.loads(lines[0])
@@ -202,7 +205,7 @@ def _demo_cast_check() -> CheckResult:
         return CheckResult("demo cast", "FAIL", str(exc))
     if header.get("version") != 2 or not all(isinstance(frame, list) for frame in frames):
         return CheckResult("demo cast", "FAIL", "invalid asciinema v2 structure")
-    return CheckResult("demo cast", "PASS", f"{len(frames)} frames")
+    return CheckResult("demo cast", "PASS", f"{len(frames)} frames and demo.gif present")
 
 
 def _submission_docs_check() -> CheckResult:
