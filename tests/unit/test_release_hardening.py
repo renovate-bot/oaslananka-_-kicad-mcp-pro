@@ -704,7 +704,9 @@ def test_release_workflow_sets_up_python_before_sigstore_signing() -> None:
         assert clear_step < setup_step < signing_step
         assert setup_action in setup_block
         assert 'python-version: "3.12"' in setup_block
-        assert 'UV_PYTHON: "3.12"' in signing_block
+        assert "UV_PYTHON:" not in signing_block
+        assert 'UV_NO_CONFIG: "1"' in signing_block
+        assert "UV_CACHE_DIR:" in signing_block
         assert "sigstore-uv-python-dir" in signing_block
 
     manual_start = workflow.index("  finish-existing-release:")
