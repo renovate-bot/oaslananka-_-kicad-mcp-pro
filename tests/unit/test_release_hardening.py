@@ -672,7 +672,7 @@ def test_release_workflow_sets_up_python_before_sigstore_signing() -> None:
     setup_steps = [
         match.start()
         for match in re.finditer(
-            r"^\s+- name: Set up Python for Sigstore$",
+            r"^[ \t]+- name: Set up Python for Sigstore$",
             workflow,
             flags=re.MULTILINE,
         )
@@ -680,7 +680,7 @@ def test_release_workflow_sets_up_python_before_sigstore_signing() -> None:
     signing_steps = [
         match.start()
         for match in re.finditer(
-            r"^\s+- name: Sign release artifacts with Sigstore$",
+            r"^[ \t]+- name: Sign release artifacts with Sigstore$",
             workflow,
             flags=re.MULTILINE,
         )
@@ -690,12 +690,22 @@ def test_release_workflow_sets_up_python_before_sigstore_signing() -> None:
 
     for setup_step, signing_step in zip(setup_steps, signing_steps, strict=True):
         clear_step = workflow.rfind("Clear project virtualenv for signing action", 0, signing_step)
+        next_boundary = re.search(
+            r"(?m)^(?: {6}- |  [A-Za-z0-9_-]+:)",
+            workflow[signing_step + 1 :],
+        )
+        next_step = (
+            signing_step + 1 + next_boundary.start() if next_boundary is not None else len(workflow)
+        )
         setup_block = workflow[setup_step:signing_step]
+        signing_block = workflow[signing_step:next_step]
 
         assert clear_step != -1
         assert clear_step < setup_step < signing_step
         assert setup_action in setup_block
-        assert 'python-version: "3.14"' in setup_block
+        assert 'python-version: "3.12"' in setup_block
+        assert 'UV_PYTHON: "3.12"' in signing_block
+        assert "sigstore-uv-python-dir" in signing_block
 
     manual_start = workflow.index("  finish-existing-release:")
     manual_setup = workflow.index("Set up Python for Sigstore", manual_start)
