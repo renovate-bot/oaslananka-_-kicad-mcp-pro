@@ -306,6 +306,7 @@ jobs:
         env:
           UV_NO_CONFIG: "1"
           UV_CACHE_DIR: ${{ runner.temp }}/sigstore-uv-cache
+          UV_PYTHON: ""
           UV_PYTHON_INSTALL_DIR: ${{ runner.temp }}/sigstore-uv-python-dir
           VIRTUAL_ENV: ""
         with:
@@ -638,6 +639,7 @@ jobs:
         env:
           UV_NO_CONFIG: "1"
           UV_CACHE_DIR: ${{ runner.temp }}/sigstore-uv-cache
+          UV_PYTHON: ""
           UV_PYTHON_INSTALL_DIR: ${{ runner.temp }}/sigstore-uv-python-dir
           VIRTUAL_ENV: ""
         with:
